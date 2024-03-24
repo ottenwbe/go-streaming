@@ -11,8 +11,21 @@ import (
 
 type StreamID uuid.UUID
 
+func (s StreamID) isNil() bool {
+	return s == StreamID(uuid.Nil)
+}
+
 func (s StreamID) String() string {
 	return uuid.UUID(s).String()
+}
+
+type StreamHeader struct {
+	ID   StreamID
+	Name string
+}
+
+func (h StreamHeader) Equal(comp StreamHeader) bool {
+	return h.Name == comp.Name && h.ID == comp.ID
 }
 
 type NotificationMap map[StreamReceiverID]chan events.Event
@@ -34,8 +47,7 @@ type Stream interface {
 	Start()
 	Stop()
 
-	Name() string
-	ID() StreamID
+	Header() StreamHeader
 
 	Publish(events.Event) error
 	Subscribe() *StreamReceiver
@@ -48,8 +60,7 @@ type Stream interface {
 }
 
 type LocalSyncStream struct {
-	name string
-	id   StreamID
+	header StreamHeader
 
 	notify      NotificationMap
 	notifyMutex sync.Mutex
@@ -58,8 +69,7 @@ type LocalSyncStream struct {
 }
 
 type LocalAsyncStream struct {
-	name string
-	id   StreamID
+	header StreamHeader
 
 	inChannel chan events.Event
 	buffer    buffer.Buffer
@@ -76,8 +86,10 @@ type LocalAsyncStream struct {
 // aka is created w/o event buffering
 func NewLocalSyncStream(name string, streamID StreamID) *LocalSyncStream {
 	return &LocalSyncStream{
-		name:   name,
-		id:     streamID,
+		header: StreamHeader{
+			Name: name,
+			ID:   streamID,
+		},
 		notify: make(NotificationMap),
 		active: false,
 	}
@@ -86,8 +98,10 @@ func NewLocalSyncStream(name string, streamID StreamID) *LocalSyncStream {
 // NewLocalAsyncStream is created w/ event buffering
 func NewLocalAsyncStream(name string, streamID StreamID) *LocalAsyncStream {
 	a := &LocalAsyncStream{
-		name:      name,
-		id:        streamID,
+		header: StreamHeader{
+			Name: name,
+			ID:   streamID,
+		},
 		inChannel: make(chan events.Event),
 		active:    false,
 		buffer:    buffer.NewAsyncBuffer(),
@@ -166,12 +180,8 @@ func (l *LocalAsyncStream) Start() {
 	}
 }
 
-func (l *LocalAsyncStream) Name() string {
-	return l.name
-}
-
-func (l *LocalAsyncStream) ID() StreamID {
-	return l.id
+func (l *LocalAsyncStream) Header() StreamHeader {
+	return l.header
 }
 
 func (l *LocalAsyncStream) Publish(event events.Event) error {
@@ -195,12 +205,8 @@ func (l *LocalAsyncStream) Subscribe() *StreamReceiver {
 	return rec
 }
 
-func (s *LocalSyncStream) Name() string {
-	return s.name
-}
-
-func (s *LocalSyncStream) ID() StreamID {
-	return s.id
+func (s *LocalSyncStream) Header() StreamHeader {
+	return s.header
 }
 
 func (s *LocalSyncStream) Publish(e events.Event) error {

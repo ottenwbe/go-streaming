@@ -10,8 +10,8 @@ import (
 
 var _ = Describe("PubSub", func() {
 	Describe("PubSub System", func() {
-		Context("adding streams", func() {
-			It("finds all added streams", func() {
+		Context("adding streamIndex", func() {
+			It("finds all added streamIndex", func() {
 				id := streams.StreamID(uuid.New())
 				s := streams.NewLocalSyncStream("test", id)
 				streams.PubSubSystem.NewOrReplaceStream(id, s)
@@ -21,7 +21,7 @@ var _ = Describe("PubSub", func() {
 				Expect(e).To(BeNil())
 			})
 		})
-		Context("getting streams", func() {
+		Context("getting streamIndex", func() {
 			It("results in an error if not existing", func() {
 				id := streams.StreamID(uuid.New())
 				_, e := streams.PubSubSystem.Get(id)
