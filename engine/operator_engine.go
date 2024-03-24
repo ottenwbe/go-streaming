@@ -37,10 +37,10 @@ type Operator struct {
 	active bool
 
 	Input  map[string]*OperatorStreamSubscription
-	Output []uuid.UUID
+	Output []streams.StreamID
 }
 
-func NewOperator(f func(events map[string][]events.Event) []events.Event, Input map[string]*OperatorStreamSubscription, Output []uuid.UUID) *Operator {
+func NewOperator(f func(events map[string][]events.Event) []events.Event, Input map[string]*OperatorStreamSubscription, Output []streams.StreamID) *Operator {
 	return &Operator{
 		id:     uuid.New(),
 		f:      f,

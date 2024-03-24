@@ -9,13 +9,15 @@ import (
 	"go-stream-processing/streams"
 )
 
-var _ = Describe("Strean", func() {
+var _ = Describe("Stream", func() {
 	var stream *streams.LocalSyncStream
 	var asyncStream *streams.LocalAsyncStream
 
 	BeforeEach(func() {
-		stream = streams.NewLocalSyncStream("test")
-		asyncStream = streams.NewLocalAsyncStream("test3")
+		stream = streams.NewLocalSyncStream("test", streams.StreamID(uuid.New()))
+		stream.Start()
+		asyncStream = streams.NewLocalAsyncStream("test3", streams.StreamID(uuid.New()))
+		asyncStream.Start()
 	})
 
 	Describe("LocalSyncStream One Event", func() {
@@ -25,12 +27,7 @@ var _ = Describe("Strean", func() {
 				event, _ := events.NewEvent("test-1")
 				bChan := make(chan bool)
 
-				receiver := streams.StreamReceiver{
-					ID:     uuid.New(),
-					Notify: make(chan events.Event),
-				}
-
-				stream.Subscribe(receiver)
+				receiver := stream.Subscribe()
 
 				go func() {
 					eventResult = <-receiver.Notify
@@ -57,19 +54,11 @@ var _ = Describe("Strean", func() {
 					event3, _ := events.NewEvent("test-3-3")
 					bChan := make(chan bool)
 
-					receiver := streams.StreamReceiver{
-						ID:     uuid.New(),
-						Notify: make(chan events.Event),
-					}
-					asyncStream.Subscribe(receiver)
+					receiver := asyncStream.Subscribe()
 
-					fmt.Print("before a\n")
 					asyncStream.Publish(event1)
-					fmt.Print("a\n")
 					asyncStream.Publish(event2)
-					fmt.Print("b\n")
 					asyncStream.Publish(event3)
-					fmt.Print("c\n")
 
 					go func() {
 						fmt.Print("test consumed event")

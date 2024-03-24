@@ -1,6 +1,7 @@
 package buffer_test
 
 import (
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go-stream-processing/buffer"
@@ -18,13 +19,12 @@ var _ = Describe("SelectionPolicy", func() {
 
 				b.AddEvents([]events.Event{e1, e2, e3})
 
-				s := buffer.SelectNPolicy{
-					N: 2,
-				}
+				s := buffer.NewSelectNPolicy(2)
 
 				es := s.Apply(b)
 
 				Expect(es).To(Equal([]events.Event{e1, e2}))
+				Expect(uuid.UUID(s.ID())).ToNot(Equal(uuid.Nil))
 			})
 		})
 	})
@@ -38,11 +38,12 @@ var _ = Describe("SelectionPolicy", func() {
 
 				b.AddEvents([]events.Event{e1, e2, e3})
 
-				s := buffer.SelectNextPolicy{}
+				p := buffer.NewSelectNextPolicy()
 
-				es := s.Apply(b)
+				es := p.Apply(b)
 
 				Expect(es).To(Equal([]events.Event{e1}))
+				Expect(uuid.UUID(p.ID())).ToNot(Equal(uuid.Nil))
 			})
 		})
 	})

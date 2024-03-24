@@ -5,111 +5,97 @@ import (
 	"sync"
 )
 
+var defaultBufferCapacity = 5
+
 type Buffer interface {
 	GetAndRemoveNextEvent() events.Event
 	GetNextEvent() events.Event
 	RemoveNextEvent()
 	AddEvent(event events.Event)
+	AddEvents(events []events.Event)
 	Len() int
+	Dump() []events.Event
 }
 
-type SimpleBuffer struct {
-	buffer []events.Event
-	mutex  sync.Mutex
-}
-
+// SimpleAsyncBuffer allows to sync exactly one reader and n writer.
+// The Read operations GetNextEvent and RemoveNextEvent either return the next event,
+// if any is available in the buffer or wait until next event is available.
 type SimpleAsyncBuffer struct {
-	Buffer        Buffer
-	selectionChan chan events.Event
-	isWaiting     bool
-	mutex         sync.Mutex
-}
-
-func NewBuffer() Buffer {
-	return &SimpleBuffer{
-		buffer: make([]events.Event, 0),
-	}
+	buffer      []events.Event
+	bufferMutex sync.Mutex
+	cond        *sync.Cond
 }
 
 func NewAsyncBuffer() Buffer {
-	return &SimpleAsyncBuffer{
-		Buffer:        NewBuffer(),
-		isWaiting:     false,
-		selectionChan: make(chan events.Event),
+	s := &SimpleAsyncBuffer{
+		buffer:      make([]events.Event, 0, defaultBufferCapacity),
+		bufferMutex: sync.Mutex{},
 	}
+	s.cond = sync.NewCond(&s.bufferMutex)
+	return s
+}
+
+func (s *SimpleAsyncBuffer) getNextEvent() events.Event {
+	return s.buffer[0]
+}
+
+func (s *SimpleAsyncBuffer) removeNextEvent() {
+	s.buffer = s.buffer[1:]
 }
 
 func (s *SimpleAsyncBuffer) GetAndRemoveNextEvent() events.Event {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	e := s.GetNextEvent()
-	s.Buffer.RemoveNextEvent()
+	s.bufferMutex.Lock()
+	defer s.bufferMutex.Unlock()
+
+	if s.Len() == 0 {
+		s.cond.Wait()
+	}
+
+	e := s.getNextEvent()
+	s.removeNextEvent()
+
 	return e
 }
 
 func (s *SimpleAsyncBuffer) GetNextEvent() events.Event {
-	s.mutex.Lock()
+	s.bufferMutex.Lock()
+	defer s.bufferMutex.Unlock()
 	if s.Len() == 0 {
-		s.isWaiting = true
-		s.mutex.Unlock()
-		return <-s.selectionChan
-	} else {
-		defer s.mutex.Unlock()
-		return s.GetNextEvent()
+		s.cond.Wait()
 	}
-
+	return s.getNextEvent()
 }
 
 func (s *SimpleAsyncBuffer) RemoveNextEvent() {
-	s.RemoveNextEvent()
-}
+	s.bufferMutex.Lock()
+	defer s.bufferMutex.Unlock()
 
-func (s *SimpleAsyncBuffer) AddEvent(event events.Event) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	if s.isWaiting {
-		s.selectionChan <- event
-		s.isWaiting = false
-	} else {
-		s.AddEvent(event)
+	if s.Len() > 0 {
+		s.removeNextEvent()
 	}
 }
 
-func (s *SimpleAsyncBuffer) Len() int {
-	return s.Len()
+func (s *SimpleAsyncBuffer) AddEvents(events []events.Event) {
+	s.bufferMutex.Lock()
+	defer s.bufferMutex.Unlock()
+
+	s.buffer = append(s.buffer, events...)
+	s.cond.Signal()
 }
 
-func (s *SimpleBuffer) GetAndRemoveNextEvent() events.Event {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	e := s.GetNextEvent()
-	s.removeNextEvent()
-	return e
-}
+func (s *SimpleAsyncBuffer) AddEvent(event events.Event) {
+	s.bufferMutex.Lock()
+	defer s.bufferMutex.Unlock()
 
-func (s *SimpleBuffer) GetNextEvent() events.Event {
-	return s.buffer[0]
-}
-
-func (s *SimpleBuffer) RemoveNextEvent() {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.removeNextEvent()
-}
-
-func (s *SimpleBuffer) removeNextEvent() {
-	s.buffer = s.buffer[1:]
-}
-
-func (s *SimpleBuffer) AddEvent(event events.Event) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
 	s.buffer = append(s.buffer, event)
+	s.cond.Signal()
 }
 
-func (s *SimpleBuffer) Len() int {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+func (s *SimpleAsyncBuffer) Dump() []events.Event {
+	return s.buffer
+}
+
+func (s *SimpleAsyncBuffer) Len() int {
+
 	return len(s.buffer)
 }

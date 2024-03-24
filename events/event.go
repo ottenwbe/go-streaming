@@ -15,7 +15,7 @@ type SimpleEvent struct {
 	Content   []byte
 }
 
-func NewEventB(content []byte) Event {
+func NewSimpleEvent(content []byte) Event {
 	return &SimpleEvent{
 		timeStamp: time.Now(),
 		Content:   content,
@@ -29,7 +29,7 @@ func NewEvent(content interface{}) (Event, error) {
 		return nil, err
 	}
 
-	return NewEventB(contentBytes), nil
+	return NewSimpleEvent(contentBytes), nil
 }
 
 func (e *SimpleEvent) GetTimestamp() time.Time {

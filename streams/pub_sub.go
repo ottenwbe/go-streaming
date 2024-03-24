@@ -2,64 +2,101 @@ package streams
 
 import (
 	"errors"
-	"github.com/google/uuid"
+	"fmt"
 	"go-stream-processing/events"
+	"go.uber.org/zap"
 	"sync"
 )
 
 type PubSub struct {
-	streams map[uuid.UUID]Stream
-	mutex   sync.Mutex
+	streams        map[StreamID]Stream
+	mapAccessMutex sync.Mutex
 }
 
 var PubSubSystem *PubSub
 
-var StreamNotFoundError = errors.New("no stream found")
+var streamNotFoundError = errors.New("no stream found")
 
-func (r *PubSub) NewOrReplaceStream(streamID uuid.UUID, newStream Stream) {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
+func StreamNotFoundError() error {
+	return streamNotFoundError
+}
+
+func (r *PubSub) NewOrReplaceStream(streamID StreamID, newStream Stream) {
+	r.mapAccessMutex.Lock()
+	defer r.mapAccessMutex.Unlock()
+	r.addStream(streamID, newStream)
+	zap.S().Info("New stream Added", zap.String("module", "stream"), zap.String("id", streamID.String()))
+}
+
+func (r *PubSub) RemoveStream(streamID StreamID) {
+	r.mapAccessMutex.Lock()
+	defer r.mapAccessMutex.Unlock()
+
+	if s, ok := r.streams[streamID]; ok {
+		for _, c := range s.notifiers() {
+			close(c)
+		}
+		delete(r.streams, streamID)
+	}
+
+	zap.S().Info("Stream Deleted", zap.String("module", "stream"), zap.String("id", streamID.String()))
+}
+
+func (r *PubSub) createDefaultStream(id StreamID) {
+	r.mapAccessMutex.Lock()
+	defer r.mapAccessMutex.Unlock()
+	if _, ok := r.streams[id]; !ok {
+		r.addStream(id, NewLocalAsyncStream(fmt.Sprintf("%v", id), id))
+	}
+}
+
+func (r *PubSub) addStream(streamID StreamID, newStream Stream) {
 	if s, ok := r.streams[streamID]; ok {
 		newStream.setNotifiers(s.notifiers())
+		newStream.setEvents(s.events())
 	}
 	r.streams[streamID] = newStream
 }
 
-func (r *PubSub) Subscribe(streamID uuid.UUID, rec StreamReceiver) error {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
+func (r *PubSub) Subscribe(streamID StreamID) (*StreamReceiver, error) {
+	r.mapAccessMutex.Lock()
+	defer r.mapAccessMutex.Unlock()
 	if stream, ok := r.streams[streamID]; ok {
-		stream.Subscribe(rec)
+		r := stream.Subscribe()
+		return r, nil
 	} else {
-		return StreamNotFoundError
+		return nil, StreamNotFoundError()
 	}
-	return nil
+
 }
 
-func (r *PubSub) Unsubscribe(id uuid.UUID) error {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-	if _, ok := r.streams[id]; ok {
-		delete(r.streams, id)
+func (r *PubSub) Unsubscribe(rec *StreamReceiver) error {
+	r.mapAccessMutex.Lock()
+	defer r.mapAccessMutex.Unlock()
+	if s, ok := r.streams[rec.StreamID]; ok {
+		s.Unsubscribe(rec.ID)
 		return nil
 	} else {
-		return StreamNotFoundError
+		return StreamNotFoundError()
 	}
 }
 
-func (r *PubSub) Publish(id uuid.UUID, event events.Event) error {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-	if res, ok := r.streams[id]; ok {
-		res.Publish(event)
-		return nil
-	} else {
-		return StreamNotFoundError
+func (r *PubSub) Publish(id StreamID, event events.Event) error {
+	if _, ok := r.streams[id]; !ok {
+		r.createDefaultStream(id)
 	}
+	return r.streams[id].Publish(event)
+}
+
+func (r *PubSub) Get(id StreamID) (Stream, error) {
+	if s, ok := r.streams[id]; ok {
+		return s, nil
+	}
+	return nil, streamNotFoundError
 }
 
 func init() {
 	PubSubSystem = &PubSub{
-		streams: make(map[uuid.UUID]Stream),
+		streams: make(map[StreamID]Stream),
 	}
 }
