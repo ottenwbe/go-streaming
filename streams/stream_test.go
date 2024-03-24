@@ -14,9 +14,9 @@ var _ = Describe("Stream", func() {
 	var asyncStream *streams.LocalAsyncStream
 
 	BeforeEach(func() {
-		stream = streams.NewLocalSyncStream("test", streams.StreamID(uuid.New()))
+		stream = streams.NewLocalSyncStream(streams.NewStreamDescription("test", uuid.New(), false))
 		stream.Start()
-		asyncStream = streams.NewLocalAsyncStream("test3", streams.StreamID(uuid.New()))
+		asyncStream = streams.NewLocalAsyncStream(streams.NewStreamDescription("test3", uuid.New(), true))
 		asyncStream.Start()
 	})
 

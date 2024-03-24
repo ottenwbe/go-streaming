@@ -9,16 +9,16 @@ import (
 type StreamReceiverID uuid.UUID
 
 type StreamReceiver struct {
-	StreamID StreamID
-	ID       StreamReceiverID
-	Notify   chan events.Event
+	Description StreamDescription
+	ID          StreamReceiverID
+	Notify      chan events.Event
 }
 
 func NewStreamReceiver(stream Stream) *StreamReceiver {
 	rec := &StreamReceiver{
-		StreamID: stream.ID(),
-		ID:       StreamReceiverID(uuid.New()),
-		Notify:   make(chan events.Event),
+		Description: stream.Description(),
+		ID:          StreamReceiverID(uuid.New()),
+		Notify:      make(chan events.Event),
 	}
 	return rec
 }

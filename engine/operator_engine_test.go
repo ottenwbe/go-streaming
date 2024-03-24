@@ -27,29 +27,28 @@ func test(eventMap map[string][]events.Event) []events.Event {
 
 var _ = Describe("Operator", func() {
 
-	streamA := streams.NewLocalSyncStream("a", uuid.New())
-	streamB := streams.NewLocalSyncStream("b", uuid.New())
-	streamC := streams.NewLocalSyncStream("c", uuid.New())
-	resRec := streams.StreamReceiver{ID: streams.StreamID(uuid.New()), Notify: make(chan events.Event)}
-	streamC.Subscribe()
-	streams.PubSubSystem.NewOrReplaceStream(streamC.ID(), streamC)
+	streamA := streams.NewLocalSyncStream(streams.NewStreamDescription("a", uuid.New(), false))
+	streamA.Start()
+	streamB := streams.NewLocalSyncStream(streams.NewStreamDescription("b", uuid.New(), false))
+	streamB.Start()
+	streamC := streams.NewLocalSyncStream(streams.NewStreamDescription("c", uuid.New(), false))
+	streamC.Start()
+	resRec := streamC.Subscribe()
+	streams.PubSubSystem.NewOrReplaceStream(streamC)
 	input := make(map[string]*engine.OperatorStreamSubscription)
 	input["a"] = &engine.OperatorStreamSubscription{
-		Stream:      streams.StreamReceiver{ID: streams.StreamID(uuid.New()), Notify: make(chan events.Event)},
+		Stream:      streamA.Subscribe(),
 		InputBuffer: buffer.NewAsyncBuffer(),
 		Selection:   &buffer.SelectNPolicy{N: 1},
 	}
 	input["a"].Run()
 
 	input["b"] = &engine.OperatorStreamSubscription{
-		Stream:      streams.StreamReceiver{ID: streams.StreamID(uuid.New()), Notify: make(chan events.Event)},
+		Stream:      streamB.Subscribe(),
 		InputBuffer: buffer.NewAsyncBuffer(),
 		Selection:   &buffer.SelectNPolicy{N: 1},
 	}
 	input["b"].Run()
-
-	streamA.Subscribe()
-	streamB.Subscribe()
 
 	op := engine.NewOperator(test, input, []streams.StreamID{streamC.ID()})
 

@@ -50,8 +50,25 @@ async: true
 			d, _ := streams.StreamDescriptionFromYML([]byte(yml))
 			streams.InstantiateStream(d)
 
-			_, err := streams.PubSubSystem.Get(d.StreamID())
+			_, err := streams.PubSubSystem.GetStream(d.StreamID())
 			Expect(err).To(BeNil())
+
+		})
+	})
+	Describe("Delete", func() {
+		It("removes streams", func() {
+			var yml = `
+name: test-delete
+id: 4c191d62-6574-4951-a9e6-4ec83c947250
+async: true
+`
+			d, _ := streams.StreamDescriptionFromYML([]byte(yml))
+
+			streams.InstantiateStream(d)
+			streams.DeleteStream(d)
+
+			_, err := streams.PubSubSystem.GetStream(d.StreamID())
+			Expect(err).To(Equal(streams.StreamNotFoundError()))
 
 		})
 	})

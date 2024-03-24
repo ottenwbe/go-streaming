@@ -1,14 +1,16 @@
 package engine
 
 import (
+	"fmt"
 	"github.com/google/uuid"
 	"go-stream-processing/buffer"
 	"go-stream-processing/events"
 	"go-stream-processing/streams"
+	"go.uber.org/zap"
 )
 
 type OperatorStreamSubscription struct {
-	Stream      streams.StreamReceiver
+	Stream      *streams.StreamReceiver
 	InputBuffer buffer.Buffer
 	Selection   buffer.SelectionPolicy
 }
@@ -16,7 +18,9 @@ type OperatorStreamSubscription struct {
 func (o *OperatorStreamSubscription) Run() {
 	go func() {
 		for {
+			fmt.Printf("before notify %v\n", o.Stream.Description.Name)
 			event, more := <-o.Stream.Notify
+			fmt.Printf("after notify: %v\n", more)
 			if more {
 				o.InputBuffer.AddEvent(event)
 			} else {
@@ -69,7 +73,10 @@ func (op *Operator) Start() {
 				for _, streamID := range op.Output {
 					for _, event := range result {
 						if err := streams.PubSubSystem.Publish(streamID, event); err != nil {
-							//TODO: log
+							zap.S().Error("could not publish event in operator",
+								zap.Error(err),
+								zap.String("operator", op.id.String()),
+							)
 						}
 					}
 				}

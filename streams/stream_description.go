@@ -1,6 +1,7 @@
 package streams
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
@@ -13,39 +14,68 @@ type StreamDescription struct {
 	Async bool      `yaml:"async"`
 }
 
-func (d *StreamDescription) StreamID() StreamID {
+func NewStreamDescription(name string, id uuid.UUID, async bool) StreamDescription {
+	return StreamDescription{
+		Name:  name,
+		ID:    id,
+		Async: async,
+	}
+}
+
+func (d StreamDescription) Equal(comp StreamDescription) bool {
+	return d.Name == comp.Name && d.ID == comp.ID
+}
+
+func (d StreamDescription) StreamID() StreamID {
 	return StreamID(d.ID)
 }
 
-func DeleteStream(description *StreamDescription) {
+func DeleteStream(description StreamDescription) {
 	PubSubSystem.RemoveStream(description.StreamID())
 }
 
-func InstantiateStream(description *StreamDescription) {
+func InstantiateStream(description StreamDescription) error {
 	var stream Stream
 
 	if description.Async {
-		stream = NewLocalAsyncStream(description.Name, description.StreamID())
+		stream = NewLocalAsyncStream(description)
 	} else {
-		stream = NewLocalSyncStream(description.Name, description.StreamID())
+		stream = NewLocalSyncStream(description)
 	}
 
-	PubSubSystem.NewOrReplaceStream(stream.ID(), stream)
+	stream.Start()
+
+	return PubSubSystem.NewOrReplaceStream(stream)
 }
 
-func StreamDescriptionFromYML(b []byte) (*StreamDescription, error) {
-	var d = &StreamDescription{}
-	if err := yaml.Unmarshal(b, d); err != nil {
-		return nil, err
-	}
+func StreamDescriptionEnrichment(d StreamDescription) (StreamDescription, error) {
 
 	if d.Name == "" {
-		return nil, errors.New("no name provided")
+		return StreamDescription{}, errors.New("no name provided")
 	}
 
-	ensureStreamIDIsProvided(d)
+	ensureStreamIDIsProvided(&d)
 
 	return d, nil
+}
+
+func StreamDescriptionFromJSON(b []byte) (StreamDescription, error) {
+	var d = StreamDescription{}
+	if err := json.Unmarshal(b, &d); err != nil {
+
+		return StreamDescription{}, err
+	}
+
+	return StreamDescriptionEnrichment(d)
+}
+
+func StreamDescriptionFromYML(b []byte) (StreamDescription, error) {
+	var d = StreamDescription{}
+	if err := yaml.Unmarshal(b, &d); err != nil {
+		return StreamDescription{}, err
+	}
+
+	return StreamDescriptionEnrichment(d)
 }
 
 func ensureStreamIDIsProvided(d *StreamDescription) {

@@ -19,15 +19,6 @@ func (s StreamID) String() string {
 	return uuid.UUID(s).String()
 }
 
-type StreamHeader struct {
-	ID   StreamID
-	Name string
-}
-
-func (h StreamHeader) Equal(comp StreamHeader) bool {
-	return h.Name == comp.Name && h.ID == comp.ID
-}
-
 type NotificationMap map[StreamReceiverID]chan events.Event
 
 func (m NotificationMap) notify(e events.Event) {
@@ -46,8 +37,11 @@ func (m NotificationMap) notify(e events.Event) {
 type Stream interface {
 	Start()
 	Stop()
+	CleanUp()
 
-	Header() StreamHeader
+	ID() StreamID
+	Name() string
+	Description() StreamDescription
 
 	Publish(events.Event) error
 	Subscribe() *StreamReceiver
@@ -60,7 +54,7 @@ type Stream interface {
 }
 
 type LocalSyncStream struct {
-	header StreamHeader
+	description StreamDescription
 
 	notify      NotificationMap
 	notifyMutex sync.Mutex
@@ -69,7 +63,7 @@ type LocalSyncStream struct {
 }
 
 type LocalAsyncStream struct {
-	header StreamHeader
+	description StreamDescription
 
 	inChannel chan events.Event
 	buffer    buffer.Buffer
@@ -84,31 +78,32 @@ type LocalAsyncStream struct {
 
 // NewLocalSyncStream is a local in-memory stream that delivers events synchronously
 // aka is created w/o event buffering
-func NewLocalSyncStream(name string, streamID StreamID) *LocalSyncStream {
+func NewLocalSyncStream(description StreamDescription) *LocalSyncStream {
 	return &LocalSyncStream{
-		header: StreamHeader{
-			Name: name,
-			ID:   streamID,
-		},
-		notify: make(NotificationMap),
-		active: false,
+		description: description,
+		notify:      make(NotificationMap),
+		active:      false,
 	}
 }
 
 // NewLocalAsyncStream is created w/ event buffering
-func NewLocalAsyncStream(name string, streamID StreamID) *LocalAsyncStream {
+func NewLocalAsyncStream(description StreamDescription) *LocalAsyncStream {
 	a := &LocalAsyncStream{
-		header: StreamHeader{
-			Name: name,
-			ID:   streamID,
-		},
-		inChannel: make(chan events.Event),
-		active:    false,
-		buffer:    buffer.NewAsyncBuffer(),
-		notify:    make(NotificationMap),
-		runner:    &localAsyncStreamRunner{active: false},
+		description: description,
+		inChannel:   make(chan events.Event),
+		active:      false,
+		buffer:      buffer.NewAsyncBuffer(),
+		notify:      make(NotificationMap),
+		runner:      &localAsyncStreamRunner{active: false},
 	}
 	return a
+}
+
+func (s *LocalSyncStream) CleanUp() {
+	s.Stop()
+	for _, c := range s.notify {
+		close(c)
+	}
 }
 
 func (s *LocalSyncStream) events() buffer.Buffer {
@@ -180,8 +175,16 @@ func (l *LocalAsyncStream) Start() {
 	}
 }
 
-func (l *LocalAsyncStream) Header() StreamHeader {
-	return l.header
+func (l *LocalAsyncStream) Description() StreamDescription {
+	return l.description
+}
+
+func (l *LocalAsyncStream) ID() StreamID {
+	return l.description.StreamID()
+}
+
+func (l *LocalAsyncStream) Name() string {
+	return l.description.Name
 }
 
 func (l *LocalAsyncStream) Publish(event events.Event) error {
@@ -205,8 +208,16 @@ func (l *LocalAsyncStream) Subscribe() *StreamReceiver {
 	return rec
 }
 
-func (s *LocalSyncStream) Header() StreamHeader {
-	return s.header
+func (s *LocalSyncStream) Description() StreamDescription {
+	return s.description
+}
+
+func (s *LocalSyncStream) ID() StreamID {
+	return s.description.StreamID()
+}
+
+func (s *LocalSyncStream) Name() string {
+	return s.description.Name
 }
 
 func (s *LocalSyncStream) Publish(e events.Event) error {
@@ -272,6 +283,14 @@ func (l *LocalAsyncStream) setNotifiers(m NotificationMap) {
 
 func (l *LocalAsyncStream) notifiers() NotificationMap {
 	return l.notify
+}
+
+func (l *LocalAsyncStream) CleanUp() {
+	l.Stop()
+	close(l.inChannel)
+	for _, c := range l.notify {
+		close(c)
+	}
 }
 
 var (

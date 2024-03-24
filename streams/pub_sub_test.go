@@ -10,21 +10,50 @@ import (
 
 var _ = Describe("PubSub", func() {
 	Describe("PubSub System", func() {
-		Context("adding streamIndex", func() {
-			It("finds all added streamIndex", func() {
+		Context("adding new streams", func() {
+			It("is successful when the stream does not yet exists", func() {
 				id := streams.StreamID(uuid.New())
-				s := streams.NewLocalSyncStream("test", id)
-				streams.PubSubSystem.NewOrReplaceStream(id, s)
+				s := streams.NewLocalSyncStream(streams.NewStreamDescription("test-ps-1", uuid.UUID(id), false))
 
-				r, e := streams.PubSubSystem.Get(id)
+				_ = streams.PubSubSystem.NewOrReplaceStream(s)
+
+				r, e := streams.PubSubSystem.GetStream(id)
 				Expect(r).To(Equal(s))
 				Expect(e).To(BeNil())
 			})
+			It("is NOT successful when the stream name is taken", func() {
+				id := streams.StreamID(uuid.New())
+				s1 := streams.NewLocalSyncStream(streams.NewStreamDescription("test-ps-2", uuid.UUID(id), false))
+				s2 := streams.NewLocalSyncStream(streams.NewStreamDescription("test-ps-2", uuid.New(), false))
+
+				streams.PubSubSystem.NewOrReplaceStream(s1)
+				err := streams.PubSubSystem.NewOrReplaceStream(s2)
+
+				Expect(err).To(Equal(streams.StreamNameExistsError()))
+			})
+			It("is NOT successful when the stream id is invalid", func() {
+				id := uuid.Nil
+				s1 := streams.NewLocalSyncStream(streams.NewStreamDescription("test-ps-3", id, false))
+
+				err := streams.PubSubSystem.NewOrReplaceStream(s1)
+
+				Expect(err).To(Equal(streams.StreamIDNilError()))
+			})
+			It("is NOT successful when the stream name and id deviate in the header", func() {
+				id := uuid.New()
+				s1 := streams.NewLocalSyncStream(streams.NewStreamDescription("test-ps-4", id, false))
+				s2 := streams.NewLocalSyncStream(streams.NewStreamDescription("test-ps-5", id, false))
+
+				streams.PubSubSystem.NewOrReplaceStream(s1)
+				err := streams.PubSubSystem.NewOrReplaceStream(s2)
+
+				Expect(err).To(Equal(streams.StreamIDNameDivError()))
+			})
 		})
-		Context("getting streamIndex", func() {
+		Context("getting streams", func() {
 			It("results in an error if not existing", func() {
 				id := streams.StreamID(uuid.New())
-				_, e := streams.PubSubSystem.Get(id)
+				_, e := streams.PubSubSystem.GetStream(id)
 				Expect(e).NotTo(BeNil())
 			})
 		})
@@ -37,11 +66,11 @@ var _ = Describe("PubSub", func() {
 		})
 		Context("unsub from a stream", func() {
 			It("is successful when the stream exists", func() {
-				id := streams.StreamID(uuid.New())
-				s := streams.NewLocalSyncStream("test", id)
-				streams.PubSubSystem.NewOrReplaceStream(id, s)
+				id := uuid.New()
+				s := streams.NewLocalSyncStream(streams.NewStreamDescription("test-unsub-1", id, false))
+				streams.PubSubSystem.NewOrReplaceStream(s)
 
-				rec, _ := streams.PubSubSystem.Subscribe(id)
+				rec, _ := streams.PubSubSystem.Subscribe(streams.StreamID(id))
 				e := streams.PubSubSystem.Unsubscribe(rec)
 
 				Expect(e).To(BeNil())
@@ -50,9 +79,9 @@ var _ = Describe("PubSub", func() {
 		Context("unsub from non existing stream", func() {
 			It("ends up in an error", func() {
 				rec := &streams.StreamReceiver{
-					StreamID: streams.StreamID(uuid.New()),
-					ID:       streams.StreamReceiverID(uuid.New()),
-					Notify:   make(chan events.Event),
+					Description: streams.NewStreamDescription(uuid.New().String(), uuid.New(), false),
+					ID:          streams.StreamReceiverID(uuid.New()),
+					Notify:      make(chan events.Event),
 				}
 				e := streams.PubSubSystem.Unsubscribe(rec)
 				Expect(e).NotTo(BeNil())
@@ -61,17 +90,35 @@ var _ = Describe("PubSub", func() {
 		})
 		Context("a stream", func() {
 			It("sends and receives event via the pub sub system", func() {
-				id := streams.StreamID(uuid.New())
-				s := streams.NewLocalSyncStream("test", id)
+				id := uuid.New()
+				s := streams.NewLocalSyncStream(streams.NewStreamDescription("test-send-rec-1", id, false))
 				s.Start()
-				defer s.Stop()
+				defer s.CleanUp()
 
-				streams.PubSubSystem.NewOrReplaceStream(id, s)
-				rec, _ := streams.PubSubSystem.Subscribe(id)
+				streams.PubSubSystem.NewOrReplaceStream(s)
+				rec, _ := streams.PubSubSystem.Subscribe(streams.StreamID(id))
 
 				e1, _ := events.NewEvent("test 1")
 				go func() {
-					streams.PubSubSystem.Publish(id, e1)
+					streams.PubSubSystem.Publish(streams.StreamID(id), e1)
+				}()
+				eResult := <-rec.Notify
+
+				Expect(e1).To(Equal(eResult))
+			})
+			It("sends and receives event via the pub sub system by name", func() {
+				id := uuid.New()
+				name := "test-send-rec-2"
+				s := streams.NewLocalAsyncStream(streams.NewStreamDescription(name, id, false))
+				s.Start()
+				defer s.CleanUp()
+
+				streams.PubSubSystem.NewOrReplaceStream(s)
+				rec, _ := streams.PubSubSystem.Subscribe(streams.StreamID(id))
+
+				e1, _ := events.NewEvent("test 1")
+				go func() {
+					streams.PubSubSystem.PublishN(name, e1)
 				}()
 				eResult := <-rec.Notify
 
