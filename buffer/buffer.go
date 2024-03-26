@@ -15,6 +15,7 @@ type Buffer interface {
 	AddEvents(events []events.Event)
 	Len() int
 	Dump() []events.Event
+	Flush()
 }
 
 // SimpleAsyncBuffer allows to sync exactly one reader and n writer.
@@ -43,27 +44,42 @@ func (s *SimpleAsyncBuffer) removeNextEvent() {
 	s.buffer = s.buffer[1:]
 }
 
+// GetAndRemoveNextEvent returns the next buffered event and removes this event from the buffer.
+// Blocks until at least one event buffered.
+// When flushed, returns nil.
 func (s *SimpleAsyncBuffer) GetAndRemoveNextEvent() events.Event {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
+	var e events.Event = nil
+
 	if s.Len() == 0 {
 		s.cond.Wait()
 	}
 
-	e := s.getNextEvent()
-	s.removeNextEvent()
+	if s.Len() > 0 {
+		e = s.getNextEvent()
+		s.removeNextEvent()
+	}
 
 	return e
 }
 
+// GetNextEvent returns the next buffered event, but no event will be removed from the buffer.
+// Blocks until at least one event buffered.
+// When flushed, returns nil.
 func (s *SimpleAsyncBuffer) GetNextEvent() events.Event {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
+
 	if s.Len() == 0 {
 		s.cond.Wait()
 	}
-	return s.getNextEvent()
+
+	if s.Len() > 0 {
+		return s.getNextEvent()
+	}
+	return nil
 }
 
 func (s *SimpleAsyncBuffer) RemoveNextEvent() {
@@ -93,6 +109,14 @@ func (s *SimpleAsyncBuffer) AddEvent(event events.Event) {
 
 func (s *SimpleAsyncBuffer) Dump() []events.Event {
 	return s.buffer
+}
+
+func (s *SimpleAsyncBuffer) Flush() {
+	s.bufferMutex.Lock()
+	defer s.bufferMutex.Unlock()
+
+	s.buffer = make([]events.Event, 0, defaultBufferCapacity)
+	s.cond.Signal()
 }
 
 func (s *SimpleAsyncBuffer) Len() int {

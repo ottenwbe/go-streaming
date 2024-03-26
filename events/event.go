@@ -10,9 +10,25 @@ type Event interface {
 	GetContent(v interface{}) error
 }
 
+type EventChannel chan Event
+
 type SimpleEvent struct {
 	timeStamp time.Time
 	Content   []byte
+}
+
+type Marker struct {
+	timeStamp time.Time
+}
+
+func (m *Marker) GetTimestamp() time.Time {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *Marker) GetContent(v interface{}) error {
+	//TODO implement me
+	panic("implement me")
 }
 
 func NewSimpleEvent(content []byte) Event {

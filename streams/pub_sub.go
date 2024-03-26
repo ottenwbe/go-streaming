@@ -9,13 +9,9 @@ import (
 	"sync"
 )
 
-type StreamIndex struct {
-	stream Stream
-}
-
 type PubSub struct {
-	streamIndex    map[StreamID]StreamIndex
-	nameIndex      map[string]StreamDescription
+	streamIndex    map[StreamID]Stream
+	nameIndex      map[string]Stream
 	mapAccessMutex sync.RWMutex
 }
 
@@ -37,16 +33,34 @@ func StreamNameExistsError() error {
 func StreamIDNilError() error     { return streamIDNilError }
 func StreamIDNameDivError() error { return streamIDNameDivError }
 
+func (r *PubSub) NewOrReplaceStreamD(description StreamDescription) error {
+	var stream Stream
+
+	if description.Async {
+		stream = NewLocalAsyncStream(description)
+	} else {
+		stream = NewLocalSyncStream(description)
+	}
+
+	return r.NewOrReplaceStream(stream)
+}
+
 func (r *PubSub) NewOrReplaceStream(newStream Stream) error {
 	r.mapAccessMutex.Lock()
 	defer r.mapAccessMutex.Unlock()
 
 	if err := r.createOrUpdateStreamIndex(newStream); err != nil {
 		return err
+	} else {
+		newStream.Start()
 	}
 
 	zap.S().Info("New stream Added", zap.String("module", "stream"), zap.String("id", newStream.ID().String()))
 	return nil
+}
+
+func (r *PubSub) RemoveStreamD(description StreamDescription) {
+	r.RemoveStream(description.StreamID())
 }
 
 func (r *PubSub) RemoveStream(streamID StreamID) {
@@ -54,10 +68,10 @@ func (r *PubSub) RemoveStream(streamID StreamID) {
 	defer r.mapAccessMutex.Unlock()
 
 	if s, ok := r.streamIndex[streamID]; ok {
-		s.stream.CleanUp()
+		s.Stop()
 
 		delete(r.streamIndex, streamID)
-		delete(r.nameIndex, s.stream.Name())
+		delete(r.nameIndex, s.Name())
 
 		zap.S().Info("Stream Deleted", zap.String("module", "stream"), zap.String("id", streamID.String()))
 	}
@@ -80,8 +94,8 @@ func (r *PubSub) createOrUpdateStreamIndex(newStream Stream) error {
 	}
 
 	if s, ok := r.streamIndex[newStream.ID()]; ok {
-		newStream.setNotifiers(s.stream.notifiers())
-		newStream.setEvents(s.stream.events())
+		newStream.setNotifiers(s.notifiers())
+		newStream.setEvents(s.events())
 	}
 
 	r.addStream(newStream)
@@ -90,10 +104,8 @@ func (r *PubSub) createOrUpdateStreamIndex(newStream Stream) error {
 }
 
 func (r *PubSub) addStream(newStream Stream) {
-	r.streamIndex[newStream.ID()] = StreamIndex{
-		stream: newStream,
-	}
-	r.nameIndex[newStream.Name()] = newStream.Description()
+	r.streamIndex[newStream.ID()] = newStream
+	r.nameIndex[newStream.Name()] = newStream
 }
 
 func (r *PubSub) validateStream(newStream Stream) error {
@@ -109,7 +121,7 @@ func (r *PubSub) validateStream(newStream Stream) error {
 			return StreamNameExistsError()
 		}
 	} else {
-		if !idx.stream.Description().Equal(newStream.Description()) {
+		if !idx.Description().Equal(newStream.Description()) {
 			return StreamIDNameDivError()
 		}
 	}
@@ -117,8 +129,11 @@ func (r *PubSub) validateStream(newStream Stream) error {
 }
 
 func (r *PubSub) SubscribeN(name string) (*StreamReceiver, error) {
-	if h, ok := r.nameIndex[name]; ok {
-		return r.Subscribe(h.StreamID())
+	r.mapAccessMutex.Lock()
+	defer r.mapAccessMutex.Unlock()
+	if stream, ok := r.nameIndex[name]; ok {
+		r := stream.Subscribe()
+		return r, nil
 	} else {
 		return nil, StreamNotFoundError()
 	}
@@ -128,7 +143,7 @@ func (r *PubSub) Subscribe(streamID StreamID) (*StreamReceiver, error) {
 	r.mapAccessMutex.Lock()
 	defer r.mapAccessMutex.Unlock()
 	if stream, ok := r.streamIndex[streamID]; ok {
-		r := stream.stream.Subscribe()
+		r := stream.Subscribe()
 		return r, nil
 	} else {
 		return nil, StreamNotFoundError()
@@ -138,8 +153,8 @@ func (r *PubSub) Subscribe(streamID StreamID) (*StreamReceiver, error) {
 func (r *PubSub) Unsubscribe(rec *StreamReceiver) error {
 	r.mapAccessMutex.Lock()
 	defer r.mapAccessMutex.Unlock()
-	if s, ok := r.streamIndex[rec.Description.StreamID()]; ok {
-		s.stream.Unsubscribe(rec.ID)
+	if s, ok := r.streamIndex[rec.StreamID]; ok {
+		s.Unsubscribe(rec.ID)
 		return nil
 	} else {
 		return StreamNotFoundError()
@@ -147,53 +162,50 @@ func (r *PubSub) Unsubscribe(rec *StreamReceiver) error {
 }
 
 func (r *PubSub) PublishN(name string, event events.Event) error {
-	if h, ok := r.nameIndex[name]; ok {
-		return r.Publish(h.StreamID(), event)
-	} else {
-		return StreamNotFoundError()
+	if s, ok := r.nameIndex[name]; ok {
+		return s.Publish(event)
 	}
+	return streamNotFoundError
 }
 
 func (r *PubSub) Publish(id StreamID, event events.Event) error {
-	if _, ok := r.streamIndex[id]; !ok {
-		if err := r.createDefaultStream(id); err != nil {
-			return err
-		}
+	if s, ok := r.streamIndex[id]; ok {
+		return s.Publish(event)
 	}
-	return r.streamIndex[id].stream.Publish(event)
+	return streamNotFoundError
 }
 
 func (r *PubSub) GetStream(id StreamID) (Stream, error) {
 	if s, ok := r.streamIndex[id]; ok {
-		return s.stream, nil
+		return s, nil
 	}
 	return nil, streamNotFoundError
 }
 
 func (r *PubSub) GetStreamN(name string) (Stream, error) {
 	if s, ok := r.nameIndex[name]; ok {
-		return r.GetStream(s.StreamID())
+		return s, nil
 	}
 	return nil, streamNotFoundError
 }
 
 func (r *PubSub) GetDescription(id StreamID) (StreamDescription, error) {
 	if s, ok := r.streamIndex[id]; ok {
-		return s.stream.Description(), nil
+		return s.Description(), nil
 	}
 	return StreamDescription{}, streamNotFoundError
 }
 
 func (r *PubSub) GetDescriptionN(name string) (StreamDescription, error) {
 	if s, ok := r.nameIndex[name]; ok {
-		return r.GetDescription(s.StreamID())
+		return s.Description(), nil
 	}
 	return StreamDescription{}, streamNotFoundError
 }
 
 func init() {
 	PubSubSystem = &PubSub{
-		streamIndex: make(map[StreamID]StreamIndex),
-		nameIndex:   make(map[string]StreamDescription),
+		streamIndex: make(map[StreamID]Stream),
+		nameIndex:   make(map[string]Stream),
 	}
 }

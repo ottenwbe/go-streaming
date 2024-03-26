@@ -19,14 +19,14 @@ func (s StreamID) String() string {
 	return uuid.UUID(s).String()
 }
 
-type NotificationMap map[StreamReceiverID]chan events.Event
+type NotificationMap map[StreamReceiverID]events.EventChannel
 
 func (m NotificationMap) notify(e events.Event) {
 	for id, notifier := range m {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					zap.S().Infof("Recovered Notify Panic %v", id)
+					zap.S().Infof("recovered notify panic %v", id)
 				}
 			}()
 			notifier <- e
@@ -37,7 +37,6 @@ func (m NotificationMap) notify(e events.Event) {
 type Stream interface {
 	Start()
 	Stop()
-	CleanUp()
 
 	ID() StreamID
 	Name() string
@@ -65,10 +64,8 @@ type LocalSyncStream struct {
 type LocalAsyncStream struct {
 	description StreamDescription
 
-	inChannel chan events.Event
+	inChannel events.EventChannel
 	buffer    buffer.Buffer
-	done      chan bool
-	runner    *localAsyncStreamRunner
 
 	notify      NotificationMap
 	notifyMutex sync.Mutex
@@ -90,20 +87,11 @@ func NewLocalSyncStream(description StreamDescription) *LocalSyncStream {
 func NewLocalAsyncStream(description StreamDescription) *LocalAsyncStream {
 	a := &LocalAsyncStream{
 		description: description,
-		inChannel:   make(chan events.Event),
 		active:      false,
 		buffer:      buffer.NewAsyncBuffer(),
 		notify:      make(NotificationMap),
-		runner:      &localAsyncStreamRunner{active: false},
 	}
 	return a
-}
-
-func (s *LocalSyncStream) CleanUp() {
-	s.Stop()
-	for _, c := range s.notify {
-		close(c)
-	}
 }
 
 func (s *LocalSyncStream) events() buffer.Buffer {
@@ -123,48 +111,37 @@ func (l *LocalAsyncStream) setEvents(b buffer.Buffer) {
 }
 
 func (l *LocalAsyncStream) Stop() {
+	l.notifyMutex.Lock()
+	defer l.notifyMutex.Unlock()
+
 	l.active = false
-}
-
-type localAsyncStreamRunner struct {
-	active bool
-	aMutex sync.Mutex
-}
-
-func (l *localAsyncStreamRunner) isActive() bool {
-	return l.active
-}
-
-func (l *localAsyncStreamRunner) asyncBufferChannelEvents(in chan events.Event, buffer buffer.Buffer) {
-	l.aMutex.Lock()
-	if l.active {
-		return
+	close(l.inChannel)
+	for _, c := range l.notify {
+		close(c)
 	}
-	go func() {
-		l.active = true
-		l.aMutex.Unlock()
-		for {
-			event, more := <-in
-			if more {
-				buffer.AddEvent(event)
-			} else {
-				l.active = false
-				return
-			}
-		}
-	}()
+	l.buffer.Flush()
 }
 
 func (l *LocalAsyncStream) Start() {
+	l.notifyMutex.Lock()
+	defer l.notifyMutex.Unlock()
 
 	if !l.active {
 
 		l.active = true
+		l.inChannel = make(chan events.Event)
 
 		// read input from in Channel and buffer it
-		if !l.runner.isActive() {
-			l.runner.asyncBufferChannelEvents(l.inChannel, l.buffer)
-		}
+		go func() {
+			for {
+				event, more := <-l.inChannel
+				if more {
+					l.buffer.AddEvent(event)
+				} else {
+					return
+				}
+			}
+		}()
 
 		// read buffer and notify
 		go func() {
@@ -265,6 +242,9 @@ func (s *LocalSyncStream) Start() {
 
 func (s *LocalSyncStream) Stop() {
 	s.active = false
+	for _, c := range s.notify {
+		close(c)
+	}
 }
 
 func (s *LocalSyncStream) setNotifiers(m NotificationMap) {
@@ -283,14 +263,6 @@ func (l *LocalAsyncStream) setNotifiers(m NotificationMap) {
 
 func (l *LocalAsyncStream) notifiers() NotificationMap {
 	return l.notify
-}
-
-func (l *LocalAsyncStream) CleanUp() {
-	l.Stop()
-	close(l.inChannel)
-	for _, c := range l.notify {
-		close(c)
-	}
 }
 
 var (

@@ -13,6 +13,8 @@ var _ = Describe("Buffer", func() {
 		Context("GetAndRemoveNextEvent", func() {
 			It("reads and deletes in a fifo manner events from a buffer", func() {
 				buffer := buffer.NewAsyncBuffer()
+				defer buffer.Flush()
+
 				e1, _ := events.NewEvent("e1")
 				e2, _ := events.NewEvent("e2")
 
@@ -27,6 +29,8 @@ var _ = Describe("Buffer", func() {
 		Context("GetNextEvent", func() {
 			It("reads events w/o deleting them from a buffer", func() {
 				buffer := buffer.NewAsyncBuffer()
+				defer buffer.Flush()
+
 				e, _ := events.NewEvent("e1")
 
 				buffer.AddEvent(e)
@@ -42,6 +46,8 @@ var _ = Describe("Buffer", func() {
 				e2, _ := events.NewEvent("e2")
 
 				buffer := buffer.NewAsyncBuffer()
+				defer buffer.Flush()
+
 				buffer.AddEvent(e1)
 				buffer.AddEvent(e2)
 
@@ -55,6 +61,8 @@ var _ = Describe("Buffer", func() {
 				e3, _ := events.NewEvent("e3")
 
 				buffer := buffer.NewAsyncBuffer()
+				defer buffer.Flush()
+
 				buffer.AddEvent(e1)
 				buffer.AddEvents([]events.Event{e2, e3})
 
@@ -64,6 +72,7 @@ var _ = Describe("Buffer", func() {
 		Context("Remove events", func() {
 			It("reduces the size of the buffer", func() {
 				buffer := buffer.NewAsyncBuffer()
+				defer buffer.Flush()
 
 				e1, _ := events.NewEvent("e1")
 				buffer.AddEvent(e1)
@@ -73,6 +82,7 @@ var _ = Describe("Buffer", func() {
 			})
 			It("does not run into an error when no event is present", func() {
 				buffer := buffer.NewAsyncBuffer()
+				defer buffer.Flush()
 
 				buffer.RemoveNextEvent()
 
@@ -82,6 +92,8 @@ var _ = Describe("Buffer", func() {
 		Context("GetNextEvent function", func() {
 			It("wait for events if not available in buffer", func() {
 				buffer := buffer.NewAsyncBuffer()
+				defer buffer.Flush()
+
 				e1, _ := events.NewEvent("e1")
 				e2, _ := events.NewEvent("e2")
 				bChan := make(chan bool)
@@ -102,9 +114,29 @@ var _ = Describe("Buffer", func() {
 				Expect(buffer.Len()).To(Equal(1))
 			})
 		})
+		Context("flush", func() {
+			It("ensures that GetNextEvent buffers does not get stuck", func() {
+				buffer := buffer.NewAsyncBuffer()
+				var rEvent events.Event
+				var testing = true
+
+				go func() {
+					for testing == true {
+						buffer.Flush()
+					}
+				}()
+
+				rEvent = buffer.GetNextEvent()
+				testing = false
+
+				Expect(rEvent).To(BeNil())
+			})
+		})
 		Context("GetAndRemove", func() {
 			It("can be executed multiple times in a row in succession", func() {
 				buffer := buffer.NewAsyncBuffer()
+				defer buffer.Flush()
+
 				e1, _ := events.NewEvent("e1")
 				e2, _ := events.NewEvent("e2")
 				e3, _ := events.NewEvent("e3")

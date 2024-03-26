@@ -12,40 +12,45 @@ import (
 func CreateRestAPI(router *gin.Engine) {
 
 	router.GET("/steams/:stream", func(c *gin.Context) {
-		result := make(map[string]interface{})
 
-		name := c.Param("stream")
+		var (
+			description streams.StreamDescription
+			result      = make(map[string]interface{})
+			err         error
+			name        = c.Param("stream")
+		)
 
-		v, err := streams.PubSubSystem.GetDescriptionN(name)
+		description, err = streams.PubSubSystem.GetDescriptionN(name)
 		if err != nil {
-			zap.S().Error("Stream could not be found")
-			c.String(http.StatusNotFound, "could not find stream")
+			zap.S().Error("stream could not be found", zap.String("method", "GET"), zap.String("path", "/streams/:stream"), zap.String("module", "api"), zap.Error(err))
+			c.String(http.StatusNotFound, "stream not found")
+			return
 		}
 
-		result["meta"] = v
+		result["meta"] = description
 
 		c.JSON(http.StatusOK, result)
 	})
 
 	router.POST("/steams", func(c *gin.Context) {
 
-		data, err := io.ReadAll(c.Request.Body)
+		body, err := io.ReadAll(c.Request.Body)
 		if err != nil {
-			zap.S().Error("Could not read body from POST /stream", zap.Error(err))
+			zap.S().Error("could not read body", zap.String("method", "POST"), zap.String("path", "/streams"), zap.String("module", "api"), zap.Error(err))
 			c.String(http.StatusBadRequest, "no payload provided")
 			return
 		}
 
-		d, err := streams.StreamDescriptionFromJSON(data)
+		d, err := streams.StreamDescriptionFromJSON(body)
 		if err != nil {
 			zap.S().Error("could not read stream description", zap.String("module", "api"), zap.Error(err))
-			c.String(http.StatusBadRequest, "json not properly formatted: %v", err.Error())
+			c.String(http.StatusBadRequest, "invalid json body")
 			return
 		}
-		err = streams.InstantiateStream(d)
+		err = streams.PubSubSystem.NewOrReplaceStreamD(d)
 		if err != nil {
-			zap.S().Error("could not instantiate stream")
-			c.String(http.StatusNotFound, "error when instantiating stream: %v", err.Error())
+			zap.S().Error("could not instantiate stream", zap.String("module", "api"), zap.Error(err))
+			c.String(http.StatusNotFound, "error when instantiating stream")
 			return
 		}
 
@@ -68,7 +73,7 @@ func CreateRestAPI(router *gin.Engine) {
 		err = streams.PubSubSystem.PublishN(name, e)
 		if err != nil {
 			zap.S().Error("cannot publish event", zap.String("module", "api"), zap.Error(err))
-			c.String(http.StatusBadRequest, "cannot publish request")
+			c.String(http.StatusBadRequest, "stream not found or inactive: cannot publish request")
 		}
 
 		c.Status(http.StatusCreated)

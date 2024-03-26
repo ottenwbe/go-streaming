@@ -1,12 +1,16 @@
 package main
 
-import (
-	"github.com/gin-gonic/gin"
-	"go-stream-processing/api"
-	"go.uber.org/zap"
-)
+import "fmt"
 
 func main() {
+	e1 := []int{1, 2, 3, 4}
+	e2 := e1[1:3]
+	fmt.Println(e2)
+
+	fmt.Println(e1)
+}
+
+/*func main() {
 	p, _ := zap.NewProduction() //TODO - handle error
 	zap.ReplaceGlobals(p)
 	router := gin.Default()
@@ -20,3 +24,4 @@ func main() {
 	}
 
 }
+*/

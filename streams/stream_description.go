@@ -30,24 +30,6 @@ func (d StreamDescription) StreamID() StreamID {
 	return StreamID(d.ID)
 }
 
-func DeleteStream(description StreamDescription) {
-	PubSubSystem.RemoveStream(description.StreamID())
-}
-
-func InstantiateStream(description StreamDescription) error {
-	var stream Stream
-
-	if description.Async {
-		stream = NewLocalAsyncStream(description)
-	} else {
-		stream = NewLocalSyncStream(description)
-	}
-
-	stream.Start()
-
-	return PubSubSystem.NewOrReplaceStream(stream)
-}
-
 func StreamDescriptionEnrichment(d StreamDescription) (StreamDescription, error) {
 
 	if d.Name == "" {

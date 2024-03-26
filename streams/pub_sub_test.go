@@ -10,6 +10,38 @@ import (
 
 var _ = Describe("PubSub", func() {
 	Describe("PubSub System", func() {
+		Describe("Create with Description", func() {
+			It("registers a Stream", func() {
+				var yml = `
+name: test
+id: 3c191d62-6574-4951-a9e6-4ec83c947250
+async: true
+`
+				d, _ := streams.StreamDescriptionFromYML([]byte(yml))
+				streams.PubSubSystem.NewOrReplaceStreamD(d)
+
+				_, err := streams.PubSubSystem.GetStream(d.StreamID())
+				Expect(err).To(BeNil())
+
+			})
+		})
+		Describe("Delete", func() {
+			It("removes streams", func() {
+				var yml = `
+name: test-delete
+id: 4c191d62-6574-4951-a9e6-4ec83c947250
+async: true
+`
+				d, _ := streams.StreamDescriptionFromYML([]byte(yml))
+
+				streams.PubSubSystem.NewOrReplaceStreamD(d)
+				streams.PubSubSystem.RemoveStreamD(d)
+
+				_, err := streams.PubSubSystem.GetStream(d.StreamID())
+				Expect(err).To(Equal(streams.StreamNotFoundError()))
+
+			})
+		})
 		Context("adding new streams", func() {
 			It("is successful when the stream does not yet exists", func() {
 				id := streams.StreamID(uuid.New())
@@ -79,9 +111,9 @@ var _ = Describe("PubSub", func() {
 		Context("unsub from non existing stream", func() {
 			It("ends up in an error", func() {
 				rec := &streams.StreamReceiver{
-					Description: streams.NewStreamDescription(uuid.New().String(), uuid.New(), false),
-					ID:          streams.StreamReceiverID(uuid.New()),
-					Notify:      make(chan events.Event),
+					StreamID: streams.StreamID(uuid.New()),
+					ID:       streams.StreamReceiverID(uuid.New()),
+					Notify:   make(chan events.Event),
 				}
 				e := streams.PubSubSystem.Unsubscribe(rec)
 				Expect(e).NotTo(BeNil())
@@ -93,7 +125,7 @@ var _ = Describe("PubSub", func() {
 				id := uuid.New()
 				s := streams.NewLocalSyncStream(streams.NewStreamDescription("test-send-rec-1", id, false))
 				s.Start()
-				defer s.CleanUp()
+				defer s.Stop()
 
 				streams.PubSubSystem.NewOrReplaceStream(s)
 				rec, _ := streams.PubSubSystem.Subscribe(streams.StreamID(id))
@@ -111,7 +143,7 @@ var _ = Describe("PubSub", func() {
 				name := "test-send-rec-2"
 				s := streams.NewLocalAsyncStream(streams.NewStreamDescription(name, id, false))
 				s.Start()
-				defer s.CleanUp()
+				defer s.Stop()
 
 				streams.PubSubSystem.NewOrReplaceStream(s)
 				rec, _ := streams.PubSubSystem.Subscribe(streams.StreamID(id))

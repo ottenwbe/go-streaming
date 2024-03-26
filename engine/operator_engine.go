@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"fmt"
 	"github.com/google/uuid"
 	"go-stream-processing/buffer"
 	"go-stream-processing/events"
@@ -18,9 +17,7 @@ type OperatorStreamSubscription struct {
 func (o *OperatorStreamSubscription) Run() {
 	go func() {
 		for {
-			fmt.Printf("before notify %v\n", o.Stream.Description.Name)
 			event, more := <-o.Stream.Notify
-			fmt.Printf("after notify: %v\n", more)
 			if more {
 				o.InputBuffer.AddEvent(event)
 			} else {
