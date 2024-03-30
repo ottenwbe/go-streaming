@@ -1,7 +1,6 @@
 package buffer_test
 
 import (
-	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go-stream-processing/buffer"
@@ -12,38 +11,50 @@ var _ = Describe("SelectionPolicy", func() {
 	Describe("SelectNPolicy", func() {
 		Context("Select Events", func() {
 			It("can read n events at the time", func() {
-				b := buffer.NewAsyncBuffer()
-				e1, _ := events.NewEvent("e1")
-				e2, _ := events.NewEvent("e2")
-				e3, _ := events.NewEvent("e3")
+				b := buffer.NewConsumableAsyncBuffer(buffer.NewSelectNPolicy(2))
+				e1 := events.NewEvent("key", "e1")
+				e2 := events.NewEvent("key", "e2")
+				e3 := events.NewEvent("key", "e3")
 
 				b.AddEvents([]events.Event{e1, e2, e3})
 
-				s := buffer.NewSelectNPolicy(2)
-
-				es := s.Apply(b)
+				es := b.GetAndConsumeNextEvents()
 
 				Expect(es).To(Equal([]events.Event{e1, e2}))
-				Expect(uuid.UUID(s.ID())).ToNot(Equal(uuid.Nil))
 			})
 		})
 	})
 	Describe("SelectNextPolicy", func() {
 		Context("Select Events", func() {
 			It("one at a time", func() {
-				b := buffer.NewAsyncBuffer()
-				e1, _ := events.NewEvent("e1")
-				e2, _ := events.NewEvent("e2")
-				e3, _ := events.NewEvent("e3")
+				b := buffer.NewConsumableAsyncBuffer(buffer.NewSelectNextPolicy())
+				e1 := events.NewEvent("key", "e1")
+				e2 := events.NewEvent("key", "e2")
+				e3 := events.NewEvent("key", "e3")
 
 				b.AddEvents([]events.Event{e1, e2, e3})
 
-				p := buffer.NewSelectNextPolicy()
-
-				es := p.Apply(b)
+				es := b.GetAndConsumeNextEvents()
 
 				Expect(es).To(Equal([]events.Event{e1}))
-				Expect(uuid.UUID(p.ID())).ToNot(Equal(uuid.Nil))
+			})
+		})
+		Context("Select Events", func() {
+			It("selects multiple events in a row", func() {
+				b := buffer.NewConsumableAsyncBuffer(buffer.NewSelectNextPolicy())
+				e1 := events.NewEvent("key", "e1")
+				e2 := events.NewEvent("key", "e2")
+				e3 := events.NewEvent("key", "e3")
+
+				b.AddEvents([]events.Event{e1, e2, e3})
+
+				es1 := b.GetAndConsumeNextEvents()
+				es2 := b.GetAndConsumeNextEvents()
+				es3 := b.GetAndConsumeNextEvents()
+
+				Expect(es1).To(Equal([]events.Event{e1}))
+				Expect(es2).To(Equal([]events.Event{e2}))
+				Expect(es3).To(Equal([]events.Event{e3}))
 			})
 		})
 	})

@@ -130,7 +130,7 @@ async: true
 				streams.PubSubSystem.NewOrReplaceStream(s)
 				rec, _ := streams.PubSubSystem.Subscribe(streams.StreamID(id))
 
-				e1, _ := events.NewEvent("test 1")
+				e1 := events.NewEvent("key", "test 1")
 				go func() {
 					streams.PubSubSystem.Publish(streams.StreamID(id), e1)
 				}()
@@ -148,7 +148,7 @@ async: true
 				streams.PubSubSystem.NewOrReplaceStream(s)
 				rec, _ := streams.PubSubSystem.Subscribe(streams.StreamID(id))
 
-				e1, _ := events.NewEvent("test 1")
+				e1 := events.NewEvent("key", "test 1")
 				go func() {
 					streams.PubSubSystem.PublishN(name, e1)
 				}()

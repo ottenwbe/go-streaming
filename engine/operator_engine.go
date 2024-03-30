@@ -28,7 +28,7 @@ func (o *OperatorStreamSubscription) Run() {
 }
 
 func (o *OperatorStreamSubscription) Consume() []events.Event {
-	return o.Selection.Apply(o.InputBuffer)
+	return o.InputBuffer.GetAndConsumeNextEvents()
 }
 
 type Operator struct {

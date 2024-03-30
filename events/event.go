@@ -2,56 +2,72 @@ package events
 
 import (
 	"encoding/json"
+	"go.uber.org/zap"
 	"time"
 )
 
 type Event interface {
 	GetTimestamp() time.Time
-	GetContent(v interface{}) error
+	GetContentMap() map[string]interface{}
+	GetContent(key string) interface{}
 }
 
 type EventChannel chan Event
 
-type SimpleEvent struct {
+type TemporalEvent struct {
 	timeStamp time.Time
-	Content   []byte
+	content   map[string]interface{}
 }
 
-type Marker struct {
+type OrchestrationEvent struct {
 	timeStamp time.Time
 }
 
-func (m *Marker) GetTimestamp() time.Time {
-	//TODO implement me
-	panic("implement me")
+func (m *OrchestrationEvent) GetTimestamp() time.Time {
+	return m.timeStamp
 }
 
-func (m *Marker) GetContent(v interface{}) error {
-	//TODO implement me
-	panic("implement me")
+func (m *OrchestrationEvent) GetContent(v interface{}) error {
+	v = nil
+	return nil
 }
 
-func NewSimpleEvent(content []byte) Event {
-	return &SimpleEvent{
+func NewEventMap(content map[string]interface{}) Event {
+	return &TemporalEvent{
 		timeStamp: time.Now(),
-		Content:   content,
+		content:   content,
 	}
 }
 
-func NewEvent(content interface{}) (Event, error) {
+func NewEvent(key string, value interface{}) Event {
+	return &TemporalEvent{
+		timeStamp: time.Now(),
+		content:   map[string]interface{}{key: value},
+	}
+}
 
-	contentBytes, err := json.Marshal(content)
+func NewEventFromJSON(b []byte) (Event, error) {
+	content := make(map[string]interface{})
+	err := json.Unmarshal(b, &content)
 	if err != nil {
+		zap.S().Error("error could not be unmarshalled", err)
 		return nil, err
 	}
 
-	return NewSimpleEvent(contentBytes), nil
+	return &TemporalEvent{
+		timeStamp: time.Now(),
+		content:   content,
+	}, nil
 }
 
-func (e *SimpleEvent) GetTimestamp() time.Time {
+func (e *TemporalEvent) GetTimestamp() time.Time {
 	return e.timeStamp
 }
 
-func (e *SimpleEvent) GetContent(v interface{}) error {
-	return json.Unmarshal(e.Content, v)
+func (e *TemporalEvent) GetContentMap() map[string]interface{} {
+	return e.content
+}
+
+func (e *TemporalEvent) GetContent(key string) interface{} {
+	return e.content[key]
 }

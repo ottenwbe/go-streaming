@@ -24,7 +24,7 @@ var _ = Describe("Stream", func() {
 		Context("publish and receive one event", func() {
 			It("should be consumed", func() {
 				var eventResult events.Event
-				event, _ := events.NewEvent("test-1")
+				event := events.NewEvent("k", "test-1")
 				bChan := make(chan bool)
 
 				receiver := stream.Subscribe()
@@ -37,9 +37,8 @@ var _ = Describe("Stream", func() {
 				stream.Publish(event)
 				<-bChan
 
-				var e1, e2 string
-				eventResult.GetContent(&e1)
-				event.GetContent(&e2)
+				e1 := eventResult.GetContent("k")
+				e2 := event.GetContent("k")
 				fmt.Print(e1)
 
 				Expect(e2).To(Equal(e1))
@@ -49,9 +48,9 @@ var _ = Describe("Stream", func() {
 			Context("publish and receive one event", func() {
 				It("should not block", func() {
 					var eventResult []events.Event = make([]events.Event, 3)
-					event1, _ := events.NewEvent("test-3-1")
-					event2, _ := events.NewEvent("test-3-2")
-					event3, _ := events.NewEvent("test-3-3")
+					event1 := events.NewEvent("k", "test-3-1")
+					event2 := events.NewEvent("k", "test-3-2")
+					event3 := events.NewEvent("k", "test-3-3")
 					bChan := make(chan bool)
 
 					receiver := asyncStream.Subscribe()
@@ -72,12 +71,11 @@ var _ = Describe("Stream", func() {
 					<-bChan
 					asyncStream.Stop()
 
-					var er1, er2, e1, e2 string
-					eventResult[0].GetContent(&er1)
-					eventResult[1].GetContent(&er2)
+					er1 := eventResult[0].GetContent("k")
+					er2 := eventResult[1].GetContent("k")
 
-					event1.GetContent(&e1)
-					event2.GetContent(&e2)
+					e1 := event1.GetContent("k")
+					e2 := event2.GetContent("k")
 
 					fmt.Print(er1)
 					fmt.Print(er2)

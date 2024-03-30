@@ -16,12 +16,12 @@ func test(eventMap map[string][]events.Event) []events.Event {
 
 	fmt.Println("op")
 
-	eventMap["a"][0].GetContent(&i)
-	eventMap["b"][0].GetContent(&j)
+	i = eventMap["a"][0].GetContent("key").(int)
+	j = eventMap["b"][0].GetContent("key").(int)
 
 	fmt.Println("op done")
 
-	e, _ := events.NewEvent(i + j)
+	e := events.NewEvent("key", i+j)
 	return []events.Event{e}
 }
 
@@ -38,15 +38,15 @@ var _ = Describe("Operator", func() {
 	input := make(map[string]*engine.OperatorStreamSubscription)
 	input["a"] = &engine.OperatorStreamSubscription{
 		Stream:      streamA.Subscribe(),
-		InputBuffer: buffer.NewAsyncBuffer(),
-		Selection:   &buffer.SelectNPolicy{N: 1},
+		InputBuffer: buffer.NewSimpleAsyncBuffer(),
+		Selection:   buffer.NewSelectNPolicy(1),
 	}
 	input["a"].Run()
 
 	input["b"] = &engine.OperatorStreamSubscription{
 		Stream:      streamB.Subscribe(),
-		InputBuffer: buffer.NewAsyncBuffer(),
-		Selection:   &buffer.SelectNPolicy{N: 1},
+		InputBuffer: buffer.NewSimpleAsyncBuffer(),
+		Selection:   buffer.NewSelectNPolicy(1),
 	}
 	input["b"].Run()
 
@@ -55,10 +55,10 @@ var _ = Describe("Operator", func() {
 	Describe("Operator", func() {
 		Context("op1", func() {
 			It("should be consumed", func() {
-				event, _ := events.NewEvent(8)
-				event2, _ := events.NewEvent(3)
+				event := events.NewEvent("key", 8)
+				event2 := events.NewEvent("key", 3)
 
-				fmt.Println("Start Operator")
+				fmt.Println("StartBlocking Operator")
 				op.Start()
 				fmt.Println("Started Operator")
 
@@ -70,9 +70,7 @@ var _ = Describe("Operator", func() {
 
 				result := <-resRec.Notify
 
-				var r int
-				result.GetContent(&r)
-				fmt.Print(r)
+				r := result.GetContent("key")
 
 				Expect(r).To(Equal(11))
 			})

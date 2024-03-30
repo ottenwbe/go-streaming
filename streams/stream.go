@@ -21,6 +21,12 @@ func (s StreamID) String() string {
 
 type NotificationMap map[StreamReceiverID]events.EventChannel
 
+func (m NotificationMap) notifyAll(events []events.Event) {
+	for _, e := range events {
+		m.notify(e)
+	}
+}
+
 func (m NotificationMap) notify(e events.Event) {
 	for id, notifier := range m {
 		func() {
@@ -88,14 +94,14 @@ func NewLocalAsyncStream(description StreamDescription) *LocalAsyncStream {
 	a := &LocalAsyncStream{
 		description: description,
 		active:      false,
-		buffer:      buffer.NewAsyncBuffer(),
+		buffer:      buffer.NewSimpleAsyncBuffer(),
 		notify:      make(NotificationMap),
 	}
 	return a
 }
 
 func (s *LocalSyncStream) events() buffer.Buffer {
-	return buffer.NewAsyncBuffer()
+	return buffer.NewSimpleAsyncBuffer()
 }
 
 func (s *LocalSyncStream) setEvents(buffer.Buffer) {
@@ -119,7 +125,7 @@ func (l *LocalAsyncStream) Stop() {
 	for _, c := range l.notify {
 		close(c)
 	}
-	l.buffer.Flush()
+	l.buffer.StopBlocking()
 }
 
 func (l *LocalAsyncStream) Start() {
@@ -146,7 +152,7 @@ func (l *LocalAsyncStream) Start() {
 		// read buffer and notify
 		go func() {
 			for l.active {
-				l.notify.notify(l.buffer.GetAndRemoveNextEvent())
+				l.notify.notifyAll(l.buffer.GetAndConsumeNextEvents())
 			}
 		}()
 	}

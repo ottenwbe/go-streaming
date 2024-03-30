@@ -68,7 +68,11 @@ func CreateRestAPI(router *gin.Engine) {
 			return
 		}
 
-		e := events.NewSimpleEvent(data)
+		e, err := events.NewEventFromJSON(data)
+		if err != nil {
+			zap.S().Error("cannot unmarshall event", zap.String("module", "api"), zap.Error(err))
+			c.String(http.StatusBadRequest, "event not valid")
+		}
 
 		err = streams.PubSubSystem.PublishN(name, e)
 		if err != nil {

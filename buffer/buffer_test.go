@@ -9,32 +9,44 @@ import (
 
 var _ = Describe("Buffer", func() {
 
-	Describe("Async Buffer", func() {
-		Context("GetAndRemoveNextEvent", func() {
-			It("reads and deletes in a fifo manner events from a buffer", func() {
-				buffer := buffer.NewAsyncBuffer()
-				defer buffer.Flush()
+	var (
+		buf buffer.Buffer
+	)
 
-				e1, _ := events.NewEvent("e1")
-				e2, _ := events.NewEvent("e2")
+	BeforeEach(func() {
+		buf = buffer.NewSimpleAsyncBuffer()
+	})
+
+	AfterEach(func() {
+		buf.StopBlocking()
+	})
+
+	Describe("SimpleAsyncBuffer", func() {
+		Context("GetAndConsumeNextEvent", func() {
+			It("reads and deletes in a fifo manner events from a buffer", func() {
+				buffer := buffer.NewSimpleAsyncBuffer()
+				defer buffer.StopBlocking()
+
+				e1 := events.NewEvent("key", "e1")
+				e2 := events.NewEvent("key", "e2")
 
 				buffer.AddEvent(e1)
 				buffer.AddEvent(e2)
-				resultEvent := buffer.GetAndRemoveNextEvent()
+				resultEvent := buffer.GetAndConsumeNextEvents()
 
-				Expect(resultEvent).To(Equal(e1))
+				Expect(resultEvent[0]).To(Equal(e1))
 				Expect(buffer.Len()).To(Equal(1))
 			})
 		})
-		Context("GetNextEvent", func() {
+		Context("PeekNextEvent", func() {
 			It("reads events w/o deleting them from a buffer", func() {
-				buffer := buffer.NewAsyncBuffer()
-				defer buffer.Flush()
+				buffer := buffer.NewSimpleAsyncBuffer()
+				defer buffer.StopBlocking()
 
-				e, _ := events.NewEvent("e1")
+				e := events.NewEvent("key", "e1")
 
 				buffer.AddEvent(e)
-				r := buffer.GetNextEvent()
+				r := buffer.PeekNextEvent()
 
 				Expect(r).To(Equal(e))
 				Expect(buffer.Len()).To(Equal(1))
@@ -42,11 +54,11 @@ var _ = Describe("Buffer", func() {
 		})
 		Context("Dump", func() {
 			It("dumps all buffered events", func() {
-				e1, _ := events.NewEvent("e1")
-				e2, _ := events.NewEvent("e2")
+				e1 := events.NewEvent("key", "e1")
+				e2 := events.NewEvent("key", "e2")
 
-				buffer := buffer.NewAsyncBuffer()
-				defer buffer.Flush()
+				buffer := buffer.NewSimpleAsyncBuffer()
+				defer buffer.StopBlocking()
 
 				buffer.AddEvent(e1)
 				buffer.AddEvent(e2)
@@ -56,12 +68,12 @@ var _ = Describe("Buffer", func() {
 		})
 		Context("AddEvents", func() {
 			It("adds all buffered events", func() {
-				e1, _ := events.NewEvent("e1")
-				e2, _ := events.NewEvent("e2")
-				e3, _ := events.NewEvent("e3")
+				e1 := events.NewEvent("key", "e1")
+				e2 := events.NewEvent("key", "e2")
+				e3 := events.NewEvent("key", "e3")
 
-				buffer := buffer.NewAsyncBuffer()
-				defer buffer.Flush()
+				buffer := buffer.NewSimpleAsyncBuffer()
+				defer buffer.StopBlocking()
 
 				buffer.AddEvent(e1)
 				buffer.AddEvents([]events.Event{e2, e3})
@@ -69,64 +81,44 @@ var _ = Describe("Buffer", func() {
 				Expect(buffer.Dump()).To(Equal([]events.Event{e1, e2, e3}))
 			})
 		})
-		Context("Remove events", func() {
-			It("reduces the size of the buffer", func() {
-				buffer := buffer.NewAsyncBuffer()
-				defer buffer.Flush()
-
-				e1, _ := events.NewEvent("e1")
-				buffer.AddEvent(e1)
-				buffer.RemoveNextEvent()
-
-				Expect(buffer.Len()).To(Equal(0))
-			})
-			It("does not run into an error when no event is present", func() {
-				buffer := buffer.NewAsyncBuffer()
-				defer buffer.Flush()
-
-				buffer.RemoveNextEvent()
-
-				Expect(buffer.Len()).To(Equal(0))
-			})
-		})
-		Context("GetNextEvent function", func() {
+		Context("Async PeekNext", func() {
 			It("wait for events if not available in buffer", func() {
-				buffer := buffer.NewAsyncBuffer()
-				defer buffer.Flush()
+				buffer := buffer.NewSimpleAsyncBuffer()
+				defer buffer.StopBlocking()
 
-				e1, _ := events.NewEvent("e1")
-				e2, _ := events.NewEvent("e2")
+				e1 := events.NewEvent("key", "e1")
+				e2 := events.NewEvent("key", "e2")
 				bChan := make(chan bool)
 
 				buffer.AddEvent(e1)
-				r1 := buffer.GetAndRemoveNextEvent()
+				r1 := buffer.GetAndConsumeNextEvents()
 
-				r2 := r1
+				var r2 events.Event
 				go func() {
-					r2 = buffer.GetNextEvent()
+					r2 = buffer.PeekNextEvent()
 					bChan <- true
 				}()
 				buffer.AddEvent(e2)
 				<-bChan
 
-				Expect(r1).To(Equal(e1))
+				Expect(r1[0]).To(Equal(e1))
 				Expect(r2).To(Equal(e2))
 				Expect(buffer.Len()).To(Equal(1))
 			})
 		})
-		Context("flush", func() {
-			It("ensures that GetNextEvent buffers does not get stuck", func() {
-				buffer := buffer.NewAsyncBuffer()
+		Context("Flush", func() {
+			It("ensures that PeekNextEvent buffers does not get stuck", func() {
+				buffer := buffer.NewSimpleAsyncBuffer()
 				var rEvent events.Event
 				var testing = true
 
 				go func() {
 					for testing == true {
-						buffer.Flush()
+						buffer.StopBlocking()
 					}
 				}()
 
-				rEvent = buffer.GetNextEvent()
+				rEvent = buffer.PeekNextEvent()
 				testing = false
 
 				Expect(rEvent).To(BeNil())
@@ -134,18 +126,18 @@ var _ = Describe("Buffer", func() {
 		})
 		Context("GetAndRemove", func() {
 			It("can be executed multiple times in a row in succession", func() {
-				buffer := buffer.NewAsyncBuffer()
-				defer buffer.Flush()
+				buffer := buffer.NewSimpleAsyncBuffer()
+				defer buffer.StopBlocking()
 
-				e1, _ := events.NewEvent("e1")
-				e2, _ := events.NewEvent("e2")
-				e3, _ := events.NewEvent("e3")
+				e1 := events.NewEvent("key", "e1")
+				e2 := events.NewEvent("key", "e2")
+				e3 := events.NewEvent("key", "e3")
 				bChan := make(chan bool)
 				r := make([]events.Event, 0)
 
 				go func() {
 					for i := 0; i < 3; i++ {
-						r = append(r, buffer.GetAndRemoveNextEvent())
+						r = append(r, buffer.GetAndConsumeNextEvents()...)
 					}
 					bChan <- true
 				}()
