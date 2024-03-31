@@ -20,7 +20,7 @@ func CreateRestAPI(router *gin.Engine) {
 			name        = c.Param("stream")
 		)
 
-		description, err = streams.PubSubSystem.GetDescriptionN(name)
+		description, err = streams.GetDescriptionN[any](name)
 		if err != nil {
 			zap.S().Error("stream could not be found", zap.String("method", "GET"), zap.String("path", "/streams/:stream"), zap.String("module", "api"), zap.Error(err))
 			c.String(http.StatusNotFound, "stream not found")
@@ -47,7 +47,7 @@ func CreateRestAPI(router *gin.Engine) {
 			c.String(http.StatusBadRequest, "invalid json body")
 			return
 		}
-		err = streams.PubSubSystem.NewOrReplaceStreamD(d)
+		err = streams.NewOrReplaceStreamD[any](d)
 		if err != nil {
 			zap.S().Error("could not instantiate stream", zap.String("module", "api"), zap.Error(err))
 			c.String(http.StatusNotFound, "error when instantiating stream")
@@ -74,7 +74,7 @@ func CreateRestAPI(router *gin.Engine) {
 			c.String(http.StatusBadRequest, "event not valid")
 		}
 
-		err = streams.PubSubSystem.PublishN(name, e)
+		err = streams.PublishN(name, e)
 		if err != nil {
 			zap.S().Error("cannot publish event", zap.String("module", "api"), zap.Error(err))
 			c.String(http.StatusBadRequest, "stream not found or inactive: cannot publish request")

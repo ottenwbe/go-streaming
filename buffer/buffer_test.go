@@ -10,11 +10,11 @@ import (
 var _ = Describe("Buffer", func() {
 
 	var (
-		buf buffer.Buffer
+		buf buffer.Buffer[string]
 	)
 
 	BeforeEach(func() {
-		buf = buffer.NewSimpleAsyncBuffer()
+		buf = buffer.NewSimpleAsyncBuffer[string]()
 	})
 
 	AfterEach(func() {
@@ -24,11 +24,11 @@ var _ = Describe("Buffer", func() {
 	Describe("SimpleAsyncBuffer", func() {
 		Context("GetAndConsumeNextEvent", func() {
 			It("reads and deletes in a fifo manner events from a buffer", func() {
-				buffer := buffer.NewSimpleAsyncBuffer()
+				buffer := buffer.NewSimpleAsyncBuffer[string]()
 				defer buffer.StopBlocking()
 
-				e1 := events.NewEvent("key", "e1")
-				e2 := events.NewEvent("key", "e2")
+				e1 := events.NewEvent("e1")
+				e2 := events.NewEvent("e2")
 
 				buffer.AddEvent(e1)
 				buffer.AddEvent(e2)
@@ -40,10 +40,10 @@ var _ = Describe("Buffer", func() {
 		})
 		Context("PeekNextEvent", func() {
 			It("reads events w/o deleting them from a buffer", func() {
-				buffer := buffer.NewSimpleAsyncBuffer()
+				buffer := buffer.NewSimpleAsyncBuffer[string]()
 				defer buffer.StopBlocking()
 
-				e := events.NewEvent("key", "e1")
+				e := events.NewEvent("e1")
 
 				buffer.AddEvent(e)
 				r := buffer.PeekNextEvent()
@@ -54,46 +54,46 @@ var _ = Describe("Buffer", func() {
 		})
 		Context("Dump", func() {
 			It("dumps all buffered events", func() {
-				e1 := events.NewEvent("key", "e1")
-				e2 := events.NewEvent("key", "e2")
+				e1 := events.NewEvent("e1")
+				e2 := events.NewEvent("e2")
 
-				buffer := buffer.NewSimpleAsyncBuffer()
+				buffer := buffer.NewSimpleAsyncBuffer[string]()
 				defer buffer.StopBlocking()
 
 				buffer.AddEvent(e1)
 				buffer.AddEvent(e2)
 
-				Expect(buffer.Dump()).To(Equal([]events.Event{e1, e2}))
+				Expect(buffer.Dump()).To(Equal([]events.Event[string]{e1, e2}))
 			})
 		})
 		Context("AddEvents", func() {
 			It("adds all buffered events", func() {
-				e1 := events.NewEvent("key", "e1")
-				e2 := events.NewEvent("key", "e2")
-				e3 := events.NewEvent("key", "e3")
+				e1 := events.NewEvent("e1")
+				e2 := events.NewEvent("e2")
+				e3 := events.NewEvent("e3")
 
-				buffer := buffer.NewSimpleAsyncBuffer()
+				buffer := buffer.NewSimpleAsyncBuffer[string]()
 				defer buffer.StopBlocking()
 
 				buffer.AddEvent(e1)
-				buffer.AddEvents([]events.Event{e2, e3})
+				buffer.AddEvents([]events.Event[string]{e2, e3})
 
-				Expect(buffer.Dump()).To(Equal([]events.Event{e1, e2, e3}))
+				Expect(buffer.Dump()).To(Equal(events.Arr(e1, e2, e3)))
 			})
 		})
 		Context("Async PeekNext", func() {
 			It("wait for events if not available in buffer", func() {
-				buffer := buffer.NewSimpleAsyncBuffer()
+				buffer := buffer.NewSimpleAsyncBuffer[string]()
 				defer buffer.StopBlocking()
 
-				e1 := events.NewEvent("key", "e1")
-				e2 := events.NewEvent("key", "e2")
+				e1 := events.NewEvent("e1")
+				e2 := events.NewEvent("e2")
 				bChan := make(chan bool)
 
 				buffer.AddEvent(e1)
 				r1 := buffer.GetAndConsumeNextEvents()
 
-				var r2 events.Event
+				var r2 events.Event[string]
 				go func() {
 					r2 = buffer.PeekNextEvent()
 					bChan <- true
@@ -108,8 +108,8 @@ var _ = Describe("Buffer", func() {
 		})
 		Context("Flush", func() {
 			It("ensures that PeekNextEvent buffers does not get stuck", func() {
-				buffer := buffer.NewSimpleAsyncBuffer()
-				var rEvent events.Event
+				buffer := buffer.NewSimpleAsyncBuffer[string]()
+				var rEvent events.Event[string]
 				var testing = true
 
 				go func() {
@@ -126,14 +126,14 @@ var _ = Describe("Buffer", func() {
 		})
 		Context("GetAndRemove", func() {
 			It("can be executed multiple times in a row in succession", func() {
-				buffer := buffer.NewSimpleAsyncBuffer()
+				buffer := buffer.NewSimpleAsyncBuffer[string]()
 				defer buffer.StopBlocking()
 
-				e1 := events.NewEvent("key", "e1")
-				e2 := events.NewEvent("key", "e2")
-				e3 := events.NewEvent("key", "e3")
+				e1 := events.NewEvent("e1")
+				e2 := events.NewEvent("e2")
+				e3 := events.NewEvent("e3")
 				bChan := make(chan bool)
-				r := make([]events.Event, 0)
+				r := make([]events.Event[string], 0)
 
 				go func() {
 					for i := 0; i < 3; i++ {

@@ -14,84 +14,83 @@ type EventRange struct {
 type PolicyID uuid.UUID
 
 // SelectionPolicy defines how events are selected from a buffer
-type SelectionPolicy interface {
+type SelectionPolicy[T any] interface {
 	NextSelectionReady() bool
 	NextSelection() EventRange
-	UpdateSelection(event events.Event)
+	UpdateSelection(event events.Event[T])
 	ShiftWithOffset(offset int)
 	ID() PolicyID
 }
 
-type SelectNextPolicy struct {
+type SelectNextPolicy[T any] struct {
 	id             PolicyID
 	selectionReady bool
 	next           int
 }
 
-func (s *SelectNextPolicy) NextSelection() EventRange {
+func (s *SelectNextPolicy[T]) NextSelection() EventRange {
 	return EventRange{s.next, s.next}
 }
 
-func (s *SelectNextPolicy) UpdateSelection(event events.Event) {
+func (s *SelectNextPolicy[T]) UpdateSelection(event events.Event[T]) {
 	if !s.selectionReady {
 		s.next++
 		s.selectionReady = true
 	}
 }
 
-func (s *SelectNextPolicy) ShiftWithOffset(offset int) {
+func (s *SelectNextPolicy[T]) ShiftWithOffset(offset int) {
 	s.selectionReady = false
-	s.next -= offset
+	s.next -= offset + 1
 }
 
-func (s *SelectNextPolicy) NextSelectionReady() bool {
+func (s *SelectNextPolicy[T]) NextSelectionReady() bool {
 	return s.selectionReady
 }
 
-func (s *SelectNextPolicy) ID() PolicyID {
+func (s *SelectNextPolicy[T]) ID() PolicyID {
 	return s.id
 }
 
-type SelectNPolicy struct {
+type SelectNPolicy[T any] struct {
 	n            int
 	currentRange EventRange
 	id           PolicyID
 }
 
-func (s *SelectNPolicy) NextSelection() EventRange {
+func (s *SelectNPolicy[T]) NextSelection() EventRange {
 	return s.currentRange
 }
 
-func (s *SelectNPolicy) NextSelectionReady() bool {
+func (s *SelectNPolicy[T]) NextSelectionReady() bool {
 	return s.currentRange.End-s.currentRange.Start+1 >= s.n
 }
 
-func (s *SelectNPolicy) UpdateSelection(event events.Event) {
+func (s *SelectNPolicy[T]) UpdateSelection(event events.Event[T]) {
 	if s.currentRange.End-s.currentRange.Start+1 < s.n {
 		s.currentRange.End++
 	}
 }
 
-func (s *SelectNPolicy) ShiftWithOffset(offset int) {
+func (s *SelectNPolicy[T]) ShiftWithOffset(offset int) {
 	s.currentRange.Start = s.currentRange.End - offset
-	s.currentRange.End -= offset
-
+	s.currentRange.End -= offset + 1
 }
 
-func (s *SelectNPolicy) ID() PolicyID {
+func (s *SelectNPolicy[T]) ID() PolicyID {
 	return s.id
 }
 
-func NewSelectNPolicy(n int) SelectionPolicy {
-	return &SelectNPolicy{
+func NewSelectNPolicy[T any](n int) SelectionPolicy[T] {
+	return &SelectNPolicy[T]{
 		n:            n,
-		currentRange: EventRange{0, 0},
+		currentRange: EventRange{0, -1},
 		id:           PolicyID(uuid.New()),
 	}
 }
 
-func NewSelectNextPolicy() SelectionPolicy {
-	return &SelectNextPolicy{
+func NewSelectNextPolicy[T any]() SelectionPolicy[T] {
+	return &SelectNextPolicy[T]{
 		id:             PolicyID(uuid.New()),
 		selectionReady: false,
 		next:           -1,

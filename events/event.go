@@ -6,17 +6,20 @@ import (
 	"time"
 )
 
-type Event interface {
+type Event[T any] interface {
 	GetTimestamp() time.Time
-	GetContentMap() map[string]interface{}
-	GetContent(key string) interface{}
+	GetContent() T
 }
 
-type EventChannel chan Event
+func Arr[T any](events ...Event[T]) []Event[T] {
+	return events
+}
 
-type TemporalEvent struct {
+type EventChannel[T any] chan Event[T]
+
+type TemporalEvent[T any] struct {
 	timeStamp time.Time
-	content   map[string]interface{}
+	content   T
 }
 
 type OrchestrationEvent struct {
@@ -32,21 +35,14 @@ func (m *OrchestrationEvent) GetContent(v interface{}) error {
 	return nil
 }
 
-func NewEventMap(content map[string]interface{}) Event {
-	return &TemporalEvent{
+func NewEvent[T any](content T) Event[T] {
+	return &TemporalEvent[T]{
 		timeStamp: time.Now(),
 		content:   content,
 	}
 }
 
-func NewEvent(key string, value interface{}) Event {
-	return &TemporalEvent{
-		timeStamp: time.Now(),
-		content:   map[string]interface{}{key: value},
-	}
-}
-
-func NewEventFromJSON(b []byte) (Event, error) {
+func NewEventFromJSON(b []byte) (Event[map[string]interface{}], error) {
 	content := make(map[string]interface{})
 	err := json.Unmarshal(b, &content)
 	if err != nil {
@@ -54,20 +50,16 @@ func NewEventFromJSON(b []byte) (Event, error) {
 		return nil, err
 	}
 
-	return &TemporalEvent{
+	return &TemporalEvent[map[string]interface{}]{
 		timeStamp: time.Now(),
 		content:   content,
 	}, nil
 }
 
-func (e *TemporalEvent) GetTimestamp() time.Time {
+func (e *TemporalEvent[T]) GetTimestamp() time.Time {
 	return e.timeStamp
 }
 
-func (e *TemporalEvent) GetContentMap() map[string]interface{} {
+func (e *TemporalEvent[T]) GetContent() T {
 	return e.content
-}
-
-func (e *TemporalEvent) GetContent(key string) interface{} {
-	return e.content[key]
 }

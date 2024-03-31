@@ -10,21 +10,21 @@ import (
 )
 
 var _ = Describe("Stream", func() {
-	var stream *streams.LocalSyncStream
-	var asyncStream *streams.LocalAsyncStream
+	var stream *streams.LocalSyncStream[string]
+	var asyncStream *streams.LocalAsyncStream[string]
 
 	BeforeEach(func() {
-		stream = streams.NewLocalSyncStream(streams.NewStreamDescription("test", uuid.New(), false))
+		stream = streams.NewLocalSyncStream[string](streams.NewStreamDescription("test", uuid.New(), false))
 		stream.Start()
-		asyncStream = streams.NewLocalAsyncStream(streams.NewStreamDescription("test3", uuid.New(), true))
+		asyncStream = streams.NewLocalAsyncStream[string](streams.NewStreamDescription("test3", uuid.New(), true))
 		asyncStream.Start()
 	})
 
 	Describe("LocalSyncStream One Event", func() {
 		Context("publish and receive one event", func() {
 			It("should be consumed", func() {
-				var eventResult events.Event
-				event := events.NewEvent("k", "test-1")
+				var eventResult events.Event[string]
+				event := events.NewEvent("test-1")
 				bChan := make(chan bool)
 
 				receiver := stream.Subscribe()
@@ -37,8 +37,8 @@ var _ = Describe("Stream", func() {
 				stream.Publish(event)
 				<-bChan
 
-				e1 := eventResult.GetContent("k")
-				e2 := event.GetContent("k")
+				e1 := eventResult.GetContent()
+				e2 := event.GetContent()
 				fmt.Print(e1)
 
 				Expect(e2).To(Equal(e1))
@@ -47,10 +47,10 @@ var _ = Describe("Stream", func() {
 		Describe("LocalAsyncStream ", func() {
 			Context("publish and receive one event", func() {
 				It("should not block", func() {
-					var eventResult []events.Event = make([]events.Event, 3)
-					event1 := events.NewEvent("k", "test-3-1")
-					event2 := events.NewEvent("k", "test-3-2")
-					event3 := events.NewEvent("k", "test-3-3")
+					var eventResult []events.Event[string] = make([]events.Event[string], 3)
+					event1 := events.NewEvent("test-3-1")
+					event2 := events.NewEvent("test-3-2")
+					event3 := events.NewEvent("test-3-3")
 					bChan := make(chan bool)
 
 					receiver := asyncStream.Subscribe()
@@ -71,11 +71,11 @@ var _ = Describe("Stream", func() {
 					<-bChan
 					asyncStream.Stop()
 
-					er1 := eventResult[0].GetContent("k")
-					er2 := eventResult[1].GetContent("k")
+					er1 := eventResult[0].GetContent()
+					er2 := eventResult[1].GetContent()
 
-					e1 := event1.GetContent("k")
-					e2 := event2.GetContent("k")
+					e1 := event1.GetContent()
+					e2 := event2.GetContent()
 
 					fmt.Print(er1)
 					fmt.Print(er2)

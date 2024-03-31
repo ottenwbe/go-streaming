@@ -19,15 +19,15 @@ func (s StreamID) String() string {
 	return uuid.UUID(s).String()
 }
 
-type NotificationMap map[StreamReceiverID]events.EventChannel
+type NotificationMap[T any] map[StreamReceiverID]events.EventChannel[T]
 
-func (m NotificationMap) notifyAll(events []events.Event) {
+func (m NotificationMap[T]) notifyAll(events []events.Event[T]) {
 	for _, e := range events {
 		m.notify(e)
 	}
 }
 
-func (m NotificationMap) notify(e events.Event) {
+func (m NotificationMap[T]) notify(e events.Event[T]) {
 	for id, notifier := range m {
 		func() {
 			defer func() {
@@ -40,7 +40,7 @@ func (m NotificationMap) notify(e events.Event) {
 	}
 }
 
-type Stream interface {
+type Stream[T any] interface {
 	Start()
 	Stop()
 
@@ -48,32 +48,30 @@ type Stream interface {
 	Name() string
 	Description() StreamDescription
 
-	Publish(events.Event) error
-	Subscribe() *StreamReceiver
+	Publish(events.Event[T]) error
+	Subscribe() *StreamReceiver[T]
 	Unsubscribe(id StreamReceiverID)
 
-	setNotifiers(notificationMap NotificationMap)
-	notifiers() NotificationMap
-	events() buffer.Buffer
-	setEvents(buffer.Buffer)
+	setNotifiers(notificationMap NotificationMap[T])
+	notifiers() NotificationMap[T]
+	events() buffer.Buffer[T]
+	setEvents(buffer.Buffer[T])
 }
 
-type LocalSyncStream struct {
+type LocalSyncStream[T any] struct {
 	description StreamDescription
 
-	notify      NotificationMap
+	notify      NotificationMap[T]
 	notifyMutex sync.Mutex
-
-	active bool
 }
 
-type LocalAsyncStream struct {
+type LocalAsyncStream[T any] struct {
 	description StreamDescription
 
-	inChannel events.EventChannel
-	buffer    buffer.Buffer
+	inChannel events.EventChannel[T]
+	buffer    buffer.Buffer[T]
 
-	notify      NotificationMap
+	notify      NotificationMap[T]
 	notifyMutex sync.Mutex
 
 	active bool
@@ -81,42 +79,41 @@ type LocalAsyncStream struct {
 
 // NewLocalSyncStream is a local in-memory stream that delivers events synchronously
 // aka is created w/o event buffering
-func NewLocalSyncStream(description StreamDescription) *LocalSyncStream {
-	return &LocalSyncStream{
+func NewLocalSyncStream[T any](description StreamDescription) *LocalSyncStream[T] {
+	return &LocalSyncStream[T]{
 		description: description,
-		notify:      make(NotificationMap),
-		active:      false,
+		notify:      make(NotificationMap[T]),
 	}
 }
 
 // NewLocalAsyncStream is created w/ event buffering
-func NewLocalAsyncStream(description StreamDescription) *LocalAsyncStream {
-	a := &LocalAsyncStream{
+func NewLocalAsyncStream[T any](description StreamDescription) *LocalAsyncStream[T] {
+	a := &LocalAsyncStream[T]{
 		description: description,
 		active:      false,
-		buffer:      buffer.NewSimpleAsyncBuffer(),
-		notify:      make(NotificationMap),
+		buffer:      buffer.NewSimpleAsyncBuffer[T](),
+		notify:      make(NotificationMap[T]),
 	}
 	return a
 }
 
-func (s *LocalSyncStream) events() buffer.Buffer {
-	return buffer.NewSimpleAsyncBuffer()
+func (s *LocalSyncStream[T]) events() buffer.Buffer[T] {
+	return buffer.NewSimpleAsyncBuffer[T]()
 }
 
-func (s *LocalSyncStream) setEvents(buffer.Buffer) {
+func (s *LocalSyncStream[T]) setEvents(buffer.Buffer[T]) {
 	// Intentional Event Loss
 }
 
-func (l *LocalAsyncStream) events() buffer.Buffer {
+func (l *LocalAsyncStream[T]) events() buffer.Buffer[T] {
 	return l.buffer
 }
 
-func (l *LocalAsyncStream) setEvents(b buffer.Buffer) {
+func (l *LocalAsyncStream[T]) setEvents(b buffer.Buffer[T]) {
 	l.buffer.AddEvents(b.Dump())
 }
 
-func (l *LocalAsyncStream) Stop() {
+func (l *LocalAsyncStream[T]) Stop() {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
@@ -128,14 +125,14 @@ func (l *LocalAsyncStream) Stop() {
 	l.buffer.StopBlocking()
 }
 
-func (l *LocalAsyncStream) Start() {
+func (l *LocalAsyncStream[T]) Start() {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
 	if !l.active {
 
 		l.active = true
-		l.inChannel = make(chan events.Event)
+		l.inChannel = make(chan events.Event[T])
 
 		// read input from in Channel and buffer it
 		go func() {
@@ -158,19 +155,19 @@ func (l *LocalAsyncStream) Start() {
 	}
 }
 
-func (l *LocalAsyncStream) Description() StreamDescription {
+func (l *LocalAsyncStream[T]) Description() StreamDescription {
 	return l.description
 }
 
-func (l *LocalAsyncStream) ID() StreamID {
+func (l *LocalAsyncStream[T]) ID() StreamID {
 	return l.description.StreamID()
 }
 
-func (l *LocalAsyncStream) Name() string {
+func (l *LocalAsyncStream[T]) Name() string {
 	return l.description.Name
 }
 
-func (l *LocalAsyncStream) Publish(event events.Event) error {
+func (l *LocalAsyncStream[T]) Publish(event events.Event[T]) error {
 	// Handle stream inactive error
 	if !l.active {
 		return StreamInactive
@@ -180,39 +177,35 @@ func (l *LocalAsyncStream) Publish(event events.Event) error {
 	return nil
 }
 
-func (l *LocalAsyncStream) Subscribe() *StreamReceiver {
+func (l *LocalAsyncStream[T]) Subscribe() *StreamReceiver[T] {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
-	rec := NewStreamReceiver(l)
+	rec := NewStreamReceiver[T](l)
 
 	l.notify[rec.ID] = rec.Notify
 
 	return rec
 }
 
-func (s *LocalSyncStream) Description() StreamDescription {
+func (s *LocalSyncStream[T]) Description() StreamDescription {
 	return s.description
 }
 
-func (s *LocalSyncStream) ID() StreamID {
+func (s *LocalSyncStream[T]) ID() StreamID {
 	return s.description.StreamID()
 }
 
-func (s *LocalSyncStream) Name() string {
+func (s *LocalSyncStream[T]) Name() string {
 	return s.description.Name
 }
 
-func (s *LocalSyncStream) Publish(e events.Event) error {
-	if !s.active {
-		return StreamInactive
-	}
-
+func (s *LocalSyncStream[T]) Publish(e events.Event[T]) error {
 	s.notify.notify(e)
 	return nil
 }
 
-func (l *LocalAsyncStream) Unsubscribe(id StreamReceiverID) {
+func (l *LocalAsyncStream[T]) Unsubscribe(id StreamReceiverID) {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
@@ -222,7 +215,7 @@ func (l *LocalAsyncStream) Unsubscribe(id StreamReceiverID) {
 	}
 }
 
-func (s *LocalSyncStream) Unsubscribe(id StreamReceiverID) {
+func (s *LocalSyncStream[T]) Unsubscribe(id StreamReceiverID) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
 
@@ -232,42 +225,41 @@ func (s *LocalSyncStream) Unsubscribe(id StreamReceiverID) {
 	}
 }
 
-func (s *LocalSyncStream) Subscribe() *StreamReceiver {
+func (s *LocalSyncStream[T]) Subscribe() *StreamReceiver[T] {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
 
-	rec := NewStreamReceiver(s)
+	rec := NewStreamReceiver[T](s)
 	s.notify[rec.ID] = rec.Notify
 
 	return rec
 }
 
-func (s *LocalSyncStream) Start() {
-	s.active = true
+func (s *LocalSyncStream[T]) Start() {
+
 }
 
-func (s *LocalSyncStream) Stop() {
-	s.active = false
+func (s *LocalSyncStream[T]) Stop() {
 	for _, c := range s.notify {
 		close(c)
 	}
 }
 
-func (s *LocalSyncStream) setNotifiers(m NotificationMap) {
+func (s *LocalSyncStream[T]) setNotifiers(m NotificationMap[T]) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
 	s.notify = m
 }
 
-func (s *LocalSyncStream) notifiers() NotificationMap {
+func (s *LocalSyncStream[T]) notifiers() NotificationMap[T] {
 	return s.notify
 }
 
-func (l *LocalAsyncStream) setNotifiers(m NotificationMap) {
+func (l *LocalAsyncStream[T]) setNotifiers(m NotificationMap[T]) {
 	l.notify = m
 }
 
-func (l *LocalAsyncStream) notifiers() NotificationMap {
+func (l *LocalAsyncStream[T]) notifiers() NotificationMap[T] {
 	return l.notify
 }
 
