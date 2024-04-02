@@ -9,13 +9,20 @@ import (
 
 var defaultBufferCapacity = 5
 
+type Reader[T any] interface {
+	Get(i int) events.Event[T]
+	Len() int
+}
+
+type basicBuffer[T any] []events.Event[T]
+
 type Buffer[T any] interface {
 	GetAndConsumeNextEvents() []events.Event[T]
 	PeekNextEvent() events.Event[T]
 	AddEvent(event events.Event[T])
 	AddEvents(events []events.Event[T])
 	Len() int
-	get(x int) events.Event[T]
+	Get(x int) events.Event[T]
 	Dump() []events.Event[T]
 	StopBlocking()
 	StartBlocking()
@@ -29,7 +36,7 @@ type iterator[T any] struct {
 
 // AsyncBuffer represents an asynchronous buffer.
 type AsyncBuffer[T any] struct {
-	buffer      []events.Event[T]
+	buffer      basicBuffer[T]
 	id          uuid.UUID
 	bufferMutex sync.Mutex
 	cond        *sync.Cond
@@ -51,9 +58,17 @@ type ConsumableAsyncBuffer[T any] struct {
 	selectionPolicy SelectionPolicy[T]
 }
 
+func (b basicBuffer[T]) Get(i int) events.Event[T] {
+	return b[i]
+}
+
+func (b basicBuffer[T]) Len() int {
+	return len(b)
+}
+
 func NewAsyncBuffer[T any]() *AsyncBuffer[T] {
 	s := &AsyncBuffer[T]{
-		buffer:      make([]events.Event[T], 0, defaultBufferCapacity),
+		buffer:      make(basicBuffer[T], 0, defaultBufferCapacity),
 		bufferMutex: sync.Mutex{},
 		stopped:     false,
 		id:          uuid.New(),
@@ -74,6 +89,8 @@ func NewConsumableAsyncBuffer[T any](policy SelectionPolicy[T]) Buffer[T] {
 		AsyncBuffer:     NewAsyncBuffer[T](),
 		selectionPolicy: policy,
 	}
+	s.selectionPolicy.SetBuffer(&s.buffer)
+	fmt.Printf("buff %p\n", s.buffer)
 	return s
 }
 
@@ -96,7 +113,7 @@ func (s *AsyncBuffer[T]) Len() int {
 	return len(s.buffer)
 }
 
-func (s *AsyncBuffer[T]) get(i int) events.Event[T] {
+func (s *AsyncBuffer[T]) Get(i int) events.Event[T] {
 	return s.buffer[i]
 }
 
@@ -171,31 +188,38 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 
 	var (
 		selectionFound = s.selectionPolicy.NextSelectionReady()
-		selection      EventRange
+		selection      EventSelection
 	)
 
-	fmt.Printf("1 getting from buffer %v %v \n", selectionFound, s.selectionPolicy.NextSelection())
+	fmt.Printf("1 getting from buffer(%v) %v %v \n", s.Len(), selectionFound, s.selectionPolicy.NextSelection())
 
 	// Wait until the buffer has enough events
 	for !selectionFound && !s.stopped {
 		s.cond.Wait()
+		fmt.Printf("1.5 getting from buffer %v %v \n", selectionFound, s.selectionPolicy.NextSelection())
 		selectionFound = s.selectionPolicy.NextSelectionReady()
 	}
 
 	fmt.Printf("2 getting from buffer %v %v l:%v \n", selectionFound, s.selectionPolicy.NextSelection(), s.Len())
 
-	if selectionFound {
-		selection = s.selectionPolicy.NextSelection()
+	selection = s.selectionPolicy.NextSelection()
+	if selectionFound || selection.IsValid() {
 		// Extract selected events from the buffer
 		selectedEvents := s.buffer[selection.Start : selection.End+1]
-		s.consume(s.selectionPolicy, selection)
-
+		s.selectionPolicy.Shift()
+		s.selectionPolicy.UpdateSelection()
+		offset := s.selectionPolicy.NextSelection().Start
+		fmt.Printf("!!offset %v %v\n", offset, s.selectionPolicy.NextSelection())
+		s.buffer = s.buffer[offset:]
+		fmt.Printf("!!offset2 %v %v\n", offset, s.selectionPolicy.NextSelection())
+		s.selectionPolicy.Offset(offset)
+		fmt.Printf("!!offset3 %v %v\n", offset, s.selectionPolicy.NextSelection())
 		return selectedEvents
 	}
 	return make([]events.Event[T], 0)
 }
 
-func (s *ConsumableAsyncBuffer[T]) consume(selectionPolicy SelectionPolicy[T], selection EventRange) {
+func (s *ConsumableAsyncBuffer[T]) consume(selectionPolicy SelectionPolicy[T], selection EventSelection) {
 
 	offset := selection.End
 
@@ -203,11 +227,10 @@ func (s *ConsumableAsyncBuffer[T]) consume(selectionPolicy SelectionPolicy[T], s
 	// Consume the selected events from the buffer
 	s.buffer = s.buffer[offset+1:]
 
-	selectionPolicy.ShiftWithOffset(offset)
 	if s.Len() > 0 {
 		iter := newIterator[T](s)
 		for iter.hasNext() && !selectionPolicy.NextSelectionReady() {
-			selectionPolicy.UpdateSelection(iter.next())
+			selectionPolicy.UpdateSelection()
 		}
 	}
 }
@@ -216,10 +239,10 @@ func (s *ConsumableAsyncBuffer[T]) AddEvents(events []events.Event[T]) {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
-	for _, event := range events {
-		s.selectionPolicy.UpdateSelection(event)
-	}
 	s.buffer = append(s.buffer, events...)
+	fmt.Printf("buff p:%p l:%v\n", s.buffer, s.buffer.Len())
+	s.selectionPolicy.UpdateSelection()
+
 	s.cond.Broadcast()
 }
 
@@ -227,8 +250,9 @@ func (s *ConsumableAsyncBuffer[T]) AddEvent(event events.Event[T]) {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
-	s.selectionPolicy.UpdateSelection(event)
 	s.buffer = append(s.buffer, event)
+	s.selectionPolicy.UpdateSelection()
+
 	s.cond.Broadcast()
 }
 
@@ -237,7 +261,7 @@ func (i *iterator[T]) hasNext() bool {
 }
 
 func (i *iterator[T]) next() events.Event[T] {
-	e := i.buffer.get(i.x)
+	e := i.buffer.Get(i.x)
 	i.x++
 	return e
 }
