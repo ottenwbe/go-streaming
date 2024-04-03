@@ -1,7 +1,6 @@
 package buffer
 
 import (
-	"fmt"
 	"github.com/google/uuid"
 	"time"
 )
@@ -96,17 +95,13 @@ func (s *CountingWindowPolicy[T]) NextSelectionReady() bool {
 
 func (s *CountingWindowPolicy[T]) UpdateSelection() {
 
-	fmt.Printf("Update buff p:%p l:%v %v\n", s.buffer, s.buffer.Len(), s.buffer)
-	fmt.Printf("UpdateSelection #1 range: %v len: %v\n", s.currentRange, s.buffer.Len())
 	for i := s.currentRange.End + 1; i < s.buffer.Len(); {
-		fmt.Printf("UpdateSelection #2 %v %v\n", s.currentRange, s.buffer.Len())
 		if s.currentRange.End-s.currentRange.Start+1 < s.n {
 			s.currentRange.End++
 			i++
 		} else {
 			i = s.buffer.Len()
 		}
-		fmt.Printf("UpdateSelection #3 %v %v %v\n", s.currentRange, s.buffer.Len(), i)
 	}
 }
 
@@ -122,7 +117,7 @@ func (s *CountingWindowPolicy[T]) Offset(offset int) {
 
 // NextSelectionReady checks if there are no more events within the window
 func (s *TemporalWindowPolicy[T]) NextSelectionReady() bool {
-	return s.currentRange.End > -1 && s.buffer.Get(s.buffer.Len()-1).GetTimestamp().After(s.windowEnd)
+	return s.buffer.Get(s.buffer.Len() - 1).GetTimestamp().After(s.windowEnd)
 }
 
 // NextSelection returns the EventSelection for the current window
@@ -134,13 +129,13 @@ func (s *TemporalWindowPolicy[T]) NextSelection() EventSelection {
 func (s *TemporalWindowPolicy[T]) UpdateSelection() {
 	for i := s.currentRange.End + 1; i < s.buffer.Len(); {
 		ts := s.buffer.Get(i).GetTimestamp()
-		if ts.After(s.windowStart) && (ts.Before(s.windowEnd) || ts.Equal(s.windowEnd)) {
+		if (ts.After(s.windowStart) || ts.Equal(s.windowStart)) && ts.Before(s.windowEnd) {
 			s.currentRange.End = i
-			if s.currentRange.Start < 0 {
-				s.currentRange.Start = i
-			}
-		} else if ts.After(s.windowEnd) {
+		} else if ts.After(s.windowEnd) || ts.Equal(s.windowEnd) {
 			i = s.buffer.Len()
+		} else if ts.Before(s.windowStart) {
+			s.currentRange.Start = i + 1
+			s.currentRange.End = i
 		}
 		i++
 	}
@@ -150,7 +145,7 @@ func (s *TemporalWindowPolicy[T]) UpdateSelection() {
 func (s *TemporalWindowPolicy[T]) Shift() {
 	s.windowStart = s.windowStart.Add(s.windowShift)
 	s.windowEnd = s.windowStart.Add(s.windowLength)
-	s.currentRange.End = s.currentRange.Start
+	s.currentRange.End = s.currentRange.Start - 1
 }
 
 func (s *TemporalWindowPolicy[T]) Offset(offset int) {

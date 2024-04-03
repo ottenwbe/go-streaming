@@ -1,7 +1,6 @@
 package buffer
 
 import (
-	"fmt"
 	"github.com/google/uuid"
 	"go-stream-processing/events"
 	"sync"
@@ -9,6 +8,7 @@ import (
 
 var defaultBufferCapacity = 5
 
+// Reader allows read-only access to a Buffer (or basicBuffer)
 type Reader[T any] interface {
 	Get(i int) events.Event[T]
 	Len() int
@@ -16,6 +16,7 @@ type Reader[T any] interface {
 
 type basicBuffer[T any] []events.Event[T]
 
+// Buffer interface to interact with any buffer
 type Buffer[T any] interface {
 	GetAndConsumeNextEvents() []events.Event[T]
 	PeekNextEvent() events.Event[T]
@@ -90,7 +91,6 @@ func NewConsumableAsyncBuffer[T any](policy SelectionPolicy[T]) Buffer[T] {
 		selectionPolicy: policy,
 	}
 	s.selectionPolicy.SetBuffer(&s.buffer)
-	fmt.Printf("buff %p\n", s.buffer)
 	return s
 }
 
@@ -187,52 +187,32 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	defer s.bufferMutex.Unlock()
 
 	var (
+		selectedEvents basicBuffer[T]
 		selectionFound = s.selectionPolicy.NextSelectionReady()
 		selection      EventSelection
 	)
 
-	fmt.Printf("1 getting from buffer(%v) %v %v \n", s.Len(), selectionFound, s.selectionPolicy.NextSelection())
-
 	// Wait until the buffer has enough events
 	for !selectionFound && !s.stopped {
 		s.cond.Wait()
-		fmt.Printf("1.5 getting from buffer %v %v \n", selectionFound, s.selectionPolicy.NextSelection())
 		selectionFound = s.selectionPolicy.NextSelectionReady()
 	}
 
-	fmt.Printf("2 getting from buffer %v %v l:%v \n", selectionFound, s.selectionPolicy.NextSelection(), s.Len())
-
 	selection = s.selectionPolicy.NextSelection()
-	if selectionFound || selection.IsValid() {
+	if selection.IsValid() {
 		// Extract selected events from the buffer
-		selectedEvents := s.buffer[selection.Start : selection.End+1]
+		selectedEvents = s.buffer[selection.Start : selection.End+1]
+	}
+
+	if selectionFound {
 		s.selectionPolicy.Shift()
 		s.selectionPolicy.UpdateSelection()
 		offset := s.selectionPolicy.NextSelection().Start
-		fmt.Printf("!!offset %v %v\n", offset, s.selectionPolicy.NextSelection())
 		s.buffer = s.buffer[offset:]
-		fmt.Printf("!!offset2 %v %v\n", offset, s.selectionPolicy.NextSelection())
 		s.selectionPolicy.Offset(offset)
-		fmt.Printf("!!offset3 %v %v\n", offset, s.selectionPolicy.NextSelection())
-		return selectedEvents
 	}
-	return make([]events.Event[T], 0)
-}
 
-func (s *ConsumableAsyncBuffer[T]) consume(selectionPolicy SelectionPolicy[T], selection EventSelection) {
-
-	offset := selection.End
-
-	fmt.Printf("Size before consume %v\n", s.Len())
-	// Consume the selected events from the buffer
-	s.buffer = s.buffer[offset+1:]
-
-	if s.Len() > 0 {
-		iter := newIterator[T](s)
-		for iter.hasNext() && !selectionPolicy.NextSelectionReady() {
-			selectionPolicy.UpdateSelection()
-		}
-	}
+	return selectedEvents
 }
 
 func (s *ConsumableAsyncBuffer[T]) AddEvents(events []events.Event[T]) {
@@ -240,7 +220,6 @@ func (s *ConsumableAsyncBuffer[T]) AddEvents(events []events.Event[T]) {
 	defer s.bufferMutex.Unlock()
 
 	s.buffer = append(s.buffer, events...)
-	fmt.Printf("buff p:%p l:%v\n", s.buffer, s.buffer.Len())
 	s.selectionPolicy.UpdateSelection()
 
 	s.cond.Broadcast()

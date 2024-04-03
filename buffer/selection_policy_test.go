@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"go-stream-processing/buffer"
 	"go-stream-processing/events"
+	"time"
 )
 
 var _ = Describe("SelectionPolicy", func() {
@@ -38,9 +39,81 @@ var _ = Describe("SelectionPolicy", func() {
 
 				es1 := b.GetAndConsumeNextEvents()
 				es2 := b.GetAndConsumeNextEvents()
+				es3 := b.GetAndConsumeNextEvents()
 
 				Expect(es1).To(Equal([]events.Event[string]{e1, e2}))
 				Expect(es2).To(Equal([]events.Event[string]{e2, e3}))
+				Expect(es3).To(Equal([]events.Event[string]{e3, e4}))
+			})
+		})
+	})
+	Describe("TemporalWindowPolicy", func() {
+		Context("Select Events", func() {
+			It("can select and slide based on time", func() {
+
+				e1 := &events.TemporalEvent[string]{
+					TimeStamp: time.Now(),
+					Content:   "e1",
+				}
+				e2 := &events.TemporalEvent[string]{
+					TimeStamp: e1.TimeStamp.Add(time.Minute * 10),
+					Content:   "e2",
+				}
+				e3 := &events.TemporalEvent[string]{
+					TimeStamp: e1.TimeStamp.Add(time.Minute * 65),
+					Content:   "e3",
+				}
+				e4 := &events.TemporalEvent[string]{
+					TimeStamp: e1.TimeStamp.Add(time.Hour * 24),
+					Content:   "e4",
+				}
+
+				w := buffer.NewTemporalWindowPolicy[string](e1.GetTimestamp(), time.Hour, time.Minute*10)
+				b := buffer.NewConsumableAsyncBuffer(w)
+
+				b.AddEvents(events.Arr[string](e1, e2, e3, e4))
+
+				es1 := b.GetAndConsumeNextEvents()
+				es2 := b.GetAndConsumeNextEvents()
+
+				Expect(es1).To(Equal(events.Arr[string](e1, e2)))
+				Expect(es2).To(Equal(events.Arr[string](e2, e3)))
+			})
+			It("can have empty windows", func() {
+
+				e1 := &events.TemporalEvent[string]{
+					TimeStamp: time.Now(),
+					Content:   "e1",
+				}
+				e2 := &events.TemporalEvent[string]{
+					TimeStamp: e1.TimeStamp.Add(time.Minute * 10),
+					Content:   "e2",
+				}
+				e3 := &events.TemporalEvent[string]{
+					TimeStamp: e1.TimeStamp.Add(time.Minute * 12),
+					Content:   "e3",
+				}
+				e4 := &events.TemporalEvent[string]{
+					TimeStamp: e1.TimeStamp.Add(time.Minute * 75),
+					Content:   "e4",
+				}
+				e5 := &events.TemporalEvent[string]{
+					TimeStamp: e1.TimeStamp.Add(time.Hour * 75),
+					Content:   "e5",
+				}
+
+				w := buffer.NewTemporalWindowPolicy[string](e1.GetTimestamp(), time.Minute*30, time.Minute*30)
+				b := buffer.NewConsumableAsyncBuffer(w)
+
+				b.AddEvents(events.Arr[string](e1, e2, e3, e4, e5))
+
+				es1 := b.GetAndConsumeNextEvents()
+				es2 := b.GetAndConsumeNextEvents()
+				es3 := b.GetAndConsumeNextEvents()
+
+				Expect(es1).To(Equal(events.Arr[string](e1, e2, e3)))
+				Expect(es2).To(Equal(events.Arr[string]()))
+				Expect(es3).To(Equal(events.Arr[string](e4)))
 			})
 		})
 	})
@@ -70,9 +143,9 @@ var _ = Describe("SelectionPolicy", func() {
 				es2 := b.GetAndConsumeNextEvents()
 				es3 := b.GetAndConsumeNextEvents()
 
-				Expect(es1).To(Equal([]events.Event[string]{e1}))
-				Expect(es2).To(Equal([]events.Event[string]{e2}))
-				Expect(es3).To(Equal([]events.Event[string]{e3}))
+				Expect(es1).To(Equal(events.Arr(e1)))
+				Expect(es2).To(Equal(events.Arr(e2)))
+				Expect(es3).To(Equal(events.Arr(e3)))
 			})
 		})
 	})

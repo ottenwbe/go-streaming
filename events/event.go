@@ -18,16 +18,16 @@ func Arr[T any](events ...Event[T]) []Event[T] {
 type EventChannel[T any] chan Event[T]
 
 type TemporalEvent[T any] struct {
-	timeStamp time.Time
-	content   T
+	TimeStamp time.Time
+	Content   T
 }
 
 type OrchestrationEvent struct {
-	timeStamp time.Time
+	TimeStamp time.Time
 }
 
 func (m *OrchestrationEvent) GetTimestamp() time.Time {
-	return m.timeStamp
+	return m.TimeStamp
 }
 
 func (m *OrchestrationEvent) GetContent(v interface{}) error {
@@ -37,8 +37,8 @@ func (m *OrchestrationEvent) GetContent(v interface{}) error {
 
 func NewEvent[T any](content T) Event[T] {
 	return &TemporalEvent[T]{
-		timeStamp: time.Now(),
-		content:   content,
+		TimeStamp: time.Now(),
+		Content:   content,
 	}
 }
 
@@ -51,15 +51,15 @@ func NewEventFromJSON(b []byte) (Event[map[string]interface{}], error) {
 	}
 
 	return &TemporalEvent[map[string]interface{}]{
-		timeStamp: time.Now(),
-		content:   content,
+		TimeStamp: time.Now(),
+		Content:   content,
 	}, nil
 }
 
 func (e *TemporalEvent[T]) GetTimestamp() time.Time {
-	return e.timeStamp
+	return e.TimeStamp
 }
 
 func (e *TemporalEvent[T]) GetContent() T {
-	return e.content
+	return e.Content
 }
