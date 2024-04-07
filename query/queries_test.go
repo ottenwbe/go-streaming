@@ -1,4 +1,4 @@
-package engine_test
+package query_test
 
 import (
 	"github.com/google/uuid"
@@ -7,50 +7,27 @@ import (
 	"go-stream-processing/buffer"
 	"go-stream-processing/engine"
 	"go-stream-processing/events"
+	"go-stream-processing/query"
 	"go-stream-processing/streams"
 )
 
 var _ = Describe("Add Operator1", func() {
 
-	streamA := streams.NewLocalSyncStream[int](streams.NewStreamDescription("a", uuid.New(), false))
-	streamA.Start()
-	streamB := streams.NewLocalSyncStream[int](streams.NewStreamDescription("b", uuid.New(), false))
-	streamB.Start()
-	streamC := streams.NewLocalSyncStream[int](streams.NewStreamDescription("c", uuid.New(), false))
-	streamC.Start()
-	resRec := streamC.Subscribe()
-	streams.NewOrReplaceStream[int](streamC)
-	input := make(map[string]*engine.OperatorStreamSubscription[int])
-	input["a"] = &engine.OperatorStreamSubscription[int]{
-		Stream:      streamA.Subscribe(),
-		InputBuffer: buffer.NewSimpleAsyncBuffer[int](),
-	}
-	input["a"].Run()
-
-	input["b"] = &engine.OperatorStreamSubscription[int]{
-		Stream:      streamB.Subscribe(),
-		InputBuffer: buffer.NewSimpleAsyncBuffer[int](),
-	}
-	input["b"].Run()
-
-	inStream := &engine.DoubleStreamInput1[engine.DoubleInputSelection1[int, int], int, int]{
-		Subscription1: input["a"],
-		Subscription2: input["b"],
-	}
-
-	op := engine.NewOperator[engine.DoubleInputSelection1[int, int], int](engine.Add[int], inStream, streamC)
-
 	Context("execute the operator", func() {
 		It("should correctly perform the operation on streams", func() {
+
+			stream, _ := query.QueryAdd[int]("test-add-in1", "test-add-in2", "test-add-out")
+			res := stream.Subscribe()
 			event := events.NewEvent(8)
 			event2 := events.NewEvent(3)
 
-			op.Start()
+			streamA, _ := streams.GetStreamN[int]("test-add-in1")
+			streamB, _ := streams.GetStreamN[int]("test-add-in2")
 
 			streamA.Publish(event)
 			streamB.Publish(event2)
 
-			result := <-resRec.Notify
+			result := <-res.Notify
 
 			r := result.GetContent()
 
@@ -63,7 +40,8 @@ var _ = Describe("Convert Operator1", func() {
 	Context("convert", func() {
 		It("should change the type", func() {
 
-			res := engine.QueryConvert[int, float32]("convert-test-in", "convert-test-out").Subscribe()
+			stream, _ := query.QueryConvert[int, float32]("convert-test-in", "convert-test-out")
+			res := stream.Subscribe()
 			event := events.NewEvent(8)
 
 			streamIn, _ := streams.GetStreamN[int]("convert-test-in")
@@ -84,7 +62,8 @@ var _ = Describe("Sum Operator1", func() {
 
 			selection := buffer.NewCountingWindowPolicy[int](2, 2)
 
-			res := engine.QueryBatchSum[int]("int values", "sum values", selection).Subscribe()
+			stream, _ := query.QueryBatchSum[int]("int values", "sum values", selection)
+			res := stream.Subscribe()
 
 			event := events.NewEvent(10)
 			event1 := events.NewEvent(10)
@@ -114,7 +93,8 @@ var _ = Describe("Count Operator1", func() {
 		It("should sum all values over a window", func() {
 
 			selection := buffer.NewCountingWindowPolicy[float32](2, 2)
-			res := engine.QueryBatchCount[float32, int]("countable floats", "counted floats", selection).Subscribe()
+			stream, _ := query.QueryBatchCount[float32, int]("countable floats", "counted floats", selection)
+			res := stream.Subscribe()
 
 			event := events.NewEvent[float32](1.0)
 			event1 := events.NewEvent[float32](1.1)
@@ -143,28 +123,9 @@ var _ = Describe("Smaller OperatorControl", func() {
 	Context("when executed", func() {
 		It("should remove large events", func() {
 
-			streamIn := streams.NewLocalSyncStream[int](streams.NewStreamDescription("int values", uuid.New(), false))
-			streamIn.Start()
-			defer streamIn.Stop()
-
-			streamOut := streams.NewLocalSyncStream[int](streams.NewStreamDescription("summed up values", uuid.New(), false))
-			streamOut.Start()
-			defer streamOut.Stop()
-
-			inputSub := &engine.OperatorStreamSubscription[int]{
-				Stream:      streamIn.Subscribe(),
-				InputBuffer: buffer.NewConsumableAsyncBuffer[int](buffer.NewCountingWindowPolicy[int](2, 2)),
-			}
-
-			inputSub.Run()
-			res := streamOut.Subscribe()
-
-			inStream := &engine.SingleStreamInput1[engine.SingleStreamSelection1[int], int]{
-				Subscription: inputSub,
-			}
-
-			greater := engine.NewOperatorN[engine.SingleStreamSelection1[int], int](engine.Smaller[int](11), inStream, streamOut)
-			greater.Start()
+			stream, _ := query.QuerySmaller[int]("q-s-1", "res-s-1", 11)
+			res := stream.Subscribe()
+			streamIn, _ := streams.GetStreamN[int]("q-s-1")
 
 			event := events.NewEvent(9)
 			event1 := events.NewEvent(10)
@@ -192,7 +153,8 @@ var _ = Describe("Greater OperatorControl", func() {
 	Context("when executed", func() {
 		It("should remove small events", func() {
 
-			res := engine.QueryGreater("test-greater-11", 11, "test-greater-11-out").Subscribe()
+			resStream, _ := query.QueryGreater("test-greater-11", 11, "test-greater-11-out")
+			res := resStream.Subscribe()
 
 			event := events.NewEvent(10)
 			event1 := events.NewEvent(10)
@@ -236,32 +198,41 @@ var _ = Describe("OperatorRepository", func() {
 			Subscription: inputSub,
 		}
 
-		op = engine.NewOperatorN(engine.Smaller[int](11), inStream, streamOut)
+		smaller := func(input engine.SingleStreamSelection1[int]) []events.Event[int] {
+			if input.GetContent() < 11 {
+				return []events.Event[int]{input}
+			} else {
+				return []events.Event[int]{}
+			}
+
+		}
+
+		op = engine.NewOperatorN[engine.SingleStreamSelection1[int], int](smaller, inStream, streamOut)
 	})
 
 	Context("Get and put", func() {
 		It("adds new operators to the map and retrieves it", func() {
-			err := engine.OperatorRepository().Put(op)
-			oResult, ok := engine.OperatorRepository().Get(op.ID())
+			err := query.OperatorRepository().Put(op)
+			oResult, ok := query.OperatorRepository().Get(op.ID())
 
 			Expect(err).To(BeNil())
 			Expect(ok).To(BeTrue())
 			Expect(op.ID()).To(Equal(oResult.ID()))
 		})
 		It("does not allow duplicated operators", func() {
-			engine.OperatorRepository().Put(op)
-			err := engine.OperatorRepository().Put(op)
+			query.OperatorRepository().Put(op)
+			err := query.OperatorRepository().Put(op)
 			Expect(err).ToNot(BeNil())
 		})
 		It("does not allow nil operators", func() {
-			err := engine.OperatorRepository().Put(nil)
+			err := query.OperatorRepository().Put(nil)
 			Expect(err).ToNot(BeNil())
 		})
 	})
 	Context("List", func() {
 		It("can be listed", func() {
-			engine.OperatorRepository().Put(op)
-			l := engine.OperatorRepository().List()
+			query.OperatorRepository().Put(op)
+			l := query.OperatorRepository().List()
 			Expect(l).To(ContainElement(op))
 		})
 	})

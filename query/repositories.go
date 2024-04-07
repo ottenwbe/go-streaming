@@ -1,39 +1,33 @@
-package engine
+package query
 
 import (
 	"errors"
 	"github.com/google/uuid"
-	"go-stream-processing/query"
-	"go-stream-processing/streams"
+	"go-stream-processing/engine"
 )
 
 type (
-	QueryControl struct {
-		ID        query.QueryID
-		Operators []OperatorControl
-		Streams   []streams.StreamControl
-	}
 	QRepository interface {
-		Get(id query.QueryID) (QueryControl, bool)
-		put(q QueryControl) error
-		remove(id query.QueryID)
-		List() map[query.QueryID]QueryControl
+		Get(id QueryID) (*QueryControl, bool)
+		put(q *QueryControl) error
+		remove(id QueryID)
+		List() map[QueryID]*QueryControl
 	}
 )
 
-type concreteQueryRepository map[query.QueryID]QueryControl
+type concreteQueryRepository map[QueryID]*QueryControl
 
-func (c concreteQueryRepository) Get(id query.QueryID) (q QueryControl, ok bool) {
+func (c concreteQueryRepository) Get(id QueryID) (q *QueryControl, ok bool) {
 	q, ok = c[id]
 	return
 }
 
-func (c concreteQueryRepository) remove(id query.QueryID) {
+func (c concreteQueryRepository) remove(id QueryID) {
 	delete(c, id)
 }
 
-func (c concreteQueryRepository) put(q QueryControl) error {
-	if q.ID == query.QueryID(uuid.Nil) {
+func (c concreteQueryRepository) put(q *QueryControl) error {
+	if q.ID == QueryID(uuid.Nil) {
 		return errors.New("invalid query id")
 	}
 
@@ -46,30 +40,30 @@ func (c concreteQueryRepository) put(q QueryControl) error {
 	return nil
 }
 
-func (c concreteQueryRepository) List() map[query.QueryID]QueryControl {
+func (c concreteQueryRepository) List() map[QueryID]*QueryControl {
 	return c
 }
 
 type ORepository interface {
-	Get(id OperatorID) (OperatorControl, bool)
-	Put(operator OperatorControl) error
-	List() map[OperatorID]OperatorControl
+	Get(id engine.OperatorID) (engine.OperatorControl, bool)
+	Put(operator engine.OperatorControl) error
+	List() map[engine.OperatorID]engine.OperatorControl
 }
 
-type MapRepository map[OperatorID]OperatorControl
+type MapRepository map[engine.OperatorID]engine.OperatorControl
 
-func (m MapRepository) List() map[OperatorID]OperatorControl {
+func (m MapRepository) List() map[engine.OperatorID]engine.OperatorControl {
 	return m
 }
 
-func (m MapRepository) Get(id OperatorID) (OperatorControl, bool) {
+func (m MapRepository) Get(id engine.OperatorID) (engine.OperatorControl, bool) {
 	o, ok := m[id]
 	return o, ok
 }
 
-func (m MapRepository) Put(operator OperatorControl) error {
+func (m MapRepository) Put(operator engine.OperatorControl) error {
 
-	if operator == nil || operator.ID() == OperatorID(uuid.Nil) {
+	if operator == nil || operator.ID() == engine.OperatorID(uuid.Nil) {
 		return errors.New("operator is considered nil (either id or operator is nil)")
 	}
 

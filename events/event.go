@@ -22,6 +22,15 @@ type TemporalEvent[T any] struct {
 	Content   T
 }
 
+// number constraint to limit the type parameter to numeric types
+type number interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64
+}
+
+type NumericEvent[T number] struct {
+	TemporalEvent[T]
+}
+
 type OrchestrationEvent struct {
 	TimeStamp time.Time
 }
@@ -39,6 +48,15 @@ func NewEvent[T any](content T) Event[T] {
 	return &TemporalEvent[T]{
 		TimeStamp: time.Now(),
 		Content:   content,
+	}
+}
+
+func NewNumericEvent[T number](content T) Event[T] {
+	return &NumericEvent[T]{
+		TemporalEvent[T]{
+			TimeStamp: time.Now(),
+			Content:   content,
+		},
 	}
 }
 

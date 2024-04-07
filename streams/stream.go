@@ -40,13 +40,17 @@ func (m NotificationMap[T]) notify(e events.Event[T]) {
 	}
 }
 
-type Stream[T any] interface {
+type StreamControl interface {
 	Start()
 	Stop()
 
 	ID() StreamID
 	Name() string
 	Description() StreamDescription
+}
+
+type Stream[T any] interface {
+	StreamControl
 
 	Publish(events.Event[T]) error
 	Subscribe() *StreamReceiver[T]

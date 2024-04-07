@@ -10,6 +10,39 @@ import (
 
 var _ = Describe("PubSub", func() {
 	Describe("PubSub System", func() {
+
+		Describe("Get Stream by Name", func() {
+			It("retrieves the stream", func() {
+				var yml = `
+name: test-retrieve
+id: 3c191d62-6575-4951-a9e6-4ec83c947251
+async: true
+`
+				d, _ := streams.StreamDescriptionFromYML([]byte(yml))
+				streams.NewOrReplaceStreamD[map[string]interface{}](d)
+
+				r, err := streams.GetStreamN[map[string]interface{}](d.Name)
+				Expect(err).To(BeNil())
+				Expect(r.Description()).To(Equal(d))
+			})
+			It("not retrieves the stream when it does not exist", func() {
+				_, err := streams.GetStreamN[int]("not-existing-name")
+				Expect(err).To(Equal(streams.StreamNotFoundError()))
+			})
+			It("not retrieves the stream when a type mismatches", func() {
+				var yml = `
+name: test-retrieve-2
+id: 3c191d62-6575-4951-a9e7-4ec83c947251
+async: true
+`
+				d, _ := streams.StreamDescriptionFromYML([]byte(yml))
+				streams.NewOrReplaceStreamD[map[string]interface{}](d)
+
+				_, err := streams.GetStreamN[int](d.Name)
+				Expect(err).To(Equal(streams.StreamTypeMismatchError()))
+			})
+		})
+
 		Describe("Create with Description", func() {
 			It("registers a Stream", func() {
 				var yml = `

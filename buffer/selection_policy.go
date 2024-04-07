@@ -11,10 +11,12 @@ type EventSelection struct {
 	End   int
 }
 
+// IsValid returns true if Start and End actually represent a possible selection in a buffer
 func (e EventSelection) IsValid() bool {
-	return e.Start <= e.End && e.End > -1
+	return e.Start <= e.End && e.End > -1 && e.Start > -1
 }
 
+// PolicyID of each individual Policy
 type PolicyID uuid.UUID
 
 // SelectionPolicy defines how events are selected from a buffer
@@ -165,7 +167,7 @@ func (id PolicyID) String() string {
 	return id.String()
 }
 
-func NewSelectNPolicy[T any](n int, shift int) SelectionPolicy[T] {
+func NewCountingWindowPolicy[T any](n int, shift int) SelectionPolicy[T] {
 	return &CountingWindowPolicy[T]{
 		PolicyID:     PolicyID(uuid.New()),
 		n:            n,

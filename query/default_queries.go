@@ -1,7 +1,8 @@
-package engine
+package query
 
 import (
 	"go-stream-processing/buffer"
+	"go-stream-processing/engine"
 	"go-stream-processing/events"
 	"go-stream-processing/streams"
 )
@@ -11,9 +12,9 @@ type number interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64
 }
 
-func QueryBatchSum[TEvent number](inEventType string, outEvenType string, selectionPolicy buffer.SelectionPolicy[TEvent]) streams.Stream[TEvent] {
+func QueryBatchSum[TEvent number](inEventType string, outEvenType string, selectionPolicy buffer.SelectionPolicy[TEvent]) (streams.Stream[TEvent], *QueryControl) {
 
-	batchSumF := func(input SingleStreamSelectionN[TEvent]) events.Event[TEvent] {
+	batchSumF := func(input engine.SingleStreamSelectionN[TEvent]) events.Event[TEvent] {
 		var result = TEvent(0)
 		for _, event := range input {
 			result += event.GetContent()
@@ -24,9 +25,9 @@ func QueryBatchSum[TEvent number](inEventType string, outEvenType string, select
 	return QueryOverSingleStreamSelectionN[TEvent, TEvent](inEventType, selectionPolicy, batchSumF, outEvenType)
 }
 
-func QueryBatchCount[TEvent any, TOut number](inEventType string, outEvenType string, selectionPolicy buffer.SelectionPolicy[TEvent]) streams.Stream[TOut] {
+func QueryBatchCount[TEvent any, TOut number](inEventType string, outEvenType string, selectionPolicy buffer.SelectionPolicy[TEvent]) (streams.Stream[TOut], *QueryControl) {
 
-	batchCount := func(input SingleStreamSelectionN[TEvent]) events.Event[TOut] {
+	batchCount := func(input engine.SingleStreamSelectionN[TEvent]) events.Event[TOut] {
 		result := TOut(len(input))
 		return events.NewNumericEvent[TOut](result)
 	}
@@ -34,9 +35,9 @@ func QueryBatchCount[TEvent any, TOut number](inEventType string, outEvenType st
 	return QueryOverSingleStreamSelectionN[TEvent, TOut](inEventType, selectionPolicy, batchCount, outEvenType)
 }
 
-func QueryGreater[T number](inEventType string, greaterThan T, outEvenType string) streams.Stream[T] {
+func QueryGreater[T number](inEventType string, greaterThan T, outEvenType string) (streams.Stream[T], *QueryControl) {
 
-	greater := func(input SingleStreamSelection1[T]) []events.Event[T] {
+	greater := func(input engine.SingleStreamSelection1[T]) []events.Event[T] {
 		if input.GetContent() > greaterThan {
 			return []events.Event[T]{input}
 		} else {
@@ -47,24 +48,32 @@ func QueryGreater[T number](inEventType string, greaterThan T, outEvenType strin
 	return QueryMultipleEventsOverSingleStreamSelection1[T, T](inEventType, greater, outEvenType)
 }
 
-func Smaller[T number](v T) func(input SingleStreamSelection1[T]) []events.Event[T] {
-	return func(input SingleStreamSelection1[T]) []events.Event[T] {
+func QuerySmaller[T number](inEventType, outEvenType string, v T) (streams.Stream[T], *QueryControl) {
+
+	smaller := func(input engine.SingleStreamSelection1[T]) []events.Event[T] {
 		if input.GetContent() < v {
 			return []events.Event[T]{input}
 		} else {
 			return []events.Event[T]{}
 		}
+
 	}
+	return QueryMultipleEventsOverSingleStreamSelection1[T, T](inEventType, smaller, outEvenType)
 }
 
-func Add[T number](input DoubleInputSelection1[T, T]) events.Event[T] {
-	result := input.input1.GetContent() + input.input2.GetContent()
-	return events.NewEvent[T](result)
+func QueryAdd[T number](inEventType1, inEventType2 string, outEventType string) (streams.Stream[T], *QueryControl) {
+
+	add := func(input engine.DoubleInputSelection1[T, T]) events.Event[T] {
+		result := input.Input1.GetContent() + input.Input2.GetContent()
+		return events.NewEvent[T](result)
+	}
+
+	return QueryOverDoubleStreamSelection1[T, T, T](inEventType1, inEventType2, add, outEventType)
 }
 
-func QueryConvert[TIn, TOut number](inEventType string, outEventType string) streams.Stream[TOut] {
+func QueryConvert[TIn, TOut number](inEventType string, outEventType string) (streams.Stream[TOut], *QueryControl) {
 
-	convert := func(input SingleStreamSelection1[TIn]) events.Event[TOut] {
+	convert := func(input engine.SingleStreamSelection1[TIn]) events.Event[TOut] {
 		return events.NewEvent[TOut](TOut(input.GetContent()))
 	}
 

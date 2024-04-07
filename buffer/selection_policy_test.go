@@ -13,7 +13,9 @@ var _ = Describe("SelectionPolicy", func() {
 	Describe("CountingWindowPolicy", func() {
 		Context("Select Events", func() {
 			It("can read n events at the time", func() {
-				b := buffer.NewConsumableAsyncBuffer[string](buffer.NewSelectNPolicy[string](2, 2))
+				b := buffer.NewConsumableAsyncBuffer[string](buffer.NewCountingWindowPolicy[string](2, 2))
+				defer b.StopBlocking()
+
 				e1 := events.NewEvent("e1")
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")
@@ -27,7 +29,7 @@ var _ = Describe("SelectionPolicy", func() {
 				Expect(es).To(Equal([]events.Event[string]{e1, e2}))
 			})
 			It("can select multiple events in a row", func() {
-				b := buffer.NewConsumableAsyncBuffer[string](buffer.NewSelectNPolicy[string](2, 1))
+				b := buffer.NewConsumableAsyncBuffer[string](buffer.NewCountingWindowPolicy[string](2, 1))
 				e1 := events.NewEvent("e1")
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")

@@ -2,8 +2,6 @@ package streams
 
 import (
 	"errors"
-	"fmt"
-	"github.com/google/uuid"
 	"go-stream-processing/events"
 	"go.uber.org/zap"
 	"sync"
@@ -18,12 +16,16 @@ type PubSub struct {
 var PubSubSystem *PubSub
 
 var (
-	streamNotFoundError   = errors.New("no stream found")
-	streamNameExistsError = errors.New("stream name already exists")
-	streamIDNilError      = errors.New("stream id nil")
-	streamIDNameDivError  = errors.New("stream id and name do not match")
+	streamTypeMismatchError = errors.New("stream type mismatch")
+	streamNotFoundError     = errors.New("no stream found")
+	streamNameExistsError   = errors.New("stream name already exists")
+	streamIDNilError        = errors.New("stream id nil")
+	streamIDNameDivError    = errors.New("stream id and name do not match")
 )
 
+func StreamTypeMismatchError() error {
+	return streamTypeMismatchError
+}
 func StreamNotFoundError() error {
 	return streamNotFoundError
 }
@@ -55,7 +57,7 @@ func NewOrReplaceStream[T any](newStream Stream[T]) error {
 		newStream.Start()
 	}
 
-	zap.S().Info("New stream Added", zap.String("module", "stream"), zap.String("id", newStream.ID().String()))
+	zap.S().Info("new stream added", zap.String("module", "stream"), zap.String("id", newStream.ID().String()))
 	return nil
 }
 
@@ -74,19 +76,8 @@ func RemoveStream[T any](streamID StreamID) {
 		delete(PubSubSystem.streamIndex, streamID)
 		delete(PubSubSystem.nameIndex, s.(Stream[T]).Name())
 
-		zap.S().Info("Stream Deleted", zap.String("module", "stream"), zap.String("id", streamID.String()))
+		zap.S().Info("stream removed", zap.String("module", "stream"), zap.String("id", streamID.String()))
 	}
-}
-
-func createDefaultStream[T any](id StreamID) (err error) {
-
-	var r = PubSubSystem
-	r.mapAccessMutex.Lock()
-	defer r.mapAccessMutex.Unlock()
-	if _, ok := r.streamIndex[id]; !ok {
-		err = createOrUpdateStreamIndex[T](NewLocalAsyncStream[T](StreamDescription{Name: fmt.Sprintf("%v", id), ID: uuid.UUID(id)}))
-	}
-	return nil
 }
 
 func createOrUpdateStreamIndex[T any](newStream Stream[T]) error {
@@ -191,7 +182,13 @@ func GetStream[T any](id StreamID) (Stream[T], error) {
 
 func GetStreamN[T any](name string) (Stream[T], error) {
 	if s, ok := PubSubSystem.nameIndex[name]; ok {
-		return s.(Stream[T]), nil
+
+		switch s.(type) {
+		case Stream[T]:
+			return s.(Stream[T]), nil
+		default:
+			return nil, streamTypeMismatchError
+		}
 	}
 	return nil, streamNotFoundError
 }
