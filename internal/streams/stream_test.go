@@ -5,18 +5,18 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/events"
-	"go-stream-processing/streams"
+	"go-stream-processing/internal/events"
+	streams2 "go-stream-processing/internal/streams"
 )
 
 var _ = Describe("Stream", func() {
-	var stream *streams.LocalSyncStream[string]
-	var asyncStream *streams.LocalAsyncStream[string]
+	var stream *streams2.LocalSyncStream[string]
+	var asyncStream *streams2.LocalAsyncStream[string]
 
 	BeforeEach(func() {
-		stream = streams.NewLocalSyncStream[string](streams.NewStreamDescription("test", uuid.New(), false))
+		stream = streams2.NewLocalSyncStream[string](streams2.NewStreamDescription("test", uuid.New(), false))
 		stream.Start()
-		asyncStream = streams.NewLocalAsyncStream[string](streams.NewStreamDescription("test3", uuid.New(), true))
+		asyncStream = streams2.NewLocalAsyncStream[string](streams2.NewStreamDescription("test3", uuid.New(), true))
 		asyncStream.Start()
 	})
 

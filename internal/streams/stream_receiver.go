@@ -3,7 +3,7 @@ package streams
 import (
 	"errors"
 	"github.com/google/uuid"
-	"go-stream-processing/events"
+	"go-stream-processing/internal/events"
 )
 
 type StreamReceiverID uuid.UUID

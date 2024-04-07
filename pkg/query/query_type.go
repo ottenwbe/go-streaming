@@ -3,10 +3,10 @@ package query
 import (
 	"errors"
 	"github.com/google/uuid"
-	"go-stream-processing/buffer"
-	"go-stream-processing/engine"
-	"go-stream-processing/events"
-	"go-stream-processing/streams"
+	buffer2 "go-stream-processing/internal/buffer"
+	"go-stream-processing/internal/engine"
+	"go-stream-processing/internal/events"
+	streams2 "go-stream-processing/internal/streams"
 	"go.uber.org/zap"
 )
 
@@ -16,24 +16,29 @@ func (q QueryID) String() string {
 	return q.String()
 }
 
-func createStream[T any](eventTopic string, async bool) (streams.Stream[T], error) {
+func Close(c *QueryControl) {
+	QueryRepository().remove(c.ID)
+	c.stop()
+}
+
+func createStream[T any](eventTopic string, async bool) (streams2.Stream[T], error) {
 	var (
-		stream streams.Stream[T]
+		stream streams2.Stream[T]
 		err    error
 	)
 
-	if existingStream, err := streams.GetStreamN[T](eventTopic); existingStream != nil {
+	if existingStream, err := streams2.GetStreamN[T](eventTopic); existingStream != nil {
 		return existingStream, nil
-	} else if errors.Is(err, streams.StreamNotFoundError()) {
-		d := streams.NewStreamDescription(eventTopic, uuid.New(), async)
+	} else if errors.Is(err, streams2.StreamNotFoundError()) {
+		d := streams2.NewStreamDescription(eventTopic, uuid.New(), async)
 
 		if async {
-			stream = streams.NewLocalSyncStream[T](d)
+			stream = streams2.NewLocalSyncStream[T](d)
 		} else {
-			stream = streams.NewLocalAsyncStream[T](d)
+			stream = streams2.NewLocalAsyncStream[T](d)
 		}
 
-		err = streams.NewOrReplaceStream(stream)
+		err = streams2.NewOrReplaceStream(stream)
 		if err != nil {
 			zap.S().Error("new stream cannot be created", zap.Error(err), zap.String("stream", eventTopic))
 		}
@@ -45,7 +50,7 @@ func createStream[T any](eventTopic string, async bool) (streams.Stream[T], erro
 func QueryOverSingleStreamSelection1[T any, TOut any](
 	in string,
 	operation func(engine.SingleStreamSelection1[T]) events.Event[TOut],
-	out string) (streams.Stream[TOut], *QueryControl) {
+	out string) (streams2.Stream[TOut], *QueryControl) {
 
 	//TODO: errorhandling
 	inputStream, _ := createStream[T](in, false)
@@ -63,15 +68,9 @@ func QueryOverSingleStreamSelection1[T any, TOut any](
 	return outputStream, queryControl
 }
 
-func createOperationOverSingleStreamSelection1[T, TOut any](inputStream streams.Stream[T], operation func(engine.SingleStreamSelection1[T]) events.Event[TOut], outputStream streams.Stream[TOut]) (engine.OperatorControl, error) {
-	inputSub := &engine.OperatorStreamSubscription[T]{
-		Stream:      inputStream.Subscribe(),
-		InputBuffer: buffer.NewSimpleAsyncBuffer[T](),
-	}
+func createOperationOverSingleStreamSelection1[T, TOut any](inputStream streams2.Stream[T], operation func(engine.SingleStreamSelection1[T]) events.Event[TOut], outputStream streams2.Stream[TOut]) (engine.OperatorControl, error) {
 
-	inStream := &engine.SingleStreamInput1[engine.SingleStreamSelection1[T], T]{
-		Subscription: inputSub,
-	}
+	inStream := engine.NewSingleStreamInput1[T](inputStream)
 
 	f := engine.NewOperator[engine.SingleStreamSelection1[T], TOut](operation, inStream, outputStream)
 
@@ -81,9 +80,9 @@ func createOperationOverSingleStreamSelection1[T, TOut any](inputStream streams.
 }
 
 func QueryOverSingleStreamSelectionN[T any, TOut any](in string,
-	selection buffer.SelectionPolicy[T],
+	selection buffer2.SelectionPolicy[T],
 	op func(engine.SingleStreamSelectionN[T]) events.Event[TOut],
-	out string) (streams.Stream[TOut], *QueryControl) {
+	out string) (streams2.Stream[TOut], *QueryControl) {
 
 	inputStream, _ := createStream[T](in, false)
 	outputStream, _ := createStream[TOut](out, false)
@@ -100,15 +99,9 @@ func QueryOverSingleStreamSelectionN[T any, TOut any](in string,
 	return outputStream, queryControl
 }
 
-func createOperatorOverSingleStreamSelectionN[T any, TOut any](inputStream streams.Stream[T], selection buffer.SelectionPolicy[T], op func(engine.SingleStreamSelectionN[T]) events.Event[TOut], outputStream streams.Stream[TOut]) engine.OperatorControl {
-	inputSub := &engine.OperatorStreamSubscription[T]{
-		Stream:      inputStream.Subscribe(),
-		InputBuffer: buffer.NewConsumableAsyncBuffer[T](selection),
-	}
+func createOperatorOverSingleStreamSelectionN[T any, TOut any](inputStream streams2.Stream[T], selection buffer2.SelectionPolicy[T], op func(engine.SingleStreamSelectionN[T]) events.Event[TOut], outputStream streams2.Stream[TOut]) engine.OperatorControl {
 
-	inStream := &engine.SingleStreamInputN[engine.SingleStreamSelectionN[T], T]{
-		Subscription: inputSub,
-	}
+	inStream := engine.NewSingleStreamInputN(inputStream, selection)
 
 	f := engine.NewOperator[engine.SingleStreamSelectionN[T], TOut](op, inStream, outputStream)
 
@@ -116,7 +109,7 @@ func createOperatorOverSingleStreamSelectionN[T any, TOut any](inputStream strea
 	return f
 }
 
-func QueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](in string, op func(engine.SingleStreamSelection1[T]) []events.Event[TOut], out string) (streams.Stream[TOut], *QueryControl) {
+func QueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](in string, op func(engine.SingleStreamSelection1[T]) []events.Event[TOut], out string) (streams2.Stream[TOut], *QueryControl) {
 
 	inputStream, _ := createStream[T](in, false)
 	outputStream, _ := createStream[TOut](out, false)
@@ -133,27 +126,19 @@ func QueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](in string, o
 	return outputStream, queryControl
 }
 
-func createMultipleEventsOverSingleStreamSelection1[T any, TOut any](inputStream streams.Stream[T], op func(engine.SingleStreamSelection1[T]) []events.Event[TOut], outputStream streams.Stream[TOut]) engine.OperatorControl {
-	inputSub := &engine.OperatorStreamSubscription[T]{
-		Stream:      inputStream.Subscribe(),
-		InputBuffer: buffer.NewSimpleAsyncBuffer[T](),
-	}
-
-	inStream := &engine.SingleStreamInput1[engine.SingleStreamSelection1[T], T]{
-		Subscription: inputSub,
-	}
-
+func createMultipleEventsOverSingleStreamSelection1[T any, TOut any](inputStream streams2.Stream[T], op func(engine.SingleStreamSelection1[T]) []events.Event[TOut], outputStream streams2.Stream[TOut]) engine.OperatorControl {
+	inStream := engine.NewSingleStreamInput1(inputStream)
 	f := engine.NewOperatorN[engine.SingleStreamSelection1[T], TOut](op, inStream, outputStream)
 	_ = OperatorRepository().Put(f)
 	return f
 }
 
 func QueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](in1 string,
-	selection1 buffer.SelectionPolicy[TIN1],
+	selection1 buffer2.SelectionPolicy[TIN1],
 	in2 string,
-	selection2 buffer.SelectionPolicy[TIN2],
+	selection2 buffer2.SelectionPolicy[TIN2],
 	op func(n engine.DoubleInputSelectionN[TIN1, TIN2]) events.Event[TOUT],
-	out string) (streams.Stream[TOUT], *QueryControl) {
+	out string) (streams2.Stream[TOUT], *QueryControl) {
 
 	inputStream1, _ := createStream[TIN1](in1, false)
 	inputStream2, _ := createStream[TIN2](in2, false)
@@ -162,12 +147,12 @@ func QueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](in1 string,
 
 	inputSub1 := &engine.OperatorStreamSubscription[TIN1]{
 		Stream:      inputStream1.Subscribe(),
-		InputBuffer: buffer.NewConsumableAsyncBuffer[TIN1](selection1),
+		InputBuffer: buffer2.NewConsumableAsyncBuffer[TIN1](selection1),
 	}
 
 	inputSub2 := &engine.OperatorStreamSubscription[TIN2]{
 		Stream:      inputStream2.Subscribe(),
-		InputBuffer: buffer.NewConsumableAsyncBuffer[TIN2](selection2),
+		InputBuffer: buffer2.NewConsumableAsyncBuffer[TIN2](selection2),
 	}
 
 	inStream := &engine.DoubleStreamInputN[engine.DoubleInputSelectionN[TIN1, TIN2], TIN1, TIN2]{
@@ -190,27 +175,14 @@ func QueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](in1 string,
 func QueryOverDoubleStreamSelection1[TIN1, TIN2, TOUT any](in1 string,
 	in2 string,
 	op func(n engine.DoubleInputSelection1[TIN1, TIN2]) events.Event[TOUT],
-	out string) (streams.Stream[TOUT], *QueryControl) {
+	out string) (streams2.Stream[TOUT], *QueryControl) {
 
 	inputStream1, _ := createStream[TIN1](in1, false)
 	inputStream2, _ := createStream[TIN2](in2, false)
 
 	outputStream, _ := createStream[TOUT](out, false)
 
-	inputSub1 := &engine.OperatorStreamSubscription[TIN1]{
-		Stream:      inputStream1.Subscribe(),
-		InputBuffer: buffer.NewSimpleAsyncBuffer[TIN1](),
-	}
-
-	inputSub2 := &engine.OperatorStreamSubscription[TIN2]{
-		Stream:      inputStream2.Subscribe(),
-		InputBuffer: buffer.NewSimpleAsyncBuffer[TIN2](),
-	}
-
-	inStream := &engine.DoubleStreamInput1[engine.DoubleInputSelection1[TIN1, TIN2], TIN1, TIN2]{
-		Subscription1: inputSub1,
-		Subscription2: inputSub2,
-	}
+	inStream := engine.NewDoubleStreamInput1[TIN1, TIN2](inputStream1, inputStream2)
 
 	f := engine.NewOperator[engine.DoubleInputSelection1[TIN1, TIN2], TOUT](op, inStream, outputStream)
 

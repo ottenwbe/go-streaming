@@ -2,7 +2,7 @@ package streams
 
 import (
 	"errors"
-	"go-stream-processing/events"
+	"go-stream-processing/internal/events"
 	"go.uber.org/zap"
 	"sync"
 )

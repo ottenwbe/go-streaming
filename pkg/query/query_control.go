@@ -2,8 +2,8 @@ package query
 
 import (
 	"github.com/google/uuid"
-	"go-stream-processing/engine"
-	"go-stream-processing/streams"
+	"go-stream-processing/internal/engine"
+	"go-stream-processing/internal/streams"
 )
 
 type QueryControl struct {

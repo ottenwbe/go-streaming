@@ -3,8 +3,8 @@ package streams
 import (
 	"errors"
 	"github.com/google/uuid"
-	"go-stream-processing/buffer"
-	"go-stream-processing/events"
+	"go-stream-processing/internal/buffer"
+	"go-stream-processing/internal/events"
 	"go.uber.org/zap"
 	"sync"
 )

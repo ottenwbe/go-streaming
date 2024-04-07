@@ -2,8 +2,8 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"go-stream-processing/events"
-	"go-stream-processing/streams"
+	"go-stream-processing/internal/events"
+	streams2 "go-stream-processing/internal/streams"
 	"go.uber.org/zap"
 	"io"
 	"net/http"
@@ -14,13 +14,13 @@ func CreateRestAPI(router *gin.Engine) {
 	router.GET("/steams/:stream", func(c *gin.Context) {
 
 		var (
-			description streams.StreamDescription
+			description streams2.StreamDescription
 			result      = make(map[string]interface{})
 			err         error
 			name        = c.Param("stream")
 		)
 
-		description, err = streams.GetDescriptionN[any](name)
+		description, err = streams2.GetDescriptionN[any](name)
 		if err != nil {
 			zap.S().Error("stream could not be found", zap.String("method", "GET"), zap.String("path", "/streams/:stream"), zap.String("module", "api"), zap.Error(err))
 			c.String(http.StatusNotFound, "stream not found")
@@ -41,13 +41,13 @@ func CreateRestAPI(router *gin.Engine) {
 			return
 		}
 
-		d, err := streams.StreamDescriptionFromJSON(body)
+		d, err := streams2.StreamDescriptionFromJSON(body)
 		if err != nil {
 			zap.S().Error("could not read stream description", zap.String("module", "api"), zap.Error(err))
 			c.String(http.StatusBadRequest, "invalid json body")
 			return
 		}
-		err = streams.NewOrReplaceStreamD[any](d)
+		err = streams2.NewOrReplaceStreamD[any](d)
 		if err != nil {
 			zap.S().Error("could not instantiate stream", zap.String("module", "api"), zap.Error(err))
 			c.String(http.StatusNotFound, "error when instantiating stream")
@@ -74,7 +74,7 @@ func CreateRestAPI(router *gin.Engine) {
 			c.String(http.StatusBadRequest, "event not valid")
 		}
 
-		err = streams.PublishN(name, e)
+		err = streams2.PublishN(name, e)
 		if err != nil {
 			zap.S().Error("cannot publish event", zap.String("module", "api"), zap.Error(err))
 			c.String(http.StatusBadRequest, "stream not found or inactive: cannot publish request")

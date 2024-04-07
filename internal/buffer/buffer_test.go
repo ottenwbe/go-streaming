@@ -3,8 +3,8 @@ package buffer_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/buffer"
-	"go-stream-processing/events"
+	"go-stream-processing/internal/buffer"
+	"go-stream-processing/internal/events"
 )
 
 var _ = Describe("Buffer", func() {

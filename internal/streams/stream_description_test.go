@@ -4,7 +4,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/streams"
+	"go-stream-processing/internal/streams"
 )
 
 var _ = Describe("Descriptions", func() {

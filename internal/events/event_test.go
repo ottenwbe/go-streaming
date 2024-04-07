@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/events"
+	"go-stream-processing/internal/events"
 )
 
 var _ = Describe("PubSub", func() {

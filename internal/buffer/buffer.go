@@ -2,7 +2,7 @@ package buffer
 
 import (
 	"github.com/google/uuid"
-	"go-stream-processing/events"
+	"go-stream-processing/internal/events"
 	"sync"
 )
 

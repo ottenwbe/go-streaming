@@ -1,10 +1,10 @@
 package query
 
 import (
-	"go-stream-processing/buffer"
-	"go-stream-processing/engine"
-	"go-stream-processing/events"
-	"go-stream-processing/streams"
+	"go-stream-processing/internal/buffer"
+	"go-stream-processing/internal/engine"
+	"go-stream-processing/internal/events"
+	"go-stream-processing/internal/streams"
 )
 
 // Constraint to limit the type parameter to numeric types

@@ -3,7 +3,7 @@ package query
 import (
 	"errors"
 	"github.com/google/uuid"
-	"go-stream-processing/engine"
+	"go-stream-processing/internal/engine"
 )
 
 type (
