@@ -1,10 +1,10 @@
-package streams_test
+package pubsub_test
 
 import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/internal/streams"
+	"go-stream-processing/internal/pubsub"
 )
 
 var _ = Describe("Descriptions", func() {
@@ -19,7 +19,7 @@ id: 3c191d62-6574-4951-a8e6-4ec83c947250
 async: true
 `
 				//yml := "name: test\nid:\n  3c191d62-6574-4951-a8e6-4ec83c947250"
-				v, err := streams.StreamDescriptionFromYML([]byte(yml))
+				v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
 				Expect(v.Name).To(Equal("test"))
 				Expect(v.ID).To(Equal(uuid.MustParse("3c191d62-6574-4951-a8e6-4ec83c947250")))
 				Expect(v.Async).To(Equal(true))
@@ -32,7 +32,7 @@ name: test2
 async: true
 `
 			//yml := "name: test\nid:\n  3c191d62-6574-4951-a8e6-4ec83c947250"
-			v, err := streams.StreamDescriptionFromYML([]byte(yml))
+			v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
 			Expect(v.Name).To(Equal("test2"))
 			Expect(v.ID).NotTo(Equal(uuid.Nil))
 			Expect(v.Async).To(Equal(true))

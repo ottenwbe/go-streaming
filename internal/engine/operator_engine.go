@@ -1,10 +1,11 @@
 package engine
 
 import (
+	"errors"
 	"github.com/google/uuid"
-	buffer2 "go-stream-processing/internal/buffer"
+	"go-stream-processing/internal/buffer"
 	"go-stream-processing/internal/events"
-	streams2 "go-stream-processing/internal/streams"
+	"go-stream-processing/internal/pubsub"
 	"go.uber.org/zap"
 )
 
@@ -14,10 +15,13 @@ type (
 	Consumable[T any] interface {
 		Consume() T
 		Run()
+		Close()
 	}
 	OperatorStreamSubscription[TSub any] struct {
-		Stream      *streams2.StreamReceiver[TSub]
-		InputBuffer buffer2.Buffer[TSub]
+		streamReceiver *pubsub.StreamReceiver[TSub]
+		streamID       pubsub.StreamID
+		inputBuffer    buffer.Buffer[TSub]
+		active         bool
 	}
 
 	SingleStreamSelection1[TIN any]                                       events.Event[TIN]
@@ -51,10 +55,10 @@ func (o OperatorID) String() string {
 	return o.String()
 }
 
-func NewSingleStreamInputN[TStream any](inputStream streams2.Stream[TStream], policy buffer2.SelectionPolicy[TStream]) Consumable[SingleStreamSelectionN[TStream]] {
+func NewSingleStreamInputN[TStream any](inputStream pubsub.StreamID, policy buffer.SelectionPolicy[TStream]) Consumable[SingleStreamSelectionN[TStream]] {
 	inputSub := &OperatorStreamSubscription[TStream]{
-		Stream:      inputStream.Subscribe(),
-		InputBuffer: buffer2.NewConsumableAsyncBuffer[TStream](policy),
+		streamID:    inputStream,
+		inputBuffer: buffer.NewConsumableAsyncBuffer[TStream](policy),
 	}
 
 	return &SingleStreamInputN[SingleStreamSelectionN[TStream], TStream]{
@@ -62,15 +66,15 @@ func NewSingleStreamInputN[TStream any](inputStream streams2.Stream[TStream], po
 	}
 }
 
-func NewDoubleStreamInput1[TIN1, TIN2 any](inputStream1 streams2.Stream[TIN1], inputStream2 streams2.Stream[TIN2]) Consumable[DoubleInputSelection1[TIN1, TIN2]] {
+func NewDoubleStreamInput1[TIN1, TIN2 any](inputStream1 pubsub.StreamID, inputStream2 pubsub.StreamID) Consumable[DoubleInputSelection1[TIN1, TIN2]] {
 	inputSub1 := &OperatorStreamSubscription[TIN1]{
-		Stream:      inputStream1.Subscribe(),
-		InputBuffer: buffer2.NewSimpleAsyncBuffer[TIN1](),
+		streamID:    inputStream1,
+		inputBuffer: buffer.NewSimpleAsyncBuffer[TIN1](),
 	}
 
 	inputSub2 := &OperatorStreamSubscription[TIN2]{
-		Stream:      inputStream2.Subscribe(),
-		InputBuffer: buffer2.NewSimpleAsyncBuffer[TIN2](),
+		streamID:    inputStream2,
+		inputBuffer: buffer.NewSimpleAsyncBuffer[TIN2](),
 	}
 
 	inStream := &DoubleStreamInput1[DoubleInputSelection1[TIN1, TIN2], TIN1, TIN2]{
@@ -80,10 +84,28 @@ func NewDoubleStreamInput1[TIN1, TIN2 any](inputStream1 streams2.Stream[TIN1], i
 	return inStream
 }
 
-func NewSingleStreamInput1[TStream any](inputStream streams2.Stream[TStream]) Consumable[SingleStreamSelection1[TStream]] {
+func NewDoubleStreamInputN[TIN1, TIN2 any](inputStream1 pubsub.StreamID, selection1 buffer.SelectionPolicy[TIN1], inputStream2 pubsub.StreamID, selection2 buffer.SelectionPolicy[TIN2]) *DoubleStreamInputN[DoubleInputSelectionN[TIN1, TIN2], TIN1, TIN2] {
+	inputSub1 := &OperatorStreamSubscription[TIN1]{
+		streamID:    inputStream1,
+		inputBuffer: buffer.NewConsumableAsyncBuffer[TIN1](selection1),
+	}
+
+	inputSub2 := &OperatorStreamSubscription[TIN2]{
+		streamID:    inputStream2,
+		inputBuffer: buffer.NewConsumableAsyncBuffer[TIN2](selection2),
+	}
+
+	inStream := &DoubleStreamInputN[DoubleInputSelectionN[TIN1, TIN2], TIN1, TIN2]{
+		Subscription1: inputSub1,
+		Subscription2: inputSub2,
+	}
+	return inStream
+}
+
+func NewSingleStreamInput1[TStream any](inputStream pubsub.StreamID) Consumable[SingleStreamSelection1[TStream]] {
 	inputSub := &OperatorStreamSubscription[TStream]{
-		Stream:      inputStream.Subscribe(),
-		InputBuffer: buffer2.NewSimpleAsyncBuffer[TStream](),
+		streamID:    inputStream,
+		inputBuffer: buffer.NewSimpleAsyncBuffer[TStream](),
 	}
 
 	return &SingleStreamInput1[SingleStreamSelection1[TStream], TStream]{
@@ -92,25 +114,33 @@ func NewSingleStreamInput1[TStream any](inputStream streams2.Stream[TStream]) Co
 }
 
 func (s *SingleStreamInputN[TRes, TStream]) Consume() TRes {
-	return s.Subscription.InputBuffer.GetAndConsumeNextEvents()
+	return s.Subscription.inputBuffer.GetAndConsumeNextEvents()
 }
 
 func (s *SingleStreamInputN[TRes, TStream]) Run() {
 	s.Subscription.Run()
 }
 
+func (s *SingleStreamInputN[TRes, TStream]) Close() {
+	s.Subscription.Close()
+}
+
 func (s *SingleStreamInput1[TRes, TStream]) Consume() TRes {
-	return s.Subscription.InputBuffer.GetAndRemoveNextEvent().(TRes)
+	return s.Subscription.inputBuffer.GetAndRemoveNextEvent().(TRes)
 }
 
 func (s *SingleStreamInput1[TRes, TStream]) Run() {
 	s.Subscription.Run()
 }
 
+func (s *SingleStreamInput1[TRes, TStream]) Close() {
+	s.Subscription.Close()
+}
+
 func (s *DoubleStreamInputN[TRes, TStream1, TStream2]) Consume() TRes {
 	return TRes{
-		input1: s.Subscription1.InputBuffer.GetAndConsumeNextEvents(),
-		input2: s.Subscription2.InputBuffer.GetAndConsumeNextEvents(),
+		input1: s.Subscription1.inputBuffer.GetAndConsumeNextEvents(),
+		input2: s.Subscription2.inputBuffer.GetAndConsumeNextEvents(),
 	}
 }
 
@@ -119,10 +149,15 @@ func (s *DoubleStreamInputN[TRes, TStream1, TStream2]) Run() {
 	s.Subscription2.Run()
 }
 
+func (s *DoubleStreamInputN[TRes, TStream1, TStream2]) Close() {
+	s.Subscription1.Close()
+	s.Subscription2.Close()
+}
+
 func (d *DoubleStreamInput1[TRes, TStream1, TStream2]) Consume() TRes {
 	return TRes{
-		Input1: d.Subscription1.InputBuffer.GetAndRemoveNextEvent(),
-		Input2: d.Subscription2.InputBuffer.GetAndRemoveNextEvent(),
+		Input1: d.Subscription1.inputBuffer.GetAndRemoveNextEvent(),
+		Input2: d.Subscription2.inputBuffer.GetAndRemoveNextEvent(),
 	}
 }
 
@@ -131,12 +166,37 @@ func (d *DoubleStreamInput1[TRes, TStream1, TStream2]) Run() {
 	d.Subscription2.Run()
 }
 
+func (d *DoubleStreamInput1[TRes, TStream1, TStream2]) Close() {
+	d.Subscription1.Close()
+	d.Subscription2.Close()
+}
+
+func (o *OperatorStreamSubscription[T]) Close() {
+	if o.active == true {
+		pubsub.Unsubscribe[T](o.streamReceiver)
+		o.inputBuffer.StopBlocking()
+	}
+}
+
 func (o *OperatorStreamSubscription[T]) Run() {
+
+	if o.active {
+		return
+	}
+	o.active = true
+
+	var err error
+	o.streamReceiver, err = pubsub.Subscribe[T](o.streamID)
+	if err != nil {
+		zap.S().Error("operator subscription failed", zap.Error(err), zap.String("stream", o.streamID.String()))
+		return
+	}
+
 	go func() {
 		for {
-			event, more := <-o.Stream.Notify
+			event, more := <-o.streamReceiver.Notify
 			if more {
-				o.InputBuffer.AddEvent(event)
+				o.inputBuffer.AddEvent(event)
 			} else {
 				return
 			}
@@ -145,7 +205,7 @@ func (o *OperatorStreamSubscription[T]) Run() {
 }
 
 func (o *OperatorStreamSubscription[T]) Consume() []events.Event[T] {
-	return o.InputBuffer.GetAndConsumeNextEvents()
+	return o.inputBuffer.GetAndConsumeNextEvents()
 }
 
 type OperatorControl interface {
@@ -159,9 +219,10 @@ type Operator1[TIN any, TOUT any] struct {
 	f  func(in TIN) events.Event[TOUT]
 
 	active bool
+	fin    chan bool
 
 	Input  Consumable[TIN]
-	Output streams2.Stream[TOUT]
+	Output pubsub.Publisher[TOUT]
 }
 
 type OperatorN[TIN any, TOUT any] struct {
@@ -169,13 +230,17 @@ type OperatorN[TIN any, TOUT any] struct {
 	f  func(in TIN) []events.Event[TOUT]
 
 	active bool
+	fin    chan bool
 
 	Input  Consumable[TIN]
-	Output streams2.Stream[TOUT]
+	Output pubsub.Publisher[TOUT]
 }
 
 func (op *Operator1[TIn, Tout]) Stop() {
-	op.active = false
+	if op.active == true {
+		op.active = false
+		op.Input.Close()
+	}
 }
 
 func (op *Operator1[TIN, TOUT]) ID() OperatorID {
@@ -187,13 +252,16 @@ func (op *Operator1[TIn, Tout]) Start() {
 	if !op.active {
 		op.active = true
 
+		op.Input.Run()
+
 		go func() {
+
+			defer func() { op.fin <- true }()
+
 			var (
 				inputEvents TIn
 				publishErr  error
 			)
-
-			op.Input.Run()
 
 			for op.active {
 				inputEvents = op.Input.Consume()
@@ -212,7 +280,10 @@ func (op *Operator1[TIn, Tout]) Start() {
 }
 
 func (op *OperatorN[TIN, TOUT]) Stop() {
-	op.active = false
+	if op.active == true {
+		op.active = false
+		op.Input.Close()
+	}
 }
 
 func (op *OperatorN[TIN, TOUT]) ID() OperatorID {
@@ -223,13 +294,16 @@ func (op *OperatorN[TIN, TOUT]) Start() {
 	if !op.active {
 		op.active = true
 
+		op.Input.Run()
+
 		go func() {
+
+			defer func() { op.fin <- true }()
+
 			var (
 				inputEvents TIN
 				publishErr  error
 			)
-
-			op.Input.Run()
 
 			for op.active {
 				inputEvents = op.Input.Consume()
@@ -250,24 +324,75 @@ func (op *OperatorN[TIN, TOUT]) Start() {
 	}
 }
 
-func NewOperator[TIn, Tout any](f func(TIn) events.Event[Tout], in Consumable[TIn], out streams2.Stream[Tout]) OperatorControl {
+func NewOperator[TIn, Tout any](f func(TIn) events.Event[Tout], in Consumable[TIn], out pubsub.Publisher[Tout]) OperatorControl {
 	o := &Operator1[TIn, Tout]{
 		id:     OperatorID(uuid.New()),
 		f:      f,
 		Input:  in,
 		Output: out,
 		active: false,
+		fin:    make(chan bool),
 	}
 
 	return o
 }
 
-func NewOperatorN[TIn, Tout any](f func(TIn) []events.Event[Tout], in Consumable[TIn], out streams2.Stream[Tout]) OperatorControl {
+func NewOperatorN[TIn, Tout any](f func(TIn) []events.Event[Tout], in Consumable[TIn], out pubsub.Publisher[Tout]) OperatorControl {
 	return &OperatorN[TIn, Tout]{
 		id:     OperatorID(uuid.New()),
 		f:      f,
 		Input:  in,
 		Output: out,
 		active: false,
+		fin:    make(chan bool),
 	}
+}
+
+type ORepository interface {
+	Get(id OperatorID) (OperatorControl, bool)
+	Put(operator OperatorControl) error
+	List() map[OperatorID]OperatorControl
+	Remove(operators []OperatorControl)
+}
+
+type MapRepository map[OperatorID]OperatorControl
+
+func (m MapRepository) Remove(operators []OperatorControl) {
+	for _, operators := range operators {
+		delete(m, operators.ID())
+	}
+}
+
+func (m MapRepository) List() map[OperatorID]OperatorControl {
+	return m
+}
+
+func (m MapRepository) Get(id OperatorID) (OperatorControl, bool) {
+	o, ok := m[id]
+	return o, ok
+}
+
+func (m MapRepository) Put(operator OperatorControl) error {
+
+	if operator == nil || operator.ID() == OperatorID(uuid.Nil) {
+		return errors.New("operator is considered nil (either id or operator is nil)")
+	}
+
+	if _, ok := m.Get(operator.ID()); ok {
+		return errors.New("operator already exists")
+	}
+
+	m[operator.ID()] = operator
+
+	return nil
+}
+
+var operatorRepository ORepository
+
+func OperatorRepository() ORepository {
+	return operatorRepository
+}
+
+func init() {
+	operatorRepository = MapRepository{}
 }

@@ -67,7 +67,7 @@ func (b basicBuffer[T]) Len() int {
 	return len(b)
 }
 
-func NewAsyncBuffer[T any]() *AsyncBuffer[T] {
+func newAsyncBuffer[T any]() *AsyncBuffer[T] {
 	s := &AsyncBuffer[T]{
 		buffer:      make(basicBuffer[T], 0, defaultBufferCapacity),
 		bufferMutex: sync.Mutex{},
@@ -80,14 +80,14 @@ func NewAsyncBuffer[T any]() *AsyncBuffer[T] {
 
 func NewSimpleAsyncBuffer[T any]() Buffer[T] {
 	s := &SimpleAsyncBuffer[T]{
-		AsyncBuffer: NewAsyncBuffer[T](),
+		AsyncBuffer: newAsyncBuffer[T](),
 	}
 	return s
 }
 
 func NewConsumableAsyncBuffer[T any](policy SelectionPolicy[T]) Buffer[T] {
 	s := &ConsumableAsyncBuffer[T]{
-		AsyncBuffer:     NewAsyncBuffer[T](),
+		AsyncBuffer:     newAsyncBuffer[T](),
 		selectionPolicy: policy,
 	}
 	s.selectionPolicy.SetBuffer(&s.buffer)

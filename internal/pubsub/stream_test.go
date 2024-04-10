@@ -1,4 +1,4 @@
-package streams_test
+package pubsub_test
 
 import (
 	"fmt"
@@ -6,18 +6,18 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go-stream-processing/internal/events"
-	streams2 "go-stream-processing/internal/streams"
+	"go-stream-processing/internal/pubsub"
 )
 
 var _ = Describe("Stream", func() {
-	var stream *streams2.LocalSyncStream[string]
-	var asyncStream *streams2.LocalAsyncStream[string]
+	var stream pubsub.Stream[string]
+	var asyncStream pubsub.Stream[string]
 
 	BeforeEach(func() {
-		stream = streams2.NewLocalSyncStream[string](streams2.NewStreamDescription("test", uuid.New(), false))
-		stream.Start()
-		asyncStream = streams2.NewLocalAsyncStream[string](streams2.NewStreamDescription("test3", uuid.New(), true))
-		asyncStream.Start()
+		stream, _ = pubsub.GetOrCreateStream[string]("test", false)
+		stream.Run()
+		asyncStream, _ = pubsub.GetOrCreateStream[string]("test3", true)
+		asyncStream.Run()
 	})
 
 	Describe("LocalSyncStream One Event", func() {
@@ -27,7 +27,7 @@ var _ = Describe("Stream", func() {
 				event := events.NewEvent("test-1")
 				bChan := make(chan bool)
 
-				receiver := stream.Subscribe()
+				receiver, _ := pubsub.Subscribe[string](stream.ID())
 
 				go func() {
 					eventResult = <-receiver.Notify
@@ -53,7 +53,7 @@ var _ = Describe("Stream", func() {
 					event3 := events.NewEvent("test-3-3")
 					bChan := make(chan bool)
 
-					receiver := asyncStream.Subscribe()
+					receiver, _ := pubsub.Subscribe[string](asyncStream.ID())
 
 					asyncStream.Publish(event1)
 					asyncStream.Publish(event2)
@@ -69,7 +69,7 @@ var _ = Describe("Stream", func() {
 					}()
 
 					<-bChan
-					asyncStream.Stop()
+					asyncStream.TryClose()
 
 					er1 := eventResult[0].GetContent()
 					er2 := eventResult[1].GetContent()
@@ -84,6 +84,18 @@ var _ = Describe("Stream", func() {
 					Expect(e2).To(Equal(er2))
 				})
 			})
+			It("should be closable", func() {
+
+				asyncStream := pubsub.NewLocalAsyncStream[string](pubsub.NewStreamDescription("close", uuid.New(), true))
+				asyncStream.Run()
+
+				asyncStream.TryClose()
+
+				result, _ := pubsub.Subscribe[string](asyncStream.ID())
+
+				Expect(result).To(BeNil())
+			})
+
 		})
 	})
 })

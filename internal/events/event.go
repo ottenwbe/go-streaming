@@ -31,19 +31,6 @@ type NumericEvent[T number] struct {
 	TemporalEvent[T]
 }
 
-type OrchestrationEvent struct {
-	TimeStamp time.Time
-}
-
-func (m *OrchestrationEvent) GetTimestamp() time.Time {
-	return m.TimeStamp
-}
-
-func (m *OrchestrationEvent) GetContent(v interface{}) error {
-	v = nil
-	return nil
-}
-
 func NewEvent[T any](content T) Event[T] {
 	return &TemporalEvent[T]{
 		TimeStamp: time.Now(),

@@ -1,4 +1,4 @@
-package streams_test
+package pubsub_test
 
 import (
 	"testing"
