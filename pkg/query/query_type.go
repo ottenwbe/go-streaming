@@ -7,16 +7,7 @@ import (
 	"go-stream-processing/internal/pubsub"
 )
 
-func Close(c *QueryControl) {
-	c.stop()
-
-	pubsub.TryRemoveStreams(c.Streams)
-	engine.OperatorRepository().Remove(c.Operators)
-
-	QueryRepository().remove(c.ID)
-}
-
-func QueryOverSingleStreamSelection1[T any, TOut any](
+func TemplateQueryOverSingleStreamSelection1[T any, TOut any](
 	in string,
 	operation func(engine.SingleStreamSelection1[T]) events.Event[TOut],
 	out string) (*QueryControl, error) {
@@ -43,7 +34,7 @@ func QueryOverSingleStreamSelection1[T any, TOut any](
 		return nil, err
 	}
 
-	queryControl.start()
+	queryControl.startEverything()
 
 	return queryControl, nil
 }
@@ -53,13 +44,12 @@ func createOperationOverSingleStreamSelection1[T, TOut any](inputStream pubsub.S
 	inStream := engine.NewSingleStreamInput1[T](inputStream)
 
 	f := engine.NewOperator[engine.SingleStreamSelection1[T], TOut](operation, inStream, outputStream)
-
 	err := engine.OperatorRepository().Put(f)
 
 	return f, err
 }
 
-func QueryOverSingleStreamSelectionN[T any, TOut any](in string,
+func TemplateQueryOverSingleStreamSelectionN[T any, TOut any](in string,
 	selection buffer2.SelectionPolicy[T],
 	op func(engine.SingleStreamSelectionN[T]) events.Event[TOut],
 	out string) (*QueryControl, error) {
@@ -89,8 +79,6 @@ func QueryOverSingleStreamSelectionN[T any, TOut any](in string,
 		return nil, err
 	}
 
-	queryControl.start()
-
 	return queryControl, nil
 }
 
@@ -104,7 +92,7 @@ func createOperatorOverSingleStreamSelectionN[T any, TOut any](inputStream pubsu
 	return f
 }
 
-func QueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](in string, op func(engine.SingleStreamSelection1[T]) []events.Event[TOut], out string) (*QueryControl, error) {
+func TemplateQueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](in string, op func(engine.SingleStreamSelection1[T]) []events.Event[TOut], out string) (*QueryControl, error) {
 
 	inputStream, err := pubsub.GetOrCreateStream[T](in, false)
 	if err != nil {
@@ -128,8 +116,6 @@ func QueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](in string, o
 		return nil, err
 	}
 
-	queryControl.start()
-
 	return queryControl, nil
 }
 
@@ -140,7 +126,7 @@ func createMultipleEventsOverSingleStreamSelection1[T any, TOut any](inputStream
 	return f
 }
 
-func QueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](in1 string,
+func TemplateQueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](in1 string,
 	selection1 buffer2.SelectionPolicy[TIN1],
 	in2 string,
 	selection2 buffer2.SelectionPolicy[TIN2],
@@ -160,8 +146,6 @@ func QueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](in1 string,
 	queryControl.addStreams(inputStream1, inputStream2)
 	queryControl.addOperations(f)
 	_ = QueryRepository().put(queryControl)
-
-	queryControl.start()
 
 	return outputStream, queryControl
 }
@@ -184,8 +168,6 @@ func QueryOverDoubleStreamSelection1[TIN1, TIN2, TOUT any](in1 string,
 	queryControl.addStreams(inputStream1, inputStream2)
 	queryControl.addOperations(f)
 	_ = QueryRepository().put(queryControl)
-
-	queryControl.start()
 
 	return queryControl, nil
 }

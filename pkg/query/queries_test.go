@@ -15,7 +15,8 @@ var _ = Describe("Add Operator1", func() {
 		It("should correctly perform the operation on pubsub", func() {
 
 			c, _ := query.ContinuousAdd[int]("test-add-in1", "test-add-in2", "test-add-out")
-			defer query.Close(c)
+			c.Run()
+			defer c.Close()
 
 			res, _ := pubsub.Subscribe[int](c.Output.ID())
 			event := events.NewEvent(8)
@@ -41,7 +42,8 @@ var _ = Describe("Convert Operator1", func() {
 		It("should change the type", func() {
 
 			c, _ := query.ContinuousConvert[int, float32]("convert-test-in", "convert-test-out")
-			defer query.Close(c)
+			c.Run()
+			defer c.Close()
 
 			res, _ := pubsub.Subscribe[float32](c.Output.ID())
 			event := events.NewEvent(8)
@@ -65,7 +67,8 @@ var _ = Describe("Sum Operator1", func() {
 			selection := buffer.NewCountingWindowPolicy[int](2, 2)
 
 			c, _ := query.ContinuousBatchSum[int]("int values", "sum values", selection)
-			defer query.Close(c)
+			c.Run()
+			defer c.Close()
 
 			res, _ := pubsub.Subscribe[int](c.Output.ID())
 
@@ -98,7 +101,8 @@ var _ = Describe("Count Operator1", func() {
 
 			selection := buffer.NewCountingWindowPolicy[float32](2, 2)
 			c, _ := query.ContinuousBatchCount[float32, int]("countable floats", "counted floats", selection)
-			defer query.Close(c)
+			c.Run()
+			defer c.Close()
 
 			res, _ := pubsub.Subscribe[int](c.Output.ID())
 
@@ -130,7 +134,8 @@ var _ = Describe("Smaller OperatorControl", func() {
 		It("should remove large events", func() {
 
 			c, _ := query.ContinuousSmaller[int]("q-s-1", "res-s-1", 11)
-			defer query.Close(c)
+			c.Run()
+			defer c.Close()
 
 			res, _ := pubsub.Subscribe[int](c.Output.ID())
 			streamIn, _ := pubsub.GetStreamN[int]("q-s-1")
@@ -162,7 +167,8 @@ var _ = Describe("Greater OperatorControl", func() {
 		It("should remove small events", func() {
 
 			c, _ := query.ContinuousGreater("test-greater-11", 11, "test-greater-11-out")
-			defer query.Close(c)
+			c.Run()
+			defer c.Close()
 
 			res, _ := pubsub.Subscribe[int](c.Output.ID())
 

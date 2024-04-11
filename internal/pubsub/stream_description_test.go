@@ -9,7 +9,7 @@ import (
 
 var _ = Describe("Descriptions", func() {
 
-	Describe("Streams Description", func() {
+	Describe("streams Description", func() {
 		Context("Parsing", func() {
 			It("it can be parsed correctly", func() {
 

@@ -21,7 +21,7 @@ func ContinuousBatchSum[TEvent number](inEventType string, outEvenType string, s
 		return events.NewNumericEvent[TEvent](result)
 	}
 
-	return QueryOverSingleStreamSelectionN[TEvent, TEvent](inEventType, selectionPolicy, batchSumF, outEvenType)
+	return TemplateQueryOverSingleStreamSelectionN[TEvent, TEvent](inEventType, selectionPolicy, batchSumF, outEvenType)
 }
 
 func ContinuousBatchCount[TEvent any, TOut number](inEventType string, outEvenType string, selectionPolicy buffer.SelectionPolicy[TEvent]) (*QueryControl, error) {
@@ -31,7 +31,7 @@ func ContinuousBatchCount[TEvent any, TOut number](inEventType string, outEvenTy
 		return events.NewNumericEvent[TOut](result)
 	}
 
-	return QueryOverSingleStreamSelectionN[TEvent, TOut](inEventType, selectionPolicy, batchCount, outEvenType)
+	return TemplateQueryOverSingleStreamSelectionN[TEvent, TOut](inEventType, selectionPolicy, batchCount, outEvenType)
 }
 
 func ContinuousGreater[T number](inEventType string, greaterThan T, outEvenType string) (*QueryControl, error) {
@@ -44,7 +44,7 @@ func ContinuousGreater[T number](inEventType string, greaterThan T, outEvenType 
 		}
 	}
 
-	return QueryMultipleEventsOverSingleStreamSelection1[T, T](inEventType, greater, outEvenType)
+	return TemplateQueryMultipleEventsOverSingleStreamSelection1[T, T](inEventType, greater, outEvenType)
 }
 
 func ContinuousSmaller[T number](inEventType, outEvenType string, than T) (*QueryControl, error) {
@@ -57,7 +57,7 @@ func ContinuousSmaller[T number](inEventType, outEvenType string, than T) (*Quer
 		}
 
 	}
-	return QueryMultipleEventsOverSingleStreamSelection1[T, T](inEventType, smaller, outEvenType)
+	return TemplateQueryMultipleEventsOverSingleStreamSelection1[T, T](inEventType, smaller, outEvenType)
 }
 
 func ContinuousAdd[T number](inEventType1, inEventType2 string, outEventType string) (*QueryControl, error) {
@@ -76,5 +76,5 @@ func ContinuousConvert[TIn, TOut number](inEventType string, outEventType string
 		return events.NewEvent[TOut](TOut(input.GetContent()))
 	}
 
-	return QueryOverSingleStreamSelection1[TIn, TOut](inEventType, convert, outEventType)
+	return TemplateQueryOverSingleStreamSelection1[TIn, TOut](inEventType, convert, outEventType)
 }

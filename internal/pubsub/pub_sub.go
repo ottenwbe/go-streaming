@@ -34,10 +34,11 @@ func StreamIDNameDivError() error { return streamIDNameDivError }
 
 func GetOrCreateStream[T any](eventTopic string, async bool) (Stream[T], error) {
 	var (
-		err error
+		err            error
+		existingStream Stream[T]
 	)
 
-	if existingStream, err := getAndConvertStream[T](eventTopic); existingStream != nil {
+	if existingStream, err = getAndConvertStream[T](eventTopic); existingStream != nil {
 		return existingStream, nil
 	} else if errors.Is(err, StreamNotFoundError()) {
 		return AddOrReplaceStreamD[T](NewStreamDescription(eventTopic, uuid.New(), async))

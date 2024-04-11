@@ -2,17 +2,19 @@ package query
 
 import (
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 )
 
 type ID uuid.UUID
 
 func (q ID) String() string {
-	return q.String()
+	return uuid.UUID(q).String()
 }
 
 type (
-	QRepository interface {
+	Repository interface {
+		fmt.Stringer
 		Get(id ID) (*QueryControl, bool)
 		put(q *QueryControl) error
 		remove(id ID)
@@ -21,6 +23,16 @@ type (
 )
 
 type concreteQueryRepository map[ID]*QueryControl
+
+func (c concreteQueryRepository) String() string {
+
+	s := "QueryControl {"
+	for id, _ := range c.List() {
+		s = s + fmt.Sprintf(" %v ", id)
+	}
+	s += "}"
+	return s
+}
 
 func (c concreteQueryRepository) Get(id ID) (q *QueryControl, ok bool) {
 	q, ok = c[id]
@@ -32,15 +44,15 @@ func (c concreteQueryRepository) remove(id ID) {
 }
 
 func (c concreteQueryRepository) put(q *QueryControl) error {
-	if q.ID == ID(uuid.Nil) {
+	if q.ID() == ID(uuid.Nil) {
 		return errors.New("invalid query id")
 	}
 
-	if _, ok := c.Get(q.ID); ok {
+	if _, ok := c.Get(q.ID()); ok {
 		return errors.New("query already exists")
 	}
 
-	c[q.ID] = q
+	c[q.ID()] = q
 
 	return nil
 }
@@ -50,10 +62,10 @@ func (c concreteQueryRepository) List() map[ID]*QueryControl {
 }
 
 var (
-	queryRepository QRepository
+	queryRepository Repository
 )
 
-func QueryRepository() QRepository {
+func QueryRepository() Repository {
 	return queryRepository
 }
 
