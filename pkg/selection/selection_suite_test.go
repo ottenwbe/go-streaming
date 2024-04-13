@@ -1,4 +1,4 @@
-package query_test
+package selection_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestQuery(t *testing.T) {
+func TestSelection(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "ContinuousQuery Suite")
+	RunSpecs(t, "Selection Suite")
 }

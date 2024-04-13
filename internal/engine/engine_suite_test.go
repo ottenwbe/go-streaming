@@ -1,10 +1,9 @@
 package engine_test
 
 import (
-	"github.com/google/uuid"
 	"go-stream-processing/internal/engine"
-	"go-stream-processing/internal/events"
-	"go-stream-processing/internal/pubsub"
+	"go-stream-processing/pkg/events"
+	pubsub2 "go-stream-processing/pkg/pubsub"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -23,8 +22,8 @@ var _ = Describe("OperatorRepository", func() {
 	)
 
 	BeforeEach(func() {
-		streamIn := pubsub.NewLocalSyncStream[int](pubsub.NewStreamDescription("int values", uuid.New(), false))
-		streamOut := pubsub.NewLocalSyncStream[int](pubsub.NewStreamDescription("summed up values", uuid.New(), false))
+		streamIn := pubsub2.NewLocalSyncStream[int](pubsub2.NewStreamDescription("int values", false))
+		streamOut := pubsub2.NewLocalSyncStream[int](pubsub2.NewStreamDescription("summed up values", false))
 
 		inStream := engine.NewSingleStreamInput1[int](streamIn.ID())
 

@@ -2,15 +2,13 @@ package pubsub
 
 import (
 	"errors"
-	"github.com/google/uuid"
-	"go-stream-processing/internal/events"
+	"go-stream-processing/pkg/events"
 	"go.uber.org/zap"
 	"sync"
 )
 
 var (
 	streamIndex    map[StreamID]interface{}
-	topicIndex     map[string]interface{}
 	mapAccessMutex sync.RWMutex
 )
 
@@ -32,16 +30,16 @@ func StreamNameExistsError() error {
 func StreamIDNilError() error     { return streamIDNilError }
 func StreamIDNameDivError() error { return streamIDNameDivError }
 
-func GetOrCreateStream[T any](eventTopic string, async bool) (Stream[T], error) {
+func GetOrCreateStream[T any](eventTopic StreamID, async bool) (Stream[T], error) {
 	var (
 		err            error
 		existingStream Stream[T]
 	)
 
-	if existingStream, err = getAndConvertStream[T](eventTopic); existingStream != nil {
+	if existingStream, err = getAndConvertStreamByID[T](eventTopic); existingStream != nil {
 		return existingStream, nil
 	} else if errors.Is(err, StreamNotFoundError()) {
-		return AddOrReplaceStreamD[T](NewStreamDescription(eventTopic, uuid.New(), async))
+		return AddOrReplaceStreamD[T](NewStreamDescription(eventTopic, async))
 	}
 
 	return nil, err
@@ -93,7 +91,6 @@ func RemoveStream[T any](streamID StreamID) {
 		s.TryClose()
 
 		delete(streamIndex, streamID)
-		delete(topicIndex, s.(Stream[T]).Name())
 
 		zap.S().Info("stream removed", zap.String("module", "stream"), zap.String("id", streamID.String()))
 	}
@@ -105,7 +102,6 @@ func TryRemoveStreams(streams []StreamControl) {
 
 	for _, stream := range streams {
 		delete(streamIndex, stream.ID())
-		delete(topicIndex, stream.Name())
 	}
 
 }
@@ -129,7 +125,6 @@ func createOrReplaceStreamIndex[T any](newStream Stream[T]) error {
 
 func addStream[T any](newStream Stream[T]) {
 	streamIndex[newStream.ID()] = newStream
-	topicIndex[newStream.Name()] = newStream
 }
 
 func validateStream[T any](newStream Stream[T]) error {
@@ -138,21 +133,14 @@ func validateStream[T any](newStream Stream[T]) error {
 		return StreamIDNilError()
 	}
 
-	//if stream is not indexed, name should not be duplicated
-	if idx, idFound := streamIndex[newStream.ID()]; !idFound {
-		if _, nameFound := topicIndex[newStream.Name()]; nameFound {
-			zap.S().Error("duplicated name of stream, name needs to be unique")
-			return StreamNameExistsError()
-		}
-	} else {
-		if !idx.(Stream[T]).Description().Equal(newStream.Description()) {
-			return StreamIDNameDivError()
-		}
+	//if stream is indexed, name should not be duplicated
+	if _, idFound := streamIndex[newStream.ID()]; idFound {
+		return StreamNameExistsError()
 	}
 	return nil
 }
 
-func SubscribeToTopic[T any](name string) (*StreamReceiver[T], error) {
+/*func SubscribeToTopic[T any](name string) (*StreamReceiver[T], error) {
 	mapAccessMutex.RLock()
 	defer mapAccessMutex.RUnlock()
 
@@ -161,9 +149,9 @@ func SubscribeToTopic[T any](name string) (*StreamReceiver[T], error) {
 	} else {
 		return nil, err
 	}
-}
+}*/
 
-func getAndConvertStream[T any](name string) (Stream[T], error) {
+/*func getAndConvertStream[T any](name string) (Stream[T], error) {
 	if stream, ok := topicIndex[name]; ok {
 		switch stream.(type) {
 		case Stream[T]:
@@ -173,7 +161,7 @@ func getAndConvertStream[T any](name string) (Stream[T], error) {
 		}
 	}
 	return nil, streamNotFoundError
-}
+}*/
 
 func getAndConvertStreamByID[T any](id StreamID) (Stream[T], error) {
 	if stream, ok := streamIndex[id]; ok {
@@ -209,13 +197,13 @@ func Unsubscribe[T any](rec *StreamReceiver[T]) {
 	}
 }
 
-func PublishN[T any](name string, event events.Event[T]) error {
+/*func PublishN[T any](name string, event events.Event[T]) error {
 	if s, err := GetOrCreateStream[T](name, false); err == nil {
 		return s.Publish(event)
 	} else {
 		return err
 	}
-}
+}*/
 
 func Publish[T any](id StreamID, event events.Event[T]) error {
 	if s, err := getAndConvertStreamByID[T](id); err == nil {
@@ -233,15 +221,15 @@ func GetStream[T any](id StreamID) (Stream[T], error) {
 	}
 }
 
-func GetStreamN[T any](name string) (Stream[T], error) {
+/*func GetStreamN[T any](name string) (Stream[T], error) {
 	if s, err := getAndConvertStream[T](name); err == nil {
 		return s, nil
 	} else {
 		return nil, err
 	}
-}
+}*/
 
-func GetDescriptionByID[T any](id StreamID) (StreamDescription, error) {
+func GetDescription[T any](id StreamID) (StreamDescription, error) {
 	if s, err := getAndConvertStreamByID[T](id); err == nil {
 		return s.(Stream[T]).Description(), nil
 	} else {
@@ -249,17 +237,14 @@ func GetDescriptionByID[T any](id StreamID) (StreamDescription, error) {
 	}
 }
 
-func GetDescription[T any](name string) (StreamDescription, error) {
+/*func GetDescription[T any](name string) (StreamDescription, error) {
 	if s, err := getAndConvertStream[T](name); err == nil {
 		return s.(Stream[T]).Description(), nil
 	} else {
 		return StreamDescription{}, err
 	}
-}
+}*/
 
 func init() {
-
 	streamIndex = make(map[StreamID]interface{})
-	topicIndex = make(map[string]interface{})
-
 }

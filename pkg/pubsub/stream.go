@@ -2,21 +2,20 @@ package pubsub
 
 import (
 	"errors"
-	"github.com/google/uuid"
 	"go-stream-processing/internal/buffer"
-	"go-stream-processing/internal/events"
+	"go-stream-processing/pkg/events"
 	"go.uber.org/zap"
 	"sync"
 )
 
-type StreamID uuid.UUID
+type StreamID string //uuid.UUID
 
 func (s StreamID) isNil() bool {
-	return s == StreamID(uuid.Nil)
+	return s == StreamID("")
 }
 
 func (s StreamID) String() string {
-	return uuid.UUID(s).String()
+	return string(s)
 }
 
 type notificationMap[T any] map[StreamReceiverID]events.EventChannel[T]
@@ -32,7 +31,7 @@ func (m notificationMap[T]) notify(e events.Event[T]) {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					zap.S().Infof("recovered notify panic %v", id)
+					zap.S().Debugf("recovered notify panic for stream %v", id)
 				}
 			}()
 			notifier <- e
@@ -52,7 +51,6 @@ type StreamControl interface {
 	HasPublishersOrSubscribers() bool
 
 	ID() StreamID
-	Name() string
 	Description() StreamDescription
 }
 
@@ -189,10 +187,6 @@ func (l *LocalAsyncStream[T]) ID() StreamID {
 	return l.description.StreamID()
 }
 
-func (l *LocalAsyncStream[T]) Name() string {
-	return l.description.Name
-}
-
 func (l *LocalAsyncStream[T]) Publish(event events.Event[T]) error {
 	// Handle stream inactive error
 	if !l.active {
@@ -222,10 +216,6 @@ func (s *LocalSyncStream[T]) Description() StreamDescription {
 
 func (s *LocalSyncStream[T]) ID() StreamID {
 	return s.description.StreamID()
-}
-
-func (s *LocalSyncStream[T]) Name() string {
-	return s.description.Name
 }
 
 func (s *LocalSyncStream[T]) Publish(e events.Event[T]) error {

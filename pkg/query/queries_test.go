@@ -3,11 +3,24 @@ package query_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/internal/buffer"
-	"go-stream-processing/internal/events"
-	"go-stream-processing/internal/pubsub"
+	"go-stream-processing/pkg/events"
+	"go-stream-processing/pkg/pubsub"
 	"go-stream-processing/pkg/query"
+	"go-stream-processing/pkg/selection"
 )
+
+var _ = Describe("Query Builder", func() {
+
+	Context("Build", func() {
+		It("creates a successful query", func() {
+			b := query.NewBuilder().Stream(query.S[int]("builder1", true)).Query(query.ContinuousBatchSum[int]("builder1", "builder2", selection.NewCountingWindowPolicy[int](10, 10)))
+			q, ok := b.Build()
+
+			Expect(ok).To(BeNil())
+			Expect(q).ToNot(BeNil())
+		})
+	})
+})
 
 var _ = Describe("Add Operator1", func() {
 
@@ -22,8 +35,8 @@ var _ = Describe("Add Operator1", func() {
 			event := events.NewEvent(8)
 			event2 := events.NewEvent(3)
 
-			streamA, _ := pubsub.GetStreamN[int]("test-add-in1")
-			streamB, _ := pubsub.GetStreamN[int]("test-add-in2")
+			streamA, _ := pubsub.GetStream[int]("test-add-in1")
+			streamB, _ := pubsub.GetStream[int]("test-add-in2")
 
 			streamA.Publish(event)
 			streamB.Publish(event2)
@@ -48,7 +61,7 @@ var _ = Describe("Convert Operator1", func() {
 			res, _ := pubsub.Subscribe[float32](c.Output.ID())
 			event := events.NewEvent(8)
 
-			streamIn, _ := pubsub.GetStreamN[int]("convert-test-in")
+			streamIn, _ := pubsub.GetStream[int]("convert-test-in")
 
 			streamIn.Publish(event)
 			result := <-res.Notify
@@ -64,7 +77,7 @@ var _ = Describe("Sum Operator1", func() {
 	Context("when executed", func() {
 		It("should sum all values over a window", func() {
 
-			selection := buffer.NewCountingWindowPolicy[int](2, 2)
+			selection := selection.NewCountingWindowPolicy[int](2, 2)
 
 			c, _ := query.ContinuousBatchSum[int]("int values", "sum values", selection)
 			c.Run()
@@ -77,7 +90,7 @@ var _ = Describe("Sum Operator1", func() {
 			event2 := events.NewEvent(15)
 			event3 := events.NewEvent(15)
 
-			streamIn, _ := pubsub.GetStreamN[int]("int values")
+			streamIn, _ := pubsub.GetStream[int]("int values")
 			streamIn.Publish(event)
 			streamIn.Publish(event1)
 			streamIn.Publish(event2)
@@ -99,7 +112,7 @@ var _ = Describe("Count Operator1", func() {
 	Context("when executed", func() {
 		It("should sum all values over a window", func() {
 
-			selection := buffer.NewCountingWindowPolicy[float32](2, 2)
+			selection := selection.NewCountingWindowPolicy[float32](2, 2)
 			c, _ := query.ContinuousBatchCount[float32, int]("countable floats", "counted floats", selection)
 			c.Run()
 			defer c.Close()
@@ -111,7 +124,7 @@ var _ = Describe("Count Operator1", func() {
 			event2 := events.NewEvent[float32](1.2)
 			event3 := events.NewEvent[float32](1.3)
 
-			streamIn, _ := pubsub.GetStreamN[float32]("countable floats")
+			streamIn, _ := pubsub.GetStream[float32]("countable floats")
 			streamIn.Publish(event)
 			streamIn.Publish(event1)
 			streamIn.Publish(event2)
@@ -138,7 +151,7 @@ var _ = Describe("Smaller OperatorControl", func() {
 			defer c.Close()
 
 			res, _ := pubsub.Subscribe[int](c.Output.ID())
-			streamIn, _ := pubsub.GetStreamN[int]("q-s-1")
+			streamIn, _ := pubsub.GetStream[int]("q-s-1")
 
 			event := events.NewEvent(9)
 			event1 := events.NewEvent(10)
@@ -177,7 +190,7 @@ var _ = Describe("Greater OperatorControl", func() {
 			event2 := events.NewEvent(15)
 			event3 := events.NewEvent(35)
 
-			streamIn, _ := pubsub.GetStreamN[int]("test-greater-11")
+			streamIn, _ := pubsub.GetStream[int]("test-greater-11")
 			streamIn.Publish(event)
 			streamIn.Publish(event1)
 			streamIn.Publish(event2)

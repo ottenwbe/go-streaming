@@ -2,21 +2,20 @@ package pubsub_test
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/internal/events"
-	"go-stream-processing/internal/pubsub"
+	"go-stream-processing/pkg/events"
+	pubsub2 "go-stream-processing/pkg/pubsub"
 )
 
 var _ = Describe("Stream", func() {
-	var stream pubsub.Stream[string]
-	var asyncStream pubsub.Stream[string]
+	var stream pubsub2.Stream[string]
+	var asyncStream pubsub2.Stream[string]
 
 	BeforeEach(func() {
-		stream, _ = pubsub.GetOrCreateStream[string]("test", false)
+		stream, _ = pubsub2.GetOrCreateStream[string]("test", false)
 		stream.Run()
-		asyncStream, _ = pubsub.GetOrCreateStream[string]("test3", true)
+		asyncStream, _ = pubsub2.GetOrCreateStream[string]("test3", true)
 		asyncStream.Run()
 	})
 
@@ -27,7 +26,7 @@ var _ = Describe("Stream", func() {
 				event := events.NewEvent("test-1")
 				bChan := make(chan bool)
 
-				receiver, _ := pubsub.Subscribe[string](stream.ID())
+				receiver, _ := pubsub2.Subscribe[string](stream.ID())
 
 				go func() {
 					eventResult = <-receiver.Notify
@@ -53,7 +52,7 @@ var _ = Describe("Stream", func() {
 					event3 := events.NewEvent("test-3-3")
 					bChan := make(chan bool)
 
-					receiver, _ := pubsub.Subscribe[string](asyncStream.ID())
+					receiver, _ := pubsub2.Subscribe[string](asyncStream.ID())
 
 					asyncStream.Publish(event1)
 					asyncStream.Publish(event2)
@@ -86,12 +85,12 @@ var _ = Describe("Stream", func() {
 			})
 			It("should be closable", func() {
 
-				asyncStream := pubsub.NewLocalAsyncStream[string](pubsub.NewStreamDescription("close", uuid.New(), true))
+				asyncStream := pubsub2.NewLocalAsyncStream[string](pubsub2.NewStreamDescription("close", true))
 				asyncStream.Run()
 
 				asyncStream.TryClose()
 
-				result, _ := pubsub.Subscribe[string](asyncStream.ID())
+				result, _ := pubsub2.Subscribe[string](asyncStream.ID())
 
 				Expect(result).To(BeNil())
 			})

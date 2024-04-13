@@ -2,10 +2,10 @@ package events
 
 import (
 	"encoding/json"
-	"go.uber.org/zap"
 	"time"
 )
 
+// Event interface for arbitrary events with any content of type T
 type Event[T any] interface {
 	GetTimestamp() time.Time
 	GetContent() T
@@ -22,12 +22,12 @@ type TemporalEvent[T any] struct {
 	Content   T
 }
 
-// number constraint to limit the type parameter to numeric types
-type number interface {
+// NumericConstraint constraint to limit the type parameter to numeric types
+type NumericConstraint interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64
 }
 
-type NumericEvent[T number] struct {
+type NumericEvent[T NumericConstraint] struct {
 	TemporalEvent[T]
 }
 
@@ -38,7 +38,7 @@ func NewEvent[T any](content T) Event[T] {
 	}
 }
 
-func NewNumericEvent[T number](content T) Event[T] {
+func NewNumericEvent[T NumericConstraint](content T) Event[T] {
 	return &NumericEvent[T]{
 		TemporalEvent[T]{
 			TimeStamp: time.Now(),
@@ -51,7 +51,6 @@ func NewEventFromJSON(b []byte) (Event[map[string]interface{}], error) {
 	content := make(map[string]interface{})
 	err := json.Unmarshal(b, &content)
 	if err != nil {
-		zap.S().Error("error could not be unmarshalled", err)
 		return nil, err
 	}
 

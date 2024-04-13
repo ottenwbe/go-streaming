@@ -1,9 +1,16 @@
-package buffer
+package selection
 
 import (
 	"github.com/google/uuid"
+	"go-stream-processing/pkg/events"
 	"time"
 )
+
+// Reader allows read-only access to an underlying event buffer that implements
+type Reader[T any] interface {
+	Get(i int) events.Event[T]
+	Len() int
+}
 
 // EventSelection represents a range of events within a buffer slice.
 type EventSelection struct {
@@ -19,18 +26,18 @@ func (e EventSelection) IsValid() bool {
 // PolicyID of each individual Policy
 type PolicyID uuid.UUID
 
-// SelectionPolicy defines how events are selected from a buffer
-type SelectionPolicy[T any] interface {
-	NextSelectionReady() bool
-	NextSelection() EventSelection
-	UpdateSelection()
-	Shift()
-	Offset(offset int)
-	ID() PolicyID
-	SetBuffer(reader Reader[T])
-}
-
 type (
+	// Policy defines how events are selected from a buffer
+	Policy[T any] interface {
+		NextSelectionReady() bool
+		NextSelection() EventSelection
+		UpdateSelection()
+		Shift()
+		Offset(offset int)
+		ID() PolicyID
+		SetBuffer(reader Reader[T])
+	}
+
 	SelectNextPolicy[T any] struct {
 		PolicyID
 		buffer         Reader[T]
@@ -167,7 +174,8 @@ func (id PolicyID) String() string {
 	return id.String()
 }
 
-func NewCountingWindowPolicy[T any](n int, shift int) SelectionPolicy[T] {
+// NewCountingWindowPolicy creates a new CountingWindowPolicy
+func NewCountingWindowPolicy[T any](n int, shift int) Policy[T] {
 	return &CountingWindowPolicy[T]{
 		PolicyID:     PolicyID(uuid.New()),
 		n:            n,
@@ -176,7 +184,8 @@ func NewCountingWindowPolicy[T any](n int, shift int) SelectionPolicy[T] {
 	}
 }
 
-func NewSelectNextPolicy[T any]() SelectionPolicy[T] {
+// NewSelectNextPolicy creates a new SelectNextPolicy
+func NewSelectNextPolicy[T any]() Policy[T] {
 	return &SelectNextPolicy[T]{
 		PolicyID:       PolicyID(uuid.New()),
 		selectionReady: false,
@@ -185,7 +194,7 @@ func NewSelectNextPolicy[T any]() SelectionPolicy[T] {
 }
 
 // NewTemporalWindowPolicy creates a new TemporalWindowPolicy with the specified window and buffer
-func NewTemporalWindowPolicy[T any](startingTime time.Time, windowLength time.Duration, windowShift time.Duration) SelectionPolicy[T] {
+func NewTemporalWindowPolicy[T any](startingTime time.Time, windowLength time.Duration, windowShift time.Duration) Policy[T] {
 
 	return &TemporalWindowPolicy[T]{
 		PolicyID:     PolicyID(uuid.New()),

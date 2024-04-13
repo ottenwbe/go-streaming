@@ -1,16 +1,68 @@
 package query
 
 import (
-	buffer2 "go-stream-processing/internal/buffer"
+	"github.com/google/uuid"
 	"go-stream-processing/internal/engine"
-	"go-stream-processing/internal/events"
-	"go-stream-processing/internal/pubsub"
+	"go-stream-processing/pkg/events"
+	"go-stream-processing/pkg/pubsub"
+	"go-stream-processing/pkg/selection"
 )
 
+type Builder struct {
+	q     *ContinuousQuery
+	error []error
+}
+
+func NewBuilder() *Builder {
+	return &Builder{
+		q: &ContinuousQuery{
+			id:        ID(uuid.New()),
+			operators: make([]engine.OperatorControl, 0),
+			streams:   make([]pubsub.StreamControl, 0),
+			Output:    nil,
+		},
+		error: make([]error, 0),
+	}
+}
+
+func S[T any](id pubsub.StreamID, async bool) (pubsub.StreamControl, error) {
+	d := pubsub.NewStreamDescription(id, async)
+	return pubsub.AddOrReplaceStreamD[T](d)
+}
+
+func (b *Builder) Query(q *ContinuousQuery, err error) *Builder {
+
+	b.q = b.q.With(q)
+
+	if err != nil {
+		b.error = append(b.error, err)
+	}
+	return b
+}
+
+func (b *Builder) Stream(s pubsub.StreamControl, err error) *Builder {
+	b.q.addStreams(s)
+	if err != nil {
+		b.error = append(b.error, err)
+	}
+	return b
+}
+
+func (b *Builder) Errors() []error {
+	return b.error
+}
+
+func (b *Builder) Build() (*ContinuousQuery, []error) {
+	if len(b.error) > 0 {
+		return nil, b.error
+	}
+	return b.q, nil
+}
+
 func TemplateQueryOverSingleStreamSelection1[T any, TOut any](
-	in string,
+	in pubsub.StreamID,
 	operation func(engine.SingleStreamSelection1[T]) events.Event[TOut],
-	out string) (*QueryControl, error) {
+	out pubsub.StreamID) (*ContinuousQuery, error) {
 
 	inputStream, err := pubsub.GetOrCreateStream[T](in, false)
 	if err != nil {
@@ -34,8 +86,6 @@ func TemplateQueryOverSingleStreamSelection1[T any, TOut any](
 		return nil, err
 	}
 
-	queryControl.startEverything()
-
 	return queryControl, nil
 }
 
@@ -49,10 +99,11 @@ func createOperationOverSingleStreamSelection1[T, TOut any](inputStream pubsub.S
 	return f, err
 }
 
-func TemplateQueryOverSingleStreamSelectionN[T any, TOut any](in string,
-	selection buffer2.SelectionPolicy[T],
+func TemplateQueryOverSingleStreamSelectionN[T any, TOut any](
+	in pubsub.StreamID,
+	selection selection.Policy[T],
 	op func(engine.SingleStreamSelectionN[T]) events.Event[TOut],
-	out string) (*QueryControl, error) {
+	out pubsub.StreamID) (*ContinuousQuery, error) {
 
 	inputStream, err := pubsub.GetOrCreateStream[T](in, false)
 	if err != nil {
@@ -82,7 +133,7 @@ func TemplateQueryOverSingleStreamSelectionN[T any, TOut any](in string,
 	return queryControl, nil
 }
 
-func createOperatorOverSingleStreamSelectionN[T any, TOut any](inputStream pubsub.StreamID, selection buffer2.SelectionPolicy[T], op func(engine.SingleStreamSelectionN[T]) events.Event[TOut], outputStream pubsub.Stream[TOut]) engine.OperatorControl {
+func createOperatorOverSingleStreamSelectionN[T any, TOut any](inputStream pubsub.StreamID, selection selection.Policy[T], op func(engine.SingleStreamSelectionN[T]) events.Event[TOut], outputStream pubsub.Stream[TOut]) engine.OperatorControl {
 
 	inStream := engine.NewSingleStreamInputN(inputStream, selection)
 
@@ -92,7 +143,7 @@ func createOperatorOverSingleStreamSelectionN[T any, TOut any](inputStream pubsu
 	return f
 }
 
-func TemplateQueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](in string, op func(engine.SingleStreamSelection1[T]) []events.Event[TOut], out string) (*QueryControl, error) {
+func TemplateQueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](in pubsub.StreamID, op func(engine.SingleStreamSelection1[T]) []events.Event[TOut], out pubsub.StreamID) (*ContinuousQuery, error) {
 
 	inputStream, err := pubsub.GetOrCreateStream[T](in, false)
 	if err != nil {
@@ -126,12 +177,13 @@ func createMultipleEventsOverSingleStreamSelection1[T any, TOut any](inputStream
 	return f
 }
 
-func TemplateQueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](in1 string,
-	selection1 buffer2.SelectionPolicy[TIN1],
-	in2 string,
-	selection2 buffer2.SelectionPolicy[TIN2],
+func TemplateQueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](
+	in1 pubsub.StreamID,
+	selection1 selection.Policy[TIN1],
+	in2 pubsub.StreamID,
+	selection2 selection.Policy[TIN2],
 	op func(n engine.DoubleInputSelectionN[TIN1, TIN2]) events.Event[TOUT],
-	out string) (pubsub.Stream[TOUT], *QueryControl) {
+	out pubsub.StreamID) (pubsub.Stream[TOUT], *ContinuousQuery) {
 
 	inputStream1, _ := pubsub.GetOrCreateStream[TIN1](in1, false)
 	inputStream2, _ := pubsub.GetOrCreateStream[TIN2](in2, false)
@@ -150,10 +202,11 @@ func TemplateQueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](in1 string,
 	return outputStream, queryControl
 }
 
-func QueryOverDoubleStreamSelection1[TIN1, TIN2, TOUT any](in1 string,
-	in2 string,
+func QueryOverDoubleStreamSelection1[TIN1, TIN2, TOUT any](
+	in1 pubsub.StreamID,
+	in2 pubsub.StreamID,
 	op func(n engine.DoubleInputSelection1[TIN1, TIN2]) events.Event[TOUT],
-	out string) (*QueryControl, error) {
+	out pubsub.StreamID) (*ContinuousQuery, error) {
 
 	inputStream1, _ := pubsub.GetOrCreateStream[TIN1](in1, false)
 	inputStream2, _ := pubsub.GetOrCreateStream[TIN2](in2, false)

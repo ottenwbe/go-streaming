@@ -2,17 +2,12 @@ package buffer
 
 import (
 	"github.com/google/uuid"
-	"go-stream-processing/internal/events"
+	"go-stream-processing/pkg/events"
+	"go-stream-processing/pkg/selection"
 	"sync"
 )
 
 var defaultBufferCapacity = 5
-
-// Reader allows read-only access to a Buffer (or basicBuffer)
-type Reader[T any] interface {
-	Get(i int) events.Event[T]
-	Len() int
-}
 
 type basicBuffer[T any] []events.Event[T]
 
@@ -56,7 +51,7 @@ type SimpleAsyncBuffer[T any] struct {
 // if any is available in the buffer or wait until next event is available.
 type ConsumableAsyncBuffer[T any] struct {
 	*AsyncBuffer[T]
-	selectionPolicy SelectionPolicy[T]
+	selectionPolicy selection.Policy[T]
 }
 
 func (b basicBuffer[T]) Get(i int) events.Event[T] {
@@ -85,7 +80,7 @@ func NewSimpleAsyncBuffer[T any]() Buffer[T] {
 	return s
 }
 
-func NewConsumableAsyncBuffer[T any](policy SelectionPolicy[T]) Buffer[T] {
+func NewConsumableAsyncBuffer[T any](policy selection.Policy[T]) Buffer[T] {
 	s := &ConsumableAsyncBuffer[T]{
 		AsyncBuffer:     newAsyncBuffer[T](),
 		selectionPolicy: policy,
@@ -189,7 +184,7 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	var (
 		selectedEvents basicBuffer[T]
 		selectionFound = s.selectionPolicy.NextSelectionReady()
-		selection      EventSelection
+		selection      selection.EventSelection
 	)
 
 	// Wait until the buffer has enough events

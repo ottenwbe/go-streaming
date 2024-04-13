@@ -19,7 +19,7 @@ func main() {
 
 	api.CreateRestAPI(router)
 
-	if err := router.Run("localhost:8080"); err != nil {
+	if err := router.Build("localhost:8080"); err != nil {
 		zap.S().Error("", zap.String("module", "main"))
 	}
 

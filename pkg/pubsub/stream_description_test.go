@@ -1,10 +1,9 @@
 package pubsub_test
 
 import (
-	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/internal/pubsub"
+	"go-stream-processing/pkg/pubsub"
 )
 
 var _ = Describe("Descriptions", func() {
@@ -20,21 +19,22 @@ async: true
 `
 				//yml := "name: test\nid:\n  3c191d62-6574-4951-a8e6-4ec83c947250"
 				v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
-				Expect(v.Name).To(Equal("test"))
-				Expect(v.ID).To(Equal(uuid.MustParse("3c191d62-6574-4951-a8e6-4ec83c947250")))
+				Expect(v.ID).To(Equal(pubsub.StreamID("3c191d62-6574-4951-a8e6-4ec83c947250")))
+				//Expect(v.ID).To(Equal(uuid.MustParse("3c191d62-6574-4951-a8e6-4ec83c947250")))
 				Expect(v.Async).To(Equal(true))
 				Expect(err).To(BeNil())
 			})
 		})
 		It("creates an ID automatically if not provided", func() {
 			var yml = `
-name: test2
+id: test2
 async: true
 `
 			//yml := "name: test\nid:\n  3c191d62-6574-4951-a8e6-4ec83c947250"
 			v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
-			Expect(v.Name).To(Equal("test2"))
-			Expect(v.ID).NotTo(Equal(uuid.Nil))
+			//Expect(v.Name).To(Equal("test2"))
+
+			Expect(v.ID).To(Equal(pubsub.StreamID("test2")))
 			Expect(v.Async).To(Equal(true))
 			Expect(err).To(BeNil())
 		})

@@ -3,10 +3,14 @@ package pubsub
 import (
 	"errors"
 	"github.com/google/uuid"
-	"go-stream-processing/internal/events"
+	"go-stream-processing/pkg/events"
 )
 
 type StreamReceiverID uuid.UUID
+
+func (i StreamReceiverID) String() string {
+	return uuid.UUID(i).String()
+}
 
 type StreamReceiver[T any] struct {
 	StreamID StreamID

@@ -1,19 +1,20 @@
-package buffer_test
+package selection_test
 
 import (
 	"fmt"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	buffer2 "go-stream-processing/internal/buffer"
-	"go-stream-processing/internal/events"
+	"go-stream-processing/internal/buffer"
+	"go-stream-processing/pkg/events"
+	"go-stream-processing/pkg/selection"
 	"time"
 )
 
-var _ = Describe("SelectionPolicy", func() {
+var _ = Describe("Policy", func() {
 	Describe("CountingWindowPolicy", func() {
 		Context("Select Events", func() {
 			It("can read n events at the time", func() {
-				b := buffer2.NewConsumableAsyncBuffer[string](buffer2.NewCountingWindowPolicy[string](2, 2))
+				b := buffer.NewConsumableAsyncBuffer[string](selection.NewCountingWindowPolicy[string](2, 2))
 				defer b.StopBlocking()
 
 				e1 := events.NewEvent("e1")
@@ -29,7 +30,7 @@ var _ = Describe("SelectionPolicy", func() {
 				Expect(es).To(Equal([]events.Event[string]{e1, e2}))
 			})
 			It("can select multiple events in a row", func() {
-				b := buffer2.NewConsumableAsyncBuffer[string](buffer2.NewCountingWindowPolicy[string](2, 1))
+				b := buffer.NewConsumableAsyncBuffer[string](selection.NewCountingWindowPolicy[string](2, 1))
 				e1 := events.NewEvent("e1")
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")
@@ -70,8 +71,8 @@ var _ = Describe("SelectionPolicy", func() {
 					Content:   "e4",
 				}
 
-				w := buffer2.NewTemporalWindowPolicy[string](e1.GetTimestamp(), time.Hour, time.Minute*10)
-				b := buffer2.NewConsumableAsyncBuffer(w)
+				w := selection.NewTemporalWindowPolicy[string](e1.GetTimestamp(), time.Hour, time.Minute*10)
+				b := buffer.NewConsumableAsyncBuffer(w)
 
 				b.AddEvents(events.Arr[string](e1, e2, e3, e4))
 
@@ -104,8 +105,8 @@ var _ = Describe("SelectionPolicy", func() {
 					Content:   "e5",
 				}
 
-				w := buffer2.NewTemporalWindowPolicy[string](e1.GetTimestamp(), time.Minute*30, time.Minute*30)
-				b := buffer2.NewConsumableAsyncBuffer(w)
+				w := selection.NewTemporalWindowPolicy[string](e1.GetTimestamp(), time.Minute*30, time.Minute*30)
+				b := buffer.NewConsumableAsyncBuffer(w)
 
 				b.AddEvents(events.Arr[string](e1, e2, e3, e4, e5))
 
@@ -122,7 +123,7 @@ var _ = Describe("SelectionPolicy", func() {
 	Describe("SelectNextPolicy", func() {
 		Context("Select Events", func() {
 			It("one at a time", func() {
-				b := buffer2.NewConsumableAsyncBuffer(buffer2.NewSelectNextPolicy[string]())
+				b := buffer.NewConsumableAsyncBuffer(selection.NewSelectNextPolicy[string]())
 				e1 := events.NewEvent("e1")
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")
@@ -134,7 +135,7 @@ var _ = Describe("SelectionPolicy", func() {
 				Expect(es).To(Equal(events.Arr(e1)))
 			})
 			It("selects multiple events in a row", func() {
-				b := buffer2.NewConsumableAsyncBuffer(buffer2.NewSelectNextPolicy[string]())
+				b := buffer.NewConsumableAsyncBuffer(selection.NewSelectNextPolicy[string]())
 				e1 := events.NewEvent("e1")
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")

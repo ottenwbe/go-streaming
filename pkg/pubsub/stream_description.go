@@ -3,27 +3,24 @@ package pubsub
 import (
 	"encoding/json"
 	"errors"
-	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 )
 
 // StreamDescription details the stream configurations
 type StreamDescription struct {
-	Name  string    `yaml:"name"`
-	ID    uuid.UUID `yaml:"id"`
-	Async bool      `yaml:"async"`
+	ID    StreamID `yaml:"id"`
+	Async bool     `yaml:"async"`
 }
 
-func NewStreamDescription(name string, id uuid.UUID, async bool) StreamDescription {
+func NewStreamDescription(id StreamID, async bool) StreamDescription {
 	return StreamDescription{
-		Name:  name,
 		ID:    id,
 		Async: async,
 	}
 }
 
 func (d StreamDescription) Equal(comp StreamDescription) bool {
-	return d.Name == comp.Name && d.ID == comp.ID
+	return d.ID == comp.ID
 }
 
 func (d StreamDescription) StreamID() StreamID {
@@ -32,11 +29,9 @@ func (d StreamDescription) StreamID() StreamID {
 
 func StreamDescriptionEnrichment(d StreamDescription) (StreamDescription, error) {
 
-	if d.Name == "" {
-		return StreamDescription{}, errors.New("no name provided")
+	if d.ID == "" {
+		return StreamDescription{}, errors.New("no id provided")
 	}
-
-	ensureStreamIDIsProvided(&d)
 
 	return d, nil
 }
@@ -58,11 +53,4 @@ func StreamDescriptionFromYML(b []byte) (StreamDescription, error) {
 	}
 
 	return StreamDescriptionEnrichment(d)
-}
-
-func ensureStreamIDIsProvided(d *StreamDescription) {
-	// if not provided, create a new ID
-	if d.ID == uuid.Nil {
-		d.ID = uuid.New()
-	}
 }

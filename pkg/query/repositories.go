@@ -3,6 +3,7 @@ package query
 import (
 	"errors"
 	"fmt"
+
 	"github.com/google/uuid"
 )
 
@@ -15,26 +16,26 @@ func (q ID) String() string {
 type (
 	Repository interface {
 		fmt.Stringer
-		Get(id ID) (*QueryControl, bool)
-		put(q *QueryControl) error
+		Get(id ID) (*ContinuousQuery, bool)
+		put(q *ContinuousQuery) error
 		remove(id ID)
-		List() map[ID]*QueryControl
+		List() map[ID]*ContinuousQuery
 	}
 )
 
-type concreteQueryRepository map[ID]*QueryControl
+type concreteQueryRepository map[ID]*ContinuousQuery
 
 func (c concreteQueryRepository) String() string {
 
-	s := "QueryControl {"
+	s := "ContinuousQueryRepository {"
 	for id, _ := range c.List() {
-		s = s + fmt.Sprintf(" %v ", id)
+		s = fmt.Sprintf("%v %v ", s, id)
 	}
 	s += "}"
 	return s
 }
 
-func (c concreteQueryRepository) Get(id ID) (q *QueryControl, ok bool) {
+func (c concreteQueryRepository) Get(id ID) (q *ContinuousQuery, ok bool) {
 	q, ok = c[id]
 	return
 }
@@ -43,7 +44,7 @@ func (c concreteQueryRepository) remove(id ID) {
 	delete(c, id)
 }
 
-func (c concreteQueryRepository) put(q *QueryControl) error {
+func (c concreteQueryRepository) put(q *ContinuousQuery) error {
 	if q.ID() == ID(uuid.Nil) {
 		return errors.New("invalid query id")
 	}
@@ -57,7 +58,7 @@ func (c concreteQueryRepository) put(q *QueryControl) error {
 	return nil
 }
 
-func (c concreteQueryRepository) List() map[ID]*QueryControl {
+func (c concreteQueryRepository) List() map[ID]*ContinuousQuery {
 	return c
 }
 

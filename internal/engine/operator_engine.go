@@ -4,8 +4,9 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"go-stream-processing/internal/buffer"
-	"go-stream-processing/internal/events"
-	"go-stream-processing/internal/pubsub"
+	"go-stream-processing/pkg/events"
+	pubsub2 "go-stream-processing/pkg/pubsub"
+	"go-stream-processing/pkg/selection"
 	"go.uber.org/zap"
 )
 
@@ -18,8 +19,8 @@ type (
 		Close()
 	}
 	OperatorStreamSubscription[TSub any] struct {
-		streamReceiver *pubsub.StreamReceiver[TSub]
-		streamID       pubsub.StreamID
+		streamReceiver *pubsub2.StreamReceiver[TSub]
+		streamID       pubsub2.StreamID
 		inputBuffer    buffer.Buffer[TSub]
 		active         bool
 	}
@@ -55,7 +56,7 @@ func (o OperatorID) String() string {
 	return o.String()
 }
 
-func NewSingleStreamInputN[TStream any](inputStream pubsub.StreamID, policy buffer.SelectionPolicy[TStream]) Consumable[SingleStreamSelectionN[TStream]] {
+func NewSingleStreamInputN[TStream any](inputStream pubsub2.StreamID, policy selection.Policy[TStream]) Consumable[SingleStreamSelectionN[TStream]] {
 	inputSub := &OperatorStreamSubscription[TStream]{
 		streamID:    inputStream,
 		inputBuffer: buffer.NewConsumableAsyncBuffer[TStream](policy),
@@ -66,7 +67,7 @@ func NewSingleStreamInputN[TStream any](inputStream pubsub.StreamID, policy buff
 	}
 }
 
-func NewDoubleStreamInput1[TIN1, TIN2 any](inputStream1 pubsub.StreamID, inputStream2 pubsub.StreamID) Consumable[DoubleInputSelection1[TIN1, TIN2]] {
+func NewDoubleStreamInput1[TIN1, TIN2 any](inputStream1 pubsub2.StreamID, inputStream2 pubsub2.StreamID) Consumable[DoubleInputSelection1[TIN1, TIN2]] {
 	inputSub1 := &OperatorStreamSubscription[TIN1]{
 		streamID:    inputStream1,
 		inputBuffer: buffer.NewSimpleAsyncBuffer[TIN1](),
@@ -84,7 +85,7 @@ func NewDoubleStreamInput1[TIN1, TIN2 any](inputStream1 pubsub.StreamID, inputSt
 	return inStream
 }
 
-func NewDoubleStreamInputN[TIN1, TIN2 any](inputStream1 pubsub.StreamID, selection1 buffer.SelectionPolicy[TIN1], inputStream2 pubsub.StreamID, selection2 buffer.SelectionPolicy[TIN2]) *DoubleStreamInputN[DoubleInputSelectionN[TIN1, TIN2], TIN1, TIN2] {
+func NewDoubleStreamInputN[TIN1, TIN2 any](inputStream1 pubsub2.StreamID, selection1 selection.Policy[TIN1], inputStream2 pubsub2.StreamID, selection2 selection.Policy[TIN2]) *DoubleStreamInputN[DoubleInputSelectionN[TIN1, TIN2], TIN1, TIN2] {
 	inputSub1 := &OperatorStreamSubscription[TIN1]{
 		streamID:    inputStream1,
 		inputBuffer: buffer.NewConsumableAsyncBuffer[TIN1](selection1),
@@ -102,7 +103,7 @@ func NewDoubleStreamInputN[TIN1, TIN2 any](inputStream1 pubsub.StreamID, selecti
 	return inStream
 }
 
-func NewSingleStreamInput1[TStream any](inputStream pubsub.StreamID) Consumable[SingleStreamSelection1[TStream]] {
+func NewSingleStreamInput1[TStream any](inputStream pubsub2.StreamID) Consumable[SingleStreamSelection1[TStream]] {
 	inputSub := &OperatorStreamSubscription[TStream]{
 		streamID:    inputStream,
 		inputBuffer: buffer.NewSimpleAsyncBuffer[TStream](),
@@ -173,7 +174,7 @@ func (d *DoubleStreamInput1[TRes, TStream1, TStream2]) Close() {
 
 func (o *OperatorStreamSubscription[T]) Close() {
 	if o.active == true {
-		pubsub.Unsubscribe[T](o.streamReceiver)
+		pubsub2.Unsubscribe[T](o.streamReceiver)
 		o.inputBuffer.StopBlocking()
 	}
 }
@@ -186,7 +187,7 @@ func (o *OperatorStreamSubscription[T]) Run() {
 	o.active = true
 
 	var err error
-	o.streamReceiver, err = pubsub.Subscribe[T](o.streamID)
+	o.streamReceiver, err = pubsub2.Subscribe[T](o.streamID)
 	if err != nil {
 		zap.S().Error("operator subscription failed", zap.Error(err), zap.String("stream", o.streamID.String()))
 		return
@@ -222,7 +223,7 @@ type Operator1[TIN any, TOUT any] struct {
 	fin    chan bool
 
 	Input  Consumable[TIN]
-	Output pubsub.Publisher[TOUT]
+	Output pubsub2.Publisher[TOUT]
 }
 
 type OperatorN[TIN any, TOUT any] struct {
@@ -233,7 +234,7 @@ type OperatorN[TIN any, TOUT any] struct {
 	fin    chan bool
 
 	Input  Consumable[TIN]
-	Output pubsub.Publisher[TOUT]
+	Output pubsub2.Publisher[TOUT]
 }
 
 func (op *Operator1[TIn, Tout]) Stop() {
@@ -324,7 +325,7 @@ func (op *OperatorN[TIN, TOUT]) Start() {
 	}
 }
 
-func NewOperator[TIn, Tout any](f func(TIn) events.Event[Tout], in Consumable[TIn], out pubsub.Publisher[Tout]) OperatorControl {
+func NewOperator[TIn, Tout any](f func(TIn) events.Event[Tout], in Consumable[TIn], out pubsub2.Publisher[Tout]) OperatorControl {
 	o := &Operator1[TIn, Tout]{
 		id:     OperatorID(uuid.New()),
 		f:      f,
@@ -337,7 +338,7 @@ func NewOperator[TIn, Tout any](f func(TIn) events.Event[Tout], in Consumable[TI
 	return o
 }
 
-func NewOperatorN[TIn, Tout any](f func(TIn) []events.Event[Tout], in Consumable[TIn], out pubsub.Publisher[Tout]) OperatorControl {
+func NewOperatorN[TIn, Tout any](f func(TIn) []events.Event[Tout], in Consumable[TIn], out pubsub2.Publisher[Tout]) OperatorControl {
 	return &OperatorN[TIn, Tout]{
 		id:     OperatorID(uuid.New()),
 		f:      f,

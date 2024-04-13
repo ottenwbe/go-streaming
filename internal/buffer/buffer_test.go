@@ -4,7 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go-stream-processing/internal/buffer"
-	"go-stream-processing/internal/events"
+	"go-stream-processing/pkg/events"
 )
 
 var _ = Describe("Buffer", func() {
