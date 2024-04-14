@@ -1,4 +1,4 @@
-package engine_test
+package events_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestEngine(t *testing.T) {
+func TestEvents(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Engine Suite")
+	RunSpecs(t, "Events Suite")
 }

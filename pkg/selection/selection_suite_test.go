@@ -1,4 +1,4 @@
-package streams_test
+package selection_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestStreams(t *testing.T) {
+func TestSelection(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Streams Suite")
+	RunSpecs(t, "Selection Suite")
 }
