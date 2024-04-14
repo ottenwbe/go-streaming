@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	streamIndex    map[StreamID]interface{}
+	streamIndex    map[StreamID]StreamControl
 	mapAccessMutex sync.RWMutex
 )
 
@@ -27,10 +27,12 @@ func StreamNameExistsError() error {
 }
 func StreamIDNilError() error { return streamIDNilError }
 
+// GetOrCreateStream creates a stream with id eventTopic or retrieves any existing stream
 func GetOrCreateStream[T any](eventTopic StreamID, async bool) (Stream[T], error) {
 	return GetOrCreateStreamD[T](MakeStreamDescription(eventTopic, async))
 }
 
+// GetOrCreateStreamD creates a stream based on the description d or retrieves any existing stream
 func GetOrCreateStreamD[T any](d StreamDescription) (Stream[T], error) {
 	var (
 		err            error
@@ -74,16 +76,15 @@ func AddOrReplaceStream[T any](newStream Stream[T]) error {
 	return nil
 }
 
-func ForceRemoveStreamD[T any](description StreamDescription) {
-	ForceRemoveStream[T](description.StreamID())
+func ForceRemoveStreamD(description StreamDescription) {
+	ForceRemoveStream(description.StreamID())
 }
 
-func ForceRemoveStream[T any](streamID StreamID) {
-
+func ForceRemoveStream(streamID StreamID) {
 	mapAccessMutex.Lock()
 	defer mapAccessMutex.Unlock()
 
-	if s, err := getAndConvertStreamByID[T](streamID); err == nil {
+	if s, ok := streamIndex[streamID]; ok {
 		s.ForceClose()
 		delete(streamIndex, streamID)
 	}
@@ -108,14 +109,18 @@ func createOrReplaceStreamIndex[T any](newStream Stream[T]) error {
 		return err
 	}
 
-	if s, ok := streamIndex[newStream.ID()]; ok {
-		newStream.setNotifiers(s.(Stream[T]).notifiers())
-		newStream.setEvents(s.(Stream[T]).events())
-	}
+	copy[T](newStream)
 
 	addStream(newStream)
 
 	return nil
+}
+
+func copy[T any](newStream Stream[T]) {
+	if s, ok := streamIndex[newStream.ID()]; ok {
+		newStream.setNotifiers(s.(Stream[T]).notifiers())
+		newStream.setEvents(s.(Stream[T]).events())
+	}
 }
 
 func addStream[T any](newStream Stream[T]) {
@@ -142,7 +147,7 @@ func getAndConvertStreamByID[T any](id StreamID) (Stream[T], error) {
 
 			return stream.(Stream[T]), nil
 		default:
-			return nil, streamTypeMismatchError
+			return nil, StreamTypeMismatchError()
 		}
 	}
 	return nil, streamNotFoundError
@@ -185,58 +190,14 @@ func GetStream[T any](id StreamID) (Stream[T], error) {
 	}
 }
 
-func GetDescription[T any](id StreamID) (StreamDescription, error) {
-	if s, err := getAndConvertStreamByID[T](id); err == nil {
-		return s.(Stream[T]).Description(), nil
+func GetDescription(id StreamID) (StreamDescription, error) {
+	if s, ok := streamIndex[id]; ok {
+		return s.Description(), nil
 	} else {
 		return StreamDescription{}, StreamNotFoundError()
 	}
 }
 
-/*func PublishN[T any](name string, event events.Event[T]) error {
-	if s, err := GetOrCreateStream[T](name, false); err == nil {
-		return s.Publish(event)
-	} else {
-		return err
-	}
-}*/
-/*func GetStreamN[T any](name string) (Stream[T], error) {
-	if s, err := getAndConvertStream[T](name); err == nil {
-		return s, nil
-	} else {
-		return nil, err
-	}
-}*/
-/*func GetDescription[T any](name string) (StreamDescription, error) {
-	if s, err := getAndConvertStream[T](name); err == nil {
-		return s.(Stream[T]).Description(), nil
-	} else {
-		return StreamDescription{}, err
-	}
-}*/
-/*func SubscribeToTopic[T any](name string) (*StreamReceiver[T], error) {
-	mapAccessMutex.RLock()
-	defer mapAccessMutex.RUnlock()
-
-	if stream, err := GetOrCreateStream[T](name, false); err == nil {
-		return stream.subscribe(), nil
-	} else {
-		return nil, err
-	}
-}*/
-
-/*func getAndConvertStream[T any](name string) (Stream[T], error) {
-	if stream, ok := topicIndex[name]; ok {
-		switch stream.(type) {
-		case Stream[T]:
-			return stream.(Stream[T]), nil
-		default:
-			return nil, streamTypeMismatchError
-		}
-	}
-	return nil, streamNotFoundError
-}*/
-
 func init() {
-	streamIndex = make(map[StreamID]interface{})
+	streamIndex = make(map[StreamID]StreamControl)
 }

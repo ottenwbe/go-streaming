@@ -2,30 +2,10 @@ package pubsub
 
 import (
 	"errors"
-	"github.com/google/uuid"
 	"go-stream-processing/internal/buffer"
 	"go-stream-processing/pkg/events"
-	"go.uber.org/zap"
 	"sync"
 )
-
-type StreamID string
-
-func (s StreamID) IsNil() bool {
-	return s == StreamID("")
-}
-
-func (s StreamID) String() string {
-	return string(s)
-}
-
-func NilStreamID() StreamID {
-	return StreamID("")
-}
-
-func RandomStreamID() StreamID {
-	return StreamID(uuid.New().String())
-}
 
 type notificationMap[T any] map[StreamReceiverID]events.EventChannel[T]
 
@@ -36,15 +16,18 @@ func (m notificationMap[T]) notifyAll(events []events.Event[T]) {
 }
 
 func (m notificationMap[T]) notify(e events.Event[T]) {
-	for id, notifier := range m {
-		func() {
+	for _, notifier := range m {
+
+		/*
+			The code should never panic here, because notifiers are unsubscribed before stream closes.
+			However, if the concept changes, consider to handle the panic here:
+
 			defer func() {
 				if r := recover(); r != nil {
-					zap.S().Debugf("recovered notify panic for stream %v", id)
+					zap.S().Debugf("recovered subscriberMap panic for stream %v", id)
 				}
-			}()
-			notifier <- e
-		}()
+			}()*/
+		notifier <- e
 	}
 }
 
@@ -68,11 +51,12 @@ type Stream[T any] interface {
 	StreamControl
 
 	Publish(events.Event[T]) error
+
 	subscribe() *StreamReceiver[T]
 	unsubscribe(id StreamReceiverID)
-
 	setNotifiers(notificationMap notificationMap[T])
 	notifiers() notificationMap[T]
+
 	events() buffer.Buffer[T]
 	setEvents(buffer.Buffer[T])
 }
@@ -80,8 +64,8 @@ type Stream[T any] interface {
 type LocalSyncStream[T any] struct {
 	description StreamDescription
 
-	notify      notificationMap[T]
-	notifyMutex sync.Mutex
+	subscriberMap notificationMap[T]
+	notifyMutex   sync.Mutex
 }
 
 type LocalAsyncStream[T any] struct {
@@ -90,8 +74,8 @@ type LocalAsyncStream[T any] struct {
 	inChannel events.EventChannel[T]
 	buffer    buffer.Buffer[T]
 
-	notify      notificationMap[T]
-	notifyMutex sync.Mutex
+	subscriberMap notificationMap[T]
+	notifyMutex   sync.Mutex
 
 	active bool
 	closed sync.WaitGroup
@@ -101,27 +85,27 @@ type LocalAsyncStream[T any] struct {
 // aka is created w/o event buffering
 func NewLocalSyncStream[T any](description StreamDescription) *LocalSyncStream[T] {
 	return &LocalSyncStream[T]{
-		description: description,
-		notify:      make(notificationMap[T]),
+		description:   description,
+		subscriberMap: make(notificationMap[T]),
 	}
 }
 
 // NewLocalAsyncStream is created w/ event buffering
 func NewLocalAsyncStream[T any](description StreamDescription) *LocalAsyncStream[T] {
 	a := &LocalAsyncStream[T]{
-		description: description,
-		active:      false,
-		notify:      make(notificationMap[T]),
+		description:   description,
+		active:        false,
+		subscriberMap: make(notificationMap[T]),
 	}
 	return a
 }
 
 func (s *LocalSyncStream[T]) HasPublishersOrSubscribers() bool {
-	return len(s.notify) > 0
+	return len(s.subscriberMap) > 0
 }
 
 func (l *LocalAsyncStream[T]) HasPublishersOrSubscribers() bool {
-	return len(l.notify) > 0
+	return len(l.subscriberMap) > 0
 }
 
 func (s *LocalSyncStream[T]) events() buffer.Buffer[T] {
@@ -141,17 +125,24 @@ func (l *LocalAsyncStream[T]) setEvents(b buffer.Buffer[T]) {
 }
 
 func (l *LocalAsyncStream[T]) ForceClose() {
-	for id := range l.notify {
-		l.unsubscribe(id)
+	l.notifyMutex.Lock()
+	defer l.notifyMutex.Unlock()
+
+	for id := range l.subscriberMap {
+		l.doUnsubscribe(id)
 	}
-	l.TryClose()
+	l.doClose(true)
 }
 
 func (l *LocalAsyncStream[T]) TryClose() {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
-	if len(l.notify) == 0 && l.active {
+	l.doClose(false)
+}
+
+func (l *LocalAsyncStream[T]) doClose(force bool) {
+	if (len(l.subscriberMap) == 0 && l.active) || force {
 		l.active = false
 		close(l.inChannel)
 		l.buffer.StopBlocking()
@@ -185,10 +176,10 @@ func (l *LocalAsyncStream[T]) Run() {
 			}
 		}()
 
-		// read buffer and notify
+		// read buffer and publish via subscriberMap
 		go func() {
 			for l.active {
-				l.notify.notify(l.buffer.GetAndRemoveNextEvent())
+				l.subscriberMap.notify(l.buffer.GetAndRemoveNextEvent())
 			}
 			l.closed.Done()
 		}()
@@ -220,7 +211,7 @@ func (l *LocalAsyncStream[T]) subscribe() *StreamReceiver[T] {
 
 	if l.active {
 		rec := NewStreamReceiver[T](l)
-		l.notify[rec.ID] = rec.Notify
+		l.subscriberMap[rec.ID] = rec.Notify
 		return rec
 	}
 
@@ -236,7 +227,7 @@ func (s *LocalSyncStream[T]) ID() StreamID {
 }
 
 func (s *LocalSyncStream[T]) Publish(e events.Event[T]) error {
-	s.notify.notify(e)
+	s.subscriberMap.notify(e)
 	return nil
 }
 
@@ -244,8 +235,12 @@ func (l *LocalAsyncStream[T]) unsubscribe(id StreamReceiverID) {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
-	if c, ok := l.notify[id]; ok {
-		delete(l.notify, id)
+	l.doUnsubscribe(id)
+}
+
+func (l *LocalAsyncStream[T]) doUnsubscribe(id StreamReceiverID) {
+	if c, ok := l.subscriberMap[id]; ok {
+		delete(l.subscriberMap, id)
 		close(c)
 	}
 }
@@ -254,8 +249,8 @@ func (s *LocalSyncStream[T]) unsubscribe(id StreamReceiverID) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
 
-	if c, ok := s.notify[id]; ok {
-		delete(s.notify, id)
+	if c, ok := s.subscriberMap[id]; ok {
+		delete(s.subscriberMap, id)
 		close(c)
 	}
 }
@@ -265,7 +260,7 @@ func (s *LocalSyncStream[T]) subscribe() *StreamReceiver[T] {
 	defer s.notifyMutex.Unlock()
 
 	rec := NewStreamReceiver[T](s)
-	s.notify[rec.ID] = rec.Notify
+	s.subscriberMap[rec.ID] = rec.Notify
 
 	return rec
 }
@@ -279,7 +274,7 @@ func (s *LocalSyncStream[T]) TryClose() {
 }
 
 func (s *LocalSyncStream[T]) ForceClose() {
-	for id := range s.notify {
+	for id := range s.subscriberMap {
 		s.unsubscribe(id)
 	}
 }
@@ -287,19 +282,19 @@ func (s *LocalSyncStream[T]) ForceClose() {
 func (s *LocalSyncStream[T]) setNotifiers(m notificationMap[T]) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
-	s.notify = m
+	s.subscriberMap = m
 }
 
 func (s *LocalSyncStream[T]) notifiers() notificationMap[T] {
-	return s.notify
+	return s.subscriberMap
 }
 
 func (l *LocalAsyncStream[T]) setNotifiers(m notificationMap[T]) {
-	l.notify = m
+	l.subscriberMap = m
 }
 
 func (l *LocalAsyncStream[T]) notifiers() notificationMap[T] {
-	return l.notify
+	return l.subscriberMap
 }
 
 var (

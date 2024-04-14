@@ -8,11 +8,54 @@ import (
 	"go-stream-processing/pkg/pubsub"
 )
 
+type QueryDescription struct {
+	operators []engine.OperatorControl
+	streams   map[pubsub.StreamID]pubsub.StreamDescription
+	output    pubsub.StreamID
+}
+
+func (q *QueryDescription) AddOutput(outputID pubsub.StreamID) {
+	q.output = outputID
+}
+
+func (q *QueryDescription) AddStreams(stream pubsub.StreamDescription) {
+	if _, ok := q.streams[stream.ID]; !ok {
+		q.streams[stream.StreamID()] = stream
+	}
+}
+
+func (q *QueryDescription) Streams() map[pubsub.StreamID]pubsub.StreamDescription {
+	return q.streams
+}
+
+func (q *QueryDescription) Operators() []engine.OperatorControl {
+	return q.operators
+}
+
+func (q *QueryDescription) AddOperator(operator engine.OperatorControl) {
+	q.operators = append(q.operators, operator)
+}
+
+func NewQueryDescription() *QueryDescription {
+	return &QueryDescription{
+		operators: make([]engine.OperatorControl, 0),
+		streams:   make(map[pubsub.StreamID]pubsub.StreamDescription),
+		output:    pubsub.NilStreamID(),
+	}
+}
+
 type ContinuousQuery struct {
-	id        ID
+	id ID
+
 	operators []engine.OperatorControl
 	streams   []pubsub.StreamControl
 	Output    pubsub.StreamID
+}
+
+type Builder struct {
+	q *ContinuousQuery
+
+	error []error
 }
 
 type ResultSubscription[T any] struct {
@@ -135,4 +178,54 @@ func in(streams []pubsub.StreamControl, id pubsub.StreamID) bool {
 		}
 	}
 	return false
+}
+
+func NewBuilder() *Builder {
+	return &Builder{
+		q: &ContinuousQuery{
+			id:        ID(uuid.New()),
+			operators: make([]engine.OperatorControl, 0),
+			streams:   make([]pubsub.StreamControl, 0),
+			Output:    pubsub.NilStreamID(),
+		},
+		error: make([]error, 0),
+	}
+}
+
+func S[T any](id pubsub.StreamID, async bool) (pubsub.StreamControl, error) {
+	d := pubsub.MakeStreamDescription(id, async)
+	return pubsub.AddOrReplaceStreamD[T](d)
+}
+
+func (b *Builder) Query(q *ContinuousQuery, pErr error) *Builder {
+
+	if pErr != nil {
+		b.error = append(b.error, pErr)
+	}
+
+	var err error
+	if b.q, err = b.q.ComposeWith(q); err != nil {
+		b.error = append(b.error, err)
+	}
+
+	return b
+}
+
+func (b *Builder) Stream(s pubsub.StreamControl, err error) *Builder {
+	b.q.addStreams(s)
+	if err != nil {
+		b.error = append(b.error, err)
+	}
+	return b
+}
+
+func (b *Builder) Errors() []error {
+	return b.error
+}
+
+func (b *Builder) Build() (*ContinuousQuery, []error) {
+	if len(b.error) > 0 {
+		return nil, b.error
+	}
+	return b.q, nil
 }

@@ -69,7 +69,7 @@ async: true
 				s, err := pubsub.AddOrReplaceStreamD[map[string]interface{}](d)
 				s.Run()
 
-				pubsub.ForceRemoveStreamD[map[string]interface{}](d)
+				pubsub.ForceRemoveStreamD(d)
 
 				_, err = pubsub.GetStream[map[string]interface{}](d.StreamID())
 				Expect(err).To(Equal(pubsub.StreamNotFoundError()))

@@ -1,67 +1,11 @@
 package query
 
 import (
-	"github.com/google/uuid"
 	"go-stream-processing/internal/engine"
 	"go-stream-processing/pkg/events"
 	"go-stream-processing/pkg/pubsub"
 	"go-stream-processing/pkg/selection"
 )
-
-type Builder struct {
-	q     *ContinuousQuery
-	error []error
-}
-
-func NewBuilder() *Builder {
-	return &Builder{
-		q: &ContinuousQuery{
-			id:        ID(uuid.New()),
-			operators: make([]engine.OperatorControl, 0),
-			streams:   make([]pubsub.StreamControl, 0),
-			Output:    pubsub.NilStreamID(),
-		},
-		error: make([]error, 0),
-	}
-}
-
-func S[T any](id pubsub.StreamID, async bool) (pubsub.StreamControl, error) {
-	d := pubsub.MakeStreamDescription(id, async)
-	return pubsub.AddOrReplaceStreamD[T](d)
-}
-
-func (b *Builder) Query(q *ContinuousQuery, pErr error) *Builder {
-
-	if pErr != nil {
-		b.error = append(b.error, pErr)
-	}
-
-	var err error
-	if b.q, err = b.q.ComposeWith(q); err != nil {
-		b.error = append(b.error, err)
-	}
-
-	return b
-}
-
-func (b *Builder) Stream(s pubsub.StreamControl, err error) *Builder {
-	b.q.addStreams(s)
-	if err != nil {
-		b.error = append(b.error, err)
-	}
-	return b
-}
-
-func (b *Builder) Errors() []error {
-	return b.error
-}
-
-func (b *Builder) Build() (*ContinuousQuery, []error) {
-	if len(b.error) > 0 {
-		return nil, b.error
-	}
-	return b.q, nil
-}
 
 func TemplateQueryOverSingleStreamSelection1[T any, TOut any](
 	in pubsub.StreamID,

@@ -20,7 +20,7 @@ func CreateRestAPI(router *gin.Engine) {
 			name        = c.Param("stream")
 		)
 
-		description, err = pubsub.GetDescription[any](pubsub.StreamID(name))
+		description, err = pubsub.GetDescription(pubsub.StreamID(name))
 		if err != nil {
 			zap.S().Error("stream could not be found", zap.String("method", "GET"), zap.String("path", "/pubsub/:stream"), zap.String("module", "api"), zap.Error(err))
 			c.String(http.StatusNotFound, "stream not found")
