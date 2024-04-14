@@ -27,11 +27,10 @@ var _ = Describe("Add Operator1", func() {
 	Context("execute the operator", func() {
 		It("should correctly perform the operation on pubsub", func() {
 
-			c, _ := query.ContinuousAdd[int]("test-add-in1", "test-add-in2", "test-add-out")
-			c.Run()
-			defer c.Close()
+			c, err1 := query.ContinuousAdd[int]("test-add-in1", "test-add-in2", "test-add-out")
+			qs, _ := query.Run[int](c, err1)
+			defer query.Close(qs)
 
-			res, _ := pubsub.Subscribe[int](c.Output.ID())
 			event := events.NewEvent(8)
 			event2 := events.NewEvent(3)
 
@@ -41,7 +40,7 @@ var _ = Describe("Add Operator1", func() {
 			streamA.Publish(event)
 			streamB.Publish(event2)
 
-			result := <-res.Notify
+			result := <-qs.Notifier()
 
 			r := result.GetContent()
 
@@ -54,17 +53,16 @@ var _ = Describe("Convert Operator1", func() {
 	Context("convert", func() {
 		It("should change the type", func() {
 
-			c, _ := query.ContinuousConvert[int, float32]("convert-test-in", "convert-test-out")
-			c.Run()
-			defer c.Close()
+			c, err1 := query.ContinuousConvert[int, float32]("convert-test-in", "convert-test-out")
+			qs, _ := query.Run[float32](c, err1)
+			defer query.Close(qs)
 
-			res, _ := pubsub.Subscribe[float32](c.Output.ID())
 			event := events.NewEvent(8)
 
 			streamIn, _ := pubsub.GetStream[int]("convert-test-in")
 
 			streamIn.Publish(event)
-			result := <-res.Notify
+			result := <-qs.Notifier()
 
 			r := result.GetContent()
 
@@ -79,11 +77,8 @@ var _ = Describe("Sum Operator1", func() {
 
 			selection := selection.NewCountingWindowPolicy[int](2, 2)
 
-			c, _ := query.ContinuousBatchSum[int]("int values", "sum values", selection)
-			c.Run()
-			defer c.Close()
-
-			res, _ := pubsub.Subscribe[int](c.Output.ID())
+			qs, _ := query.Run[int](query.ContinuousBatchSum[int]("int values", "sum values", selection))
+			defer query.Close(qs)
 
 			event := events.NewEvent(10)
 			event1 := events.NewEvent(10)
@@ -96,8 +91,8 @@ var _ = Describe("Sum Operator1", func() {
 			streamIn.Publish(event2)
 			streamIn.Publish(event3)
 
-			result1 := <-res.Notify
-			result2 := <-res.Notify
+			result1 := <-qs.Notifier()
+			result2 := <-qs.Notifier()
 
 			r1 := result1.GetContent()
 			r2 := result2.GetContent()
@@ -113,11 +108,8 @@ var _ = Describe("Count Operator1", func() {
 		It("should sum all values over a window", func() {
 
 			selection := selection.NewCountingWindowPolicy[float32](2, 2)
-			c, _ := query.ContinuousBatchCount[float32, int]("countable floats", "counted floats", selection)
-			c.Run()
-			defer c.Close()
-
-			res, _ := pubsub.Subscribe[int](c.Output.ID())
+			qs, _ := query.Run[int](query.ContinuousBatchCount[float32, int]("countable floats", "counted floats", selection))
+			defer query.Close(qs)
 
 			event := events.NewEvent[float32](1.0)
 			event1 := events.NewEvent[float32](1.1)
@@ -130,8 +122,8 @@ var _ = Describe("Count Operator1", func() {
 			streamIn.Publish(event2)
 			streamIn.Publish(event3)
 
-			result1 := <-res.Notify
-			result2 := <-res.Notify
+			result1 := <-qs.Notifier()
+			result2 := <-qs.Notifier()
 
 			r1 := result1.GetContent()
 			r2 := result2.GetContent()
@@ -146,11 +138,9 @@ var _ = Describe("Smaller OperatorControl", func() {
 	Context("when executed", func() {
 		It("should remove large events", func() {
 
-			c, _ := query.ContinuousSmaller[int]("q-s-1", "res-s-1", 11)
-			c.Run()
-			defer c.Close()
+			qs, _ := query.Run[int](query.ContinuousSmaller[int]("q-s-1", "res-s-1", 11))
+			defer query.Close(qs)
 
-			res, _ := pubsub.Subscribe[int](c.Output.ID())
 			streamIn, _ := pubsub.GetStream[int]("q-s-1")
 
 			event := events.NewEvent(9)
@@ -163,8 +153,8 @@ var _ = Describe("Smaller OperatorControl", func() {
 			streamIn.Publish(event2)
 			streamIn.Publish(event3)
 
-			result1 := <-res.Notify
-			result2 := <-res.Notify
+			result1 := <-qs.Notifier()
+			result2 := <-qs.Notifier()
 
 			r1 := result1.GetContent()
 			r2 := result2.GetContent()
@@ -179,11 +169,8 @@ var _ = Describe("Greater OperatorControl", func() {
 	Context("when executed", func() {
 		It("should remove small events", func() {
 
-			c, _ := query.ContinuousGreater("test-greater-11", 11, "test-greater-11-out")
-			c.Run()
-			defer c.Close()
-
-			res, _ := pubsub.Subscribe[int](c.Output.ID())
+			qs, _ := query.Run[int](query.ContinuousGreater("test-greater-11", 11, "test-greater-11-out"))
+			defer query.Close(qs)
 
 			event := events.NewEvent(10)
 			event1 := events.NewEvent(10)
@@ -196,8 +183,8 @@ var _ = Describe("Greater OperatorControl", func() {
 			streamIn.Publish(event2)
 			streamIn.Publish(event3)
 
-			result1 := <-res.Notify
-			result2 := <-res.Notify
+			result1 := <-qs.Notifier()
+			result2 := <-qs.Notifier()
 
 			r1 := result1.GetContent()
 			r2 := result2.GetContent()

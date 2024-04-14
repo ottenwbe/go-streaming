@@ -85,7 +85,7 @@ var _ = Describe("Stream", func() {
 			})
 			It("should be closable", func() {
 
-				asyncStream := pubsub2.NewLocalAsyncStream[string](pubsub2.NewStreamDescription("close", true))
+				asyncStream := pubsub2.NewLocalAsyncStream[string](pubsub2.MakeStreamDescription("close", true))
 				asyncStream.Run()
 
 				asyncStream.TryClose()

@@ -12,7 +12,7 @@ type StreamDescription struct {
 	Async bool     `yaml:"async"`
 }
 
-func NewStreamDescription(id StreamID, async bool) StreamDescription {
+func MakeStreamDescription(id StreamID, async bool) StreamDescription {
 	return StreamDescription{
 		ID:    id,
 		Async: async,

@@ -4,68 +4,55 @@ import (
 	"go-stream-processing/pkg/events"
 	"go-stream-processing/pkg/pubsub"
 	"go-stream-processing/pkg/query"
-	"go-stream-processing/pkg/selection"
 	"go.uber.org/zap"
 	"math/rand"
+	"time"
+)
+
+var (
+	numEvents = 100000
 )
 
 func main() {
-	q1, q2 := defineContinuousQueries()
+	// define the query
+	q, defErr := query.ContinuousGreater[int]("in", 50, "out")
+	if defErr != nil {
+		zap.S().Error("could not create query", zap.Error(defErr))
+		return
+	}
 
-	// merge the continuous queries
-	composedQ := q1.With(q2)
-	// start the composedQ one
-	composedQ.Run()
+	// start the query
+	qs, runErr := query.Run[int](q, defErr)
+	if len(runErr) > 0 {
+		zap.S().Error("could not run the query", zap.Errors("errors", runErr))
+	}
 	// always close your query when no longer needed to free resources
-	defer composedQ.Close()
+	defer query.Close(qs)
 
-	res, err := pubsub.Subscribe[int](composedQ.Output.ID())
-	if err != nil {
-		zap.S().Error("could not subscribe", zap.Error(err))
-	}
+	publishEvents()
+	receiveProcessedEvents(qs)
 
-	publishEvents(res)
-	waitForProcessedEvents(res)
+	// wait for some seconds to let streams being processed
+	time.Sleep(time.Second * 10)
 }
 
-func defineContinuousQueries() (*query.ContinuousQuery, *query.ContinuousQuery) {
-	// define the continuous query (or queries)
-	policy := selection.NewCountingWindowPolicy[float64](10, 10)
-	q1, err := query.ContinuousBatchSum[float64]("in", "out", policy)
-	if err != nil {
-		zap.S().Error("could not create query", zap.Error(err))
-	}
-	q2, err := query.ContinuousConvert[float64, int]("out", "fin")
-	if err != nil {
-		zap.S().Error("could not create query", zap.Error(err))
-	}
-	return q1, q2
-}
-
-func waitForProcessedEvents(res *pubsub.StreamReceiver[int]) {
-	var fin = make(chan bool)
+func receiveProcessedEvents(res *query.ResultSubscription[int]) {
 	go func() {
 		for {
-			if e, more := <-res.Notify; more {
-				zap.S().Infof("event received %v", e)
-			} else {
-				fin <- true
-			}
+			e := <-res.Notifier()
+			zap.S().Infof("event received %v", e)
 		}
 	}()
-	<-fin
-
 }
 
-func publishEvents(res *pubsub.StreamReceiver[int]) {
+func publishEvents() {
 	go func() {
-		for i := 0; i < 100000; i++ {
-			if err := pubsub.PublishN[float64]("in", events.NewEvent[float64](rand.Float64())); err != nil {
+		for i := 0; i < numEvents; i++ {
+			// create events in the range of  0-100
+			if err := pubsub.Publish[int]("in", events.NewEvent[int](rand.Int()%100)); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
 			}
 		}
-		// close channel
-		pubsub.Unsubscribe[int](res)
 	}()
 }
 

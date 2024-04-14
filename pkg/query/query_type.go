@@ -19,24 +19,28 @@ func NewBuilder() *Builder {
 			id:        ID(uuid.New()),
 			operators: make([]engine.OperatorControl, 0),
 			streams:   make([]pubsub.StreamControl, 0),
-			Output:    nil,
+			Output:    pubsub.NilStreamID(),
 		},
 		error: make([]error, 0),
 	}
 }
 
 func S[T any](id pubsub.StreamID, async bool) (pubsub.StreamControl, error) {
-	d := pubsub.NewStreamDescription(id, async)
+	d := pubsub.MakeStreamDescription(id, async)
 	return pubsub.AddOrReplaceStreamD[T](d)
 }
 
-func (b *Builder) Query(q *ContinuousQuery, err error) *Builder {
+func (b *Builder) Query(q *ContinuousQuery, pErr error) *Builder {
 
-	b.q = b.q.With(q)
+	if pErr != nil {
+		b.error = append(b.error, pErr)
+	}
 
-	if err != nil {
+	var err error
+	if b.q, err = b.q.ComposeWith(q); err != nil {
 		b.error = append(b.error, err)
 	}
+
 	return b
 }
 
@@ -76,10 +80,9 @@ func TemplateQueryOverSingleStreamSelection1[T any, TOut any](
 
 	f, _ := createOperationOverSingleStreamSelection1(inputStream.ID(), operation, outputStream)
 
-	queryControl := newQueryControl(outputStream)
-	queryControl.addStreams(inputStream)
+	queryControl := newQueryControl(outputStream.ID())
+	queryControl.addStreams(inputStream, outputStream)
 	queryControl.addOperations(f)
-	err = QueryRepository().put(queryControl)
 	if err != nil {
 		pubsub.TryRemoveStreams([]pubsub.StreamControl{inputStream, outputStream})
 		engine.OperatorRepository().Remove([]engine.OperatorControl{f})
@@ -119,10 +122,10 @@ func TemplateQueryOverSingleStreamSelectionN[T any, TOut any](
 
 	f := createOperatorOverSingleStreamSelectionN(inputStream.ID(), selection, op, outputStream)
 
-	queryControl := newQueryControl(outputStream)
-	queryControl.addStreams(inputStream)
+	queryControl := newQueryControl(outputStream.ID())
+	queryControl.addStreams(inputStream, outputStream)
 	queryControl.addOperations(f)
-	err = QueryRepository().put(queryControl)
+
 	if err != nil {
 		// cleanup
 		pubsub.TryRemoveStreams([]pubsub.StreamControl{outputStream, inputStream})
@@ -157,10 +160,10 @@ func TemplateQueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](in p
 
 	f := createMultipleEventsOverSingleStreamSelection1(inputStream.ID(), op, outputStream)
 
-	queryControl := newQueryControl(outputStream)
-	queryControl.addStreams(inputStream)
+	queryControl := newQueryControl(outputStream.ID())
+	queryControl.addStreams(inputStream, outputStream)
 	queryControl.addOperations(f)
-	err = QueryRepository().put(queryControl)
+
 	if err != nil {
 		pubsub.TryRemoveStreams([]pubsub.StreamControl{inputStream})
 		engine.OperatorRepository().Remove([]engine.OperatorControl{f})
@@ -194,10 +197,9 @@ func TemplateQueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](
 
 	f := engine.NewOperator[engine.DoubleInputSelectionN[TIN1, TIN2], TOUT](op, inStream, outputStream)
 
-	queryControl := newQueryControl(outputStream)
-	queryControl.addStreams(inputStream1, inputStream2)
+	queryControl := newQueryControl(outputStream.ID())
+	queryControl.addStreams(inputStream1, inputStream2, outputStream)
 	queryControl.addOperations(f)
-	_ = QueryRepository().put(queryControl)
 
 	return outputStream, queryControl
 }
@@ -217,10 +219,9 @@ func QueryOverDoubleStreamSelection1[TIN1, TIN2, TOUT any](
 
 	f := engine.NewOperator[engine.DoubleInputSelection1[TIN1, TIN2], TOUT](op, inStream, outputStream)
 
-	queryControl := newQueryControl(outputStream)
-	queryControl.addStreams(inputStream1, inputStream2)
+	queryControl := newQueryControl(outputStream.ID())
+	queryControl.addStreams(inputStream1, inputStream2, outputStream)
 	queryControl.addOperations(f)
-	_ = QueryRepository().put(queryControl)
 
 	return queryControl, nil
 }

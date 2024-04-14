@@ -1,61 +1,108 @@
 package query
 
 import (
+	"errors"
 	"github.com/google/uuid"
 	"go-stream-processing/internal/engine"
-	pubsub2 "go-stream-processing/pkg/pubsub"
+	"go-stream-processing/pkg/events"
+	"go-stream-processing/pkg/pubsub"
 )
 
 type ContinuousQuery struct {
 	id        ID
 	operators []engine.OperatorControl
-	streams   []pubsub2.StreamControl
-	Output    pubsub2.StreamControl
+	streams   []pubsub.StreamControl
+	Output    pubsub.StreamID
 }
 
-func (c *ContinuousQuery) With(c2 *ContinuousQuery) *ContinuousQuery {
+type ResultSubscription[T any] struct {
+	continuousQuery *ContinuousQuery
+	receiver        *pubsub.StreamReceiver[T]
+}
 
-	if c2.Output != nil && in(c.streams, c2.Output.ID()) {
+func (qs *ResultSubscription[T]) Notifier() events.EventChannel[T] {
+	return qs.receiver.Notify
+}
+
+func (c *ContinuousQuery) ComposeWith(c2 *ContinuousQuery) (*ContinuousQuery, error) {
+
+	if !c2.Output.IsNil() && in(c.streams, c2.Output) {
 		c2.Output = c.Output
-	} else if (c.Output != nil && in(c2.streams, c.Output.ID())) || (c.Output == nil && c2.Output != nil) {
+	} else if (!c.Output.IsNil() && in(c2.streams, c.Output)) || (c.Output.IsNil() && !c2.Output.IsNil()) {
 		c.Output = c2.Output
 	} else {
-		panic("output streams don't match")
+		return nil, errors.New("output streams don't match")
 	}
 
 	c.addStreams(c2.streams...)
 	c.addOperations(c2.operators...)
 
-	return c
+	return c, nil
 }
 
 func (c *ContinuousQuery) ID() ID {
 	return c.id
 }
 
-func (c *ContinuousQuery) Close() {
+func Close[T any](qs *ResultSubscription[T]) {
+	pubsub.Unsubscribe(qs.receiver)
+	qs.continuousQuery.close()
+	qs = nil
+}
+
+func (c *ContinuousQuery) close() {
 	c.stopEverything()
 
-	pubsub2.TryRemoveStreams(c.streams)
+	pubsub.TryRemoveStreams(c.streams)
 	engine.OperatorRepository().Remove(c.operators)
 
 	QueryRepository().remove(c.id)
 }
 
-func (c *ContinuousQuery) Run() {
-	c.startEverything()
+func Run[T any](c *ContinuousQuery, err ...error) (*ResultSubscription[T], []error) {
+
+	for i, _ := range err {
+		if err[i] == nil {
+			err = append(err[:i], err[i+1:]...)
+		}
+	}
+
+	if len(err) > 0 {
+		return nil, err
+	}
+
+	if runErr := c.run(); runErr != nil {
+		return nil, append(err, runErr)
+	}
+
+	res, subErr := pubsub.Subscribe[T](c.Output)
+	if subErr != nil {
+		c.close()
+		return nil, append(err, subErr)
+	}
+
+	return &ResultSubscription[T]{
+		continuousQuery: c,
+		receiver:        res,
+	}, err
 }
 
-func newQueryControl(outStream pubsub2.StreamControl) *ContinuousQuery {
+func (c *ContinuousQuery) run() error {
+	c.startEverything()
+	err := QueryRepository().put(c)
+	return err
+}
+
+func newQueryControl(outStream pubsub.StreamID) *ContinuousQuery {
 	return &ContinuousQuery{
 		id:        ID(uuid.New()),
 		operators: make([]engine.OperatorControl, 0),
-		streams:   []pubsub2.StreamControl{outStream},
+		streams:   []pubsub.StreamControl{},
 		Output:    outStream,
 	}
 }
 
-func (c *ContinuousQuery) addStreams(streams ...pubsub2.StreamControl) {
+func (c *ContinuousQuery) addStreams(streams ...pubsub.StreamControl) {
 	c.streams = append(c.streams, streams...)
 }
 
@@ -81,7 +128,7 @@ func (c *ContinuousQuery) stopEverything() {
 	}
 }
 
-func in(streams []pubsub2.StreamControl, id pubsub2.StreamID) bool {
+func in(streams []pubsub.StreamControl, id pubsub.StreamID) bool {
 	for _, stream := range streams {
 		if stream.ID() == id {
 			return true

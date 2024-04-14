@@ -3,7 +3,6 @@ package pubsub
 import (
 	"errors"
 	"go-stream-processing/pkg/events"
-	"go.uber.org/zap"
 	"sync"
 )
 
@@ -15,9 +14,8 @@ var (
 var (
 	streamTypeMismatchError = errors.New("stream type mismatch")
 	streamNotFoundError     = errors.New("no stream found")
-	streamNameExistsError   = errors.New("stream name already exists")
+	streamNameExistsError   = errors.New("stream id already exists")
 	streamIDNilError        = errors.New("stream id nil")
-	streamIDNameDivError    = errors.New("stream id and name do not match")
 )
 
 func StreamTypeMismatchError() error {
@@ -27,19 +25,22 @@ func StreamNotFoundError() error { return streamNotFoundError }
 func StreamNameExistsError() error {
 	return streamNameExistsError
 }
-func StreamIDNilError() error     { return streamIDNilError }
-func StreamIDNameDivError() error { return streamIDNameDivError }
+func StreamIDNilError() error { return streamIDNilError }
 
 func GetOrCreateStream[T any](eventTopic StreamID, async bool) (Stream[T], error) {
+	return GetOrCreateStreamD[T](MakeStreamDescription(eventTopic, async))
+}
+
+func GetOrCreateStreamD[T any](d StreamDescription) (Stream[T], error) {
 	var (
 		err            error
 		existingStream Stream[T]
 	)
 
-	if existingStream, err = getAndConvertStreamByID[T](eventTopic); existingStream != nil {
+	if existingStream, err = getAndConvertStreamByID[T](d.ID); existingStream != nil {
 		return existingStream, nil
 	} else if errors.Is(err, StreamNotFoundError()) {
-		return AddOrReplaceStreamD[T](NewStreamDescription(eventTopic, async))
+		return AddOrReplaceStreamD[T](d)
 	}
 
 	return nil, err
@@ -70,29 +71,21 @@ func AddOrReplaceStream[T any](newStream Stream[T]) error {
 		return err
 	}
 
-	zap.S().Info("new stream added", zap.String("module", "stream"), zap.String("id", newStream.ID().String()))
 	return nil
 }
 
-func RemoveStreamD[T any](description StreamDescription) {
-	RemoveStream[T](description.StreamID())
+func ForceRemoveStreamD[T any](description StreamDescription) {
+	ForceRemoveStream[T](description.StreamID())
 }
 
-func RemoveStream[T any](streamID StreamID) {
+func ForceRemoveStream[T any](streamID StreamID) {
 
 	mapAccessMutex.Lock()
 	defer mapAccessMutex.Unlock()
 
 	if s, err := getAndConvertStreamByID[T](streamID); err == nil {
-
-		for id, _ := range s.notifiers() {
-			s.unsubscribe(id)
-		}
-		s.TryClose()
-
+		s.ForceClose()
 		delete(streamIndex, streamID)
-
-		zap.S().Info("stream removed", zap.String("module", "stream"), zap.String("id", streamID.String()))
 	}
 }
 
@@ -101,7 +94,9 @@ func TryRemoveStreams(streams []StreamControl) {
 	defer mapAccessMutex.Unlock()
 
 	for _, stream := range streams {
-		delete(streamIndex, stream.ID())
+		if !stream.HasPublishersOrSubscribers() {
+			delete(streamIndex, stream.ID())
+		}
 	}
 
 }
@@ -129,7 +124,7 @@ func addStream[T any](newStream Stream[T]) {
 
 func validateStream[T any](newStream Stream[T]) error {
 
-	if newStream.ID().isNil() {
+	if newStream.ID().IsNil() {
 		return StreamIDNilError()
 	}
 
@@ -140,6 +135,85 @@ func validateStream[T any](newStream Stream[T]) error {
 	return nil
 }
 
+func getAndConvertStreamByID[T any](id StreamID) (Stream[T], error) {
+	if stream, ok := streamIndex[id]; ok {
+		switch stream.(type) {
+		case Stream[T]:
+
+			return stream.(Stream[T]), nil
+		default:
+			return nil, streamTypeMismatchError
+		}
+	}
+	return nil, streamNotFoundError
+
+}
+
+func Subscribe[T any](id StreamID) (*StreamReceiver[T], error) {
+	mapAccessMutex.RLock()
+	defer mapAccessMutex.RUnlock()
+
+	if stream, err := getAndConvertStreamByID[T](id); err == nil {
+		return stream.subscribe(), nil
+	} else {
+		return nil, err
+	}
+}
+
+func Unsubscribe[T any](rec *StreamReceiver[T]) {
+	mapAccessMutex.RLock()
+	defer mapAccessMutex.RUnlock()
+
+	if s, err := getAndConvertStreamByID[T](rec.StreamID); err == nil {
+		s.unsubscribe(rec.ID)
+	}
+}
+
+func Publish[T any](id StreamID, event events.Event[T]) error {
+	if s, err := getAndConvertStreamByID[T](id); err == nil {
+		return s.Publish(event)
+	} else {
+		return err
+	}
+}
+
+func GetStream[T any](id StreamID) (Stream[T], error) {
+	if s, err := getAndConvertStreamByID[T](id); err == nil {
+		return s, nil
+	} else {
+		return nil, err
+	}
+}
+
+func GetDescription[T any](id StreamID) (StreamDescription, error) {
+	if s, err := getAndConvertStreamByID[T](id); err == nil {
+		return s.(Stream[T]).Description(), nil
+	} else {
+		return StreamDescription{}, StreamNotFoundError()
+	}
+}
+
+/*func PublishN[T any](name string, event events.Event[T]) error {
+	if s, err := GetOrCreateStream[T](name, false); err == nil {
+		return s.Publish(event)
+	} else {
+		return err
+	}
+}*/
+/*func GetStreamN[T any](name string) (Stream[T], error) {
+	if s, err := getAndConvertStream[T](name); err == nil {
+		return s, nil
+	} else {
+		return nil, err
+	}
+}*/
+/*func GetDescription[T any](name string) (StreamDescription, error) {
+	if s, err := getAndConvertStream[T](name); err == nil {
+		return s.(Stream[T]).Description(), nil
+	} else {
+		return StreamDescription{}, err
+	}
+}*/
 /*func SubscribeToTopic[T any](name string) (*StreamReceiver[T], error) {
 	mapAccessMutex.RLock()
 	defer mapAccessMutex.RUnlock()
@@ -161,88 +235,6 @@ func validateStream[T any](newStream Stream[T]) error {
 		}
 	}
 	return nil, streamNotFoundError
-}*/
-
-func getAndConvertStreamByID[T any](id StreamID) (Stream[T], error) {
-	if stream, ok := streamIndex[id]; ok {
-		switch stream.(type) {
-		case Stream[T]:
-
-			return stream.(Stream[T]), nil
-		default:
-			return nil, streamTypeMismatchError
-		}
-	}
-	return nil, streamNotFoundError
-
-}
-
-func Subscribe[T any](streamID StreamID) (*StreamReceiver[T], error) {
-	mapAccessMutex.RLock()
-	defer mapAccessMutex.RUnlock()
-
-	if stream, err := getAndConvertStreamByID[T](streamID); err == nil {
-		return stream.subscribe(), nil
-	} else {
-		return nil, err
-	}
-}
-
-func Unsubscribe[T any](rec *StreamReceiver[T]) {
-	mapAccessMutex.RLock()
-	defer mapAccessMutex.RUnlock()
-
-	if s, err := getAndConvertStreamByID[T](rec.StreamID); err == nil {
-		s.unsubscribe(rec.ID)
-	}
-}
-
-/*func PublishN[T any](name string, event events.Event[T]) error {
-	if s, err := GetOrCreateStream[T](name, false); err == nil {
-		return s.Publish(event)
-	} else {
-		return err
-	}
-}*/
-
-func Publish[T any](id StreamID, event events.Event[T]) error {
-	if s, err := getAndConvertStreamByID[T](id); err == nil {
-		return s.Publish(event)
-	} else {
-		return err
-	}
-}
-
-func GetStream[T any](id StreamID) (Stream[T], error) {
-	if s, err := getAndConvertStreamByID[T](id); err == nil {
-		return s, nil
-	} else {
-		return nil, err
-	}
-}
-
-/*func GetStreamN[T any](name string) (Stream[T], error) {
-	if s, err := getAndConvertStream[T](name); err == nil {
-		return s, nil
-	} else {
-		return nil, err
-	}
-}*/
-
-func GetDescription[T any](id StreamID) (StreamDescription, error) {
-	if s, err := getAndConvertStreamByID[T](id); err == nil {
-		return s.(Stream[T]).Description(), nil
-	} else {
-		return StreamDescription{}, streamNotFoundError
-	}
-}
-
-/*func GetDescription[T any](name string) (StreamDescription, error) {
-	if s, err := getAndConvertStream[T](name); err == nil {
-		return s.(Stream[T]).Description(), nil
-	} else {
-		return StreamDescription{}, err
-	}
 }*/
 
 func init() {

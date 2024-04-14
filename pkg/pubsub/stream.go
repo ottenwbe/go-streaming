@@ -2,20 +2,29 @@ package pubsub
 
 import (
 	"errors"
+	"github.com/google/uuid"
 	"go-stream-processing/internal/buffer"
 	"go-stream-processing/pkg/events"
 	"go.uber.org/zap"
 	"sync"
 )
 
-type StreamID string //uuid.UUID
+type StreamID string
 
-func (s StreamID) isNil() bool {
+func (s StreamID) IsNil() bool {
 	return s == StreamID("")
 }
 
 func (s StreamID) String() string {
 	return string(s)
+}
+
+func NilStreamID() StreamID {
+	return StreamID("")
+}
+
+func RandomStreamID() StreamID {
+	return StreamID(uuid.New().String())
 }
 
 type notificationMap[T any] map[StreamReceiverID]events.EventChannel[T]
@@ -47,6 +56,7 @@ type Publisher[T any] interface {
 type StreamControl interface {
 	Run()
 	TryClose()
+	ForceClose()
 
 	HasPublishersOrSubscribers() bool
 
@@ -83,8 +93,8 @@ type LocalAsyncStream[T any] struct {
 	notify      notificationMap[T]
 	notifyMutex sync.Mutex
 
-	active    bool
-	closeChan chan bool
+	active bool
+	closed sync.WaitGroup
 }
 
 // NewLocalSyncStream is a local in-memory stream that delivers events synchronously
@@ -102,7 +112,6 @@ func NewLocalAsyncStream[T any](description StreamDescription) *LocalAsyncStream
 		description: description,
 		active:      false,
 		notify:      make(notificationMap[T]),
-		closeChan:   make(chan bool),
 	}
 	return a
 }
@@ -131,6 +140,13 @@ func (l *LocalAsyncStream[T]) setEvents(b buffer.Buffer[T]) {
 	l.buffer.AddEvents(b.Dump())
 }
 
+func (l *LocalAsyncStream[T]) ForceClose() {
+	for id := range l.notify {
+		l.unsubscribe(id)
+	}
+	l.TryClose()
+}
+
 func (l *LocalAsyncStream[T]) TryClose() {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
@@ -140,8 +156,7 @@ func (l *LocalAsyncStream[T]) TryClose() {
 		close(l.inChannel)
 		l.buffer.StopBlocking()
 
-		<-l.closeChan
-		<-l.closeChan
+		l.closed.Wait()
 	}
 }
 
@@ -154,6 +169,8 @@ func (l *LocalAsyncStream[T]) Run() {
 		l.active = true
 		l.inChannel = make(chan events.Event[T])
 		l.buffer = buffer.NewSimpleAsyncBuffer[T]()
+		l.closed = sync.WaitGroup{}
+		l.closed.Add(2)
 
 		// read input from in Channel and buffer it
 		go func() {
@@ -162,7 +179,7 @@ func (l *LocalAsyncStream[T]) Run() {
 				if more {
 					l.buffer.AddEvent(event)
 				} else {
-					l.closeChan <- true
+					l.closed.Done()
 					return
 				}
 			}
@@ -171,9 +188,9 @@ func (l *LocalAsyncStream[T]) Run() {
 		// read buffer and notify
 		go func() {
 			for l.active {
-				l.notify.notifyAll(l.buffer.GetAndConsumeNextEvents())
+				l.notify.notify(l.buffer.GetAndRemoveNextEvent())
 			}
-			l.closeChan <- true
+			l.closed.Done()
 		}()
 
 	}
@@ -259,6 +276,12 @@ func (s *LocalSyncStream[T]) Run() {
 
 func (s *LocalSyncStream[T]) TryClose() {
 
+}
+
+func (s *LocalSyncStream[T]) ForceClose() {
+	for id := range s.notify {
+		s.unsubscribe(id)
+	}
 }
 
 func (s *LocalSyncStream[T]) setNotifiers(m notificationMap[T]) {
