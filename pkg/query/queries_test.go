@@ -40,7 +40,7 @@ var _ = Describe("Add Operator1", func() {
 			streamA.Publish(event)
 			streamB.Publish(event2)
 
-			result := <-qs.Notifier()
+			result, _ := qs.Notify()
 
 			r := result.GetContent()
 
@@ -62,7 +62,7 @@ var _ = Describe("Convert Operator1", func() {
 			streamIn, _ := pubsub.GetStream[int]("convert-test-in")
 
 			streamIn.Publish(event)
-			result := <-qs.Notifier()
+			result, _ := qs.Notify()
 
 			r := result.GetContent()
 
@@ -91,8 +91,8 @@ var _ = Describe("Sum Operator1", func() {
 			streamIn.Publish(event2)
 			streamIn.Publish(event3)
 
-			result1 := <-qs.Notifier()
-			result2 := <-qs.Notifier()
+			result1, _ := qs.Notify()
+			result2, _ := qs.Notify()
 
 			r1 := result1.GetContent()
 			r2 := result2.GetContent()
@@ -122,8 +122,8 @@ var _ = Describe("Count Operator1", func() {
 			streamIn.Publish(event2)
 			streamIn.Publish(event3)
 
-			result1 := <-qs.Notifier()
-			result2 := <-qs.Notifier()
+			result1, _ := qs.Notify()
+			result2, _ := qs.Notify()
 
 			r1 := result1.GetContent()
 			r2 := result2.GetContent()
@@ -153,8 +153,8 @@ var _ = Describe("Smaller OperatorControl", func() {
 			streamIn.Publish(event2)
 			streamIn.Publish(event3)
 
-			result1 := <-qs.Notifier()
-			result2 := <-qs.Notifier()
+			result1, _ := qs.Notify()
+			result2, _ := qs.Notify()
 
 			r1 := result1.GetContent()
 			r2 := result2.GetContent()
@@ -183,8 +183,8 @@ var _ = Describe("Greater OperatorControl", func() {
 			streamIn.Publish(event2)
 			streamIn.Publish(event3)
 
-			result1 := <-qs.Notifier()
-			result2 := <-qs.Notifier()
+			result1, _ := qs.Notify()
+			result2, _ := qs.Notify()
 
 			r1 := result1.GetContent()
 			r2 := result2.GetContent()

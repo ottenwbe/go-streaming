@@ -27,22 +27,17 @@ func StreamNameExistsError() error {
 }
 func StreamIDNilError() error { return streamIDNilError }
 
-// GetOrCreateStream creates a stream with id eventTopic or retrieves any existing stream
-func GetOrCreateStream[T any](eventTopic StreamID, async bool) (Stream[T], error) {
-	return GetOrCreateStreamD[T](MakeStreamDescription(eventTopic, async))
-}
-
-// GetOrCreateStreamD creates a stream based on the description d or retrieves any existing stream
-func GetOrCreateStreamD[T any](d StreamDescription) (Stream[T], error) {
+// GetOrAddStream adds a stream to the pub sub system or returns an existing one
+func GetOrAddStream[T any](stream Stream[T]) (Stream[T], error) {
 	var (
 		err            error
 		existingStream Stream[T]
 	)
 
-	if existingStream, err = getAndConvertStreamByID[T](d.ID); existingStream != nil {
+	if existingStream, err = getAndConvertStreamByID[T](stream.ID()); existingStream != nil {
 		return existingStream, nil
 	} else if errors.Is(err, StreamNotFoundError()) {
-		return AddOrReplaceStreamD[T](d)
+		return stream, AddOrReplaceStream[T](stream)
 	}
 
 	return nil, err
@@ -54,11 +49,7 @@ func AddOrReplaceStreamD[T any](description StreamDescription) (Stream[T], error
 		err    error
 	)
 
-	if description.Async {
-		stream = NewLocalAsyncStream[T](description)
-	} else {
-		stream = NewLocalSyncStream[T](description)
-	}
+	stream = NewStreamD[T](description)
 
 	err = AddOrReplaceStream(stream)
 
@@ -159,7 +150,7 @@ func Subscribe[T any](id StreamID) (*StreamReceiver[T], error) {
 	defer mapAccessMutex.RUnlock()
 
 	if stream, err := getAndConvertStreamByID[T](id); err == nil {
-		return stream.subscribe(), nil
+		return stream.subscribe()
 	} else {
 		return nil, err
 	}

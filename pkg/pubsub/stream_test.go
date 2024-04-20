@@ -5,96 +5,147 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go-stream-processing/pkg/events"
-	pubsub2 "go-stream-processing/pkg/pubsub"
+	"go-stream-processing/pkg/pubsub"
 )
 
-var _ = Describe("Stream", func() {
-	var stream pubsub2.Stream[string]
-	var asyncStream pubsub2.Stream[string]
+var _ = Describe("LocalSyncStream", func() {
+	var stream pubsub.Stream[string]
 
 	BeforeEach(func() {
-		stream, _ = pubsub2.GetOrCreateStream[string]("test", false)
+		stream = pubsub.NewStreamD[string](pubsub.MakeStreamDescription("test", false))
 		stream.Run()
-		asyncStream, _ = pubsub2.GetOrCreateStream[string]("test3", true)
-		asyncStream.Run()
+		pubsub.AddOrReplaceStream(stream)
 	})
 
-	Describe("LocalSyncStream One Event", func() {
-		Context("publish and receive one event", func() {
-			It("should be consumed", func() {
-				var eventResult events.Event[string]
-				event := events.NewEvent("test-1")
-				bChan := make(chan bool)
+	AfterEach(func() {
+		pubsub.ForceRemoveStream(stream.ID())
+	})
 
-				receiver, _ := pubsub2.Subscribe[string](stream.ID())
-
-				go func() {
-					eventResult = <-receiver.Notify
-					bChan <- true
-				}()
-
-				stream.Publish(event)
-				<-bChan
-
-				e1 := eventResult.GetContent()
-				e2 := event.GetContent()
-				fmt.Print(e1)
-
-				Expect(e2).To(Equal(e1))
-			})
+	Context("description", func() {
+		It("should be retrievable", func() {
+			Expect(stream.Description()).To(Equal(pubsub.MakeStreamDescription(stream.ID(), false)))
 		})
-		Describe("LocalAsyncStream ", func() {
-			Context("publish and receive one event", func() {
-				It("should not block", func() {
-					var eventResult []events.Event[string] = make([]events.Event[string], 3)
-					event1 := events.NewEvent("test-3-1")
-					event2 := events.NewEvent("test-3-2")
-					event3 := events.NewEvent("test-3-3")
-					bChan := make(chan bool)
+		It("should contain a valid id", func() {
+			Expect(stream.ID().IsNil()).ToNot(BeTrue())
+		})
+	})
 
-					receiver, _ := pubsub2.Subscribe[string](asyncStream.ID())
+	Context("closing the stream", func() {
+		It("forcefully ensures that all resources are cleaned up", func() {
+			pubsub.Subscribe[string](stream.ID())
+			Expect(stream.HasPublishersOrSubscribers()).To(BeTrue())
+			stream.ForceClose()
+			Expect(stream.HasPublishersOrSubscribers()).To(BeFalse())
+		})
+		It("without force ensures that the stream receiver is still functioning after trying to close the stream", func() {
+			pubsub.Subscribe[string](stream.ID())
+			Expect(stream.HasPublishersOrSubscribers()).To(BeTrue())
+			stream.TryClose()
+			Expect(stream.HasPublishersOrSubscribers()).To(BeTrue())
+		})
+	})
 
-					asyncStream.Publish(event1)
-					asyncStream.Publish(event2)
-					asyncStream.Publish(event3)
+	Context("published events", func() {
+		It("should be received", func() {
+			var eventResult events.Event[string]
+			event := events.NewEvent("test-1")
+			bChan := make(chan bool)
 
-					go func() {
-						fmt.Print("test consumed event")
-						eventResult[0] = <-receiver.Notify
-						eventResult[1] = <-receiver.Notify
-						eventResult[2] = <-receiver.Notify
-						fmt.Print("test consumed event finished")
-						bChan <- true
-					}()
+			receiver, _ := pubsub.Subscribe[string](stream.ID())
 
-					<-bChan
-					asyncStream.TryClose()
+			go func() {
+				eventResult = <-receiver.Notify
+				bChan <- true
+			}()
 
-					er1 := eventResult[0].GetContent()
-					er2 := eventResult[1].GetContent()
+			stream.Publish(event)
+			<-bChan
 
-					e1 := event1.GetContent()
-					e2 := event2.GetContent()
+			Expect(eventResult.GetContent()).To(Equal(event.GetContent()))
+		})
+	})
+})
 
-					fmt.Print(er1)
-					fmt.Print(er2)
+var _ = Describe("LocalAsyncStream", func() {
+	var stream pubsub.Stream[string]
 
-					Expect(e1).To(Equal(er1))
-					Expect(e2).To(Equal(er2))
-				})
-			})
-			It("should be closable", func() {
+	BeforeEach(func() {
+		stream = pubsub.NewStreamD[string](pubsub.MakeStreamDescription("test3", true))
+		stream.Run()
+		pubsub.AddOrReplaceStream(stream)
+	})
 
-				asyncStream := pubsub2.NewLocalAsyncStream[string](pubsub2.MakeStreamDescription("doClose", true))
-				asyncStream.Run()
+	AfterEach(func() {
+		pubsub.ForceRemoveStream(stream.ID())
+	})
 
-				asyncStream.TryClose()
+	Context("description", func() {
+		It("should be retrievable", func() {
+			Expect(stream.Description()).To(Equal(pubsub.MakeStreamDescription(stream.ID(), true)))
+		})
+		It("should contain a valid id", func() {
+			Expect(stream.ID().IsNil()).ToNot(BeTrue())
+		})
+	})
 
-				result, _ := pubsub2.Subscribe[string](asyncStream.ID())
+	Context("closing the stream", func() {
+		It("forcefully ensures that all resources are cleaned up", func() {
+			pubsub.Subscribe[string](stream.ID())
+			Expect(stream.HasPublishersOrSubscribers()).To(BeTrue())
+			stream.ForceClose()
+			Expect(stream.HasPublishersOrSubscribers()).To(BeFalse())
+		})
+		It("without force ensures that the stream receiver is still functioning after trying to close the stream", func() {
+			pubsub.Subscribe[string](stream.ID())
+			Expect(stream.HasPublishersOrSubscribers()).To(BeTrue())
+			stream.TryClose()
+			Expect(stream.HasPublishersOrSubscribers()).To(BeTrue())
+		})
+		It("should no longer be subscribable after closing the stream", func() {
+			stream.TryClose()
+			result, err := pubsub.Subscribe[string](stream.ID())
+			Expect(result).To(BeNil())
+			Expect(err).ToNot(BeNil())
+		})
+	})
 
-				Expect(result).To(BeNil())
-			})
+	Context("publishing and receiving events", func() {
+		It("should not block", func() {
+			var eventResult []events.Event[string] = make([]events.Event[string], 3)
+			event1 := events.NewEvent("test-3-1")
+			event2 := events.NewEvent("test-3-2")
+			event3 := events.NewEvent("test-3-3")
+			bChan := make(chan bool)
 
+			receiver, _ := pubsub.Subscribe[string](stream.ID())
+
+			stream.Publish(event1)
+			stream.Publish(event2)
+			stream.Publish(event3)
+
+			go func() {
+				fmt.Print("test consumed event")
+				eventResult[0] = <-receiver.Notify
+				eventResult[1] = <-receiver.Notify
+				eventResult[2] = <-receiver.Notify
+				fmt.Print("test consumed event finished")
+				bChan <- true
+			}()
+
+			<-bChan
+			stream.TryClose()
+
+			er1 := eventResult[0].GetContent()
+			er2 := eventResult[1].GetContent()
+
+			e1 := event1.GetContent()
+			e2 := event2.GetContent()
+
+			fmt.Print(er1)
+			fmt.Print(er2)
+
+			Expect(e1).To(Equal(er1))
+			Expect(e2).To(Equal(er2))
 		})
 	})
 })

@@ -7,6 +7,10 @@ import (
 	"sync"
 )
 
+func StreamInactive() error {
+	return streamInactive
+}
+
 type notificationMap[T any] map[StreamReceiverID]events.EventChannel[T]
 
 func (m notificationMap[T]) notifyAll(events []events.Event[T]) {
@@ -52,7 +56,7 @@ type Stream[T any] interface {
 
 	Publish(events.Event[T]) error
 
-	subscribe() *StreamReceiver[T]
+	subscribe() (*StreamReceiver[T], error)
 	unsubscribe(id StreamReceiverID)
 	setNotifiers(notificationMap notificationMap[T])
 	notifiers() notificationMap[T]
@@ -79,6 +83,20 @@ type LocalAsyncStream[T any] struct {
 
 	active bool
 	closed sync.WaitGroup
+}
+
+func NewStream[T any](id StreamID, async bool) Stream[T] {
+	return NewStreamD[T](MakeStreamDescription(id, async))
+}
+
+func NewStreamD[T any](description StreamDescription) Stream[T] {
+	var stream Stream[T]
+	if description.Async {
+		stream = NewLocalAsyncStream[T](description)
+	} else {
+		stream = NewLocalSyncStream[T](description)
+	}
+	return stream
 }
 
 // NewLocalSyncStream is a local in-memory stream that delivers events synchronously
@@ -142,7 +160,7 @@ func (l *LocalAsyncStream[T]) TryClose() {
 }
 
 func (l *LocalAsyncStream[T]) doClose(force bool) {
-	if (len(l.subscriberMap) == 0 && l.active) || force {
+	if (len(l.subscriberMap) == 0 || force) && l.active {
 		l.active = false
 		close(l.inChannel)
 		l.buffer.StopBlocking()
@@ -198,24 +216,24 @@ func (l *LocalAsyncStream[T]) ID() StreamID {
 func (l *LocalAsyncStream[T]) Publish(event events.Event[T]) error {
 	// Handle stream inactive error
 	if !l.active {
-		return StreamInactive
+		return StreamInactive()
 	}
 	// Publish event...
 	l.inChannel <- event
 	return nil
 }
 
-func (l *LocalAsyncStream[T]) subscribe() *StreamReceiver[T] {
+func (l *LocalAsyncStream[T]) subscribe() (*StreamReceiver[T], error) {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
 	if l.active {
 		rec := NewStreamReceiver[T](l)
 		l.subscriberMap[rec.ID] = rec.Notify
-		return rec
+		return rec, nil
 	}
 
-	return nil
+	return nil, StreamInactive()
 }
 
 func (s *LocalSyncStream[T]) Description() StreamDescription {
@@ -255,14 +273,14 @@ func (s *LocalSyncStream[T]) unsubscribe(id StreamReceiverID) {
 	}
 }
 
-func (s *LocalSyncStream[T]) subscribe() *StreamReceiver[T] {
+func (s *LocalSyncStream[T]) subscribe() (*StreamReceiver[T], error) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
 
 	rec := NewStreamReceiver[T](s)
 	s.subscriberMap[rec.ID] = rec.Notify
 
-	return rec
+	return rec, nil
 }
 
 func (s *LocalSyncStream[T]) Run() {
@@ -298,9 +316,5 @@ func (l *LocalAsyncStream[T]) notifiers() notificationMap[T] {
 }
 
 var (
-	StreamInactive error
+	streamInactive = errors.New("stream not active")
 )
-
-func init() {
-	StreamInactive = errors.New("stream not active")
-}

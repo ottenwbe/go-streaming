@@ -12,7 +12,7 @@ func TemplateQueryOverSingleStreamSelection1[T any, TOut any](
 	operation func(engine.SingleStreamSelection1[T]) events.Event[TOut],
 	out pubsub.StreamID) (*ContinuousQuery, error) {
 
-	inputStream, err := pubsub.GetOrCreateStream[T](in, false)
+	inputStream, err := pubsub.NewStream[T](in, false)
 	if err != nil {
 		return nil, err
 	}
@@ -22,16 +22,16 @@ func TemplateQueryOverSingleStreamSelection1[T any, TOut any](
 		return nil, err
 	}
 
-	f, _ := createOperationOverSingleStreamSelection1(inputStream.ID(), operation, outputStream)
-
-	queryControl := newQueryControl(outputStream.ID())
-	queryControl.addStreams(inputStream, outputStream)
-	queryControl.addOperations(f)
+	f, err := createOperationOverSingleStreamSelection1(inputStream.ID(), operation, outputStream)
 	if err != nil {
 		pubsub.TryRemoveStreams([]pubsub.StreamControl{inputStream, outputStream})
 		engine.OperatorRepository().Remove([]engine.OperatorControl{f})
 		return nil, err
 	}
+
+	queryControl := newQueryControl(outputStream.ID())
+	queryControl.addStreams(inputStream, outputStream)
+	queryControl.addOperations(f)
 
 	return queryControl, nil
 }
