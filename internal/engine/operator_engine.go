@@ -223,7 +223,7 @@ type Operator1[TIN any, TOUT any] struct {
 	fin    chan bool
 
 	Input    Consumable[TIN]
-	Output   pubsub.PublisherNew[TOUT]
+	Output   pubsub.Publisher[TOUT]
 	OutputID pubsub.StreamID
 }
 
@@ -235,7 +235,7 @@ type OperatorN[TIN any, TOUT any] struct {
 	fin    chan bool
 
 	Input    Consumable[TIN]
-	Output   pubsub.PublisherNew[TOUT]
+	Output   pubsub.Publisher[TOUT]
 	OutputID pubsub.StreamID
 }
 

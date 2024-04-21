@@ -24,7 +24,6 @@ func main() {
 
 	// start the continuous query
 	qs, _ := query.RunAndSubscribe[float64](q, err...)
-
 	// always close your query when no longer needed to free resources
 	defer query.Close(qs)
 
@@ -43,7 +42,7 @@ func waitForProcessedEvents(res *query.TypedContinuousQuery[float64]) {
 func publishEvents() {
 	go func() {
 		for i := 0; i < numEvents; i++ {
-			if err := pubsub.PublishByTopic[float64]("in", events.NewEvent[float64](rand.Float64())); err != nil {
+			if err := pubsub.InstantPublishByTopic[float64]("in", events.NewEvent[float64](rand.Float64())); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
 			}
 		}

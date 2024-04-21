@@ -50,7 +50,7 @@ func publishEvents() {
 	go func() {
 		for i := 0; i < numEvents; i++ {
 			// create events in the range of  0-100
-			if err := pubsub.PublishByTopic[int]("in", events.NewEvent[int](rand.Int()%100)); err != nil {
+			if err := pubsub.InstantPublishByTopic[int]("in", events.NewEvent[int](rand.Int()%100)); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
 			}
 		}
