@@ -167,7 +167,8 @@ async: true
 
 				e1 := events.NewEvent("test 1")
 				go func() {
-					pubsub.Publish(pubsub.StreamID(id), e1)
+					publisher, _ := pubsub.RegisterPublisher[string](s.ID())
+					publisher.Publish(e1)
 				}()
 				eResult := <-rec.Notify
 

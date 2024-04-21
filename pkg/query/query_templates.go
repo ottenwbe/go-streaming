@@ -28,7 +28,7 @@ func createOperationOverSingleStreamSelection1[T, TOut any](inputStream pubsub.S
 
 	inStream := engine.NewSingleStreamInput1[T](inputStream)
 
-	f := engine.NewOperator[engine.SingleStreamSelection1[T], TOut](operation, inStream, outputStream)
+	f := engine.NewOperator[engine.SingleStreamSelection1[T], TOut](operation, inStream, outputStream.ID())
 
 	return f
 }
@@ -53,7 +53,7 @@ func TemplateQueryOverSingleStreamSelectionN[T any, TOut any](
 
 func createOperatorOverSingleStreamSelectionN[T any, TOut any](inputStream pubsub.StreamID, selection selection.Policy[T], op func(engine.SingleStreamSelectionN[T]) events.Event[TOut], outputStream pubsub.Stream[TOut]) engine.OperatorControl {
 	inStream := engine.NewSingleStreamInputN(inputStream, selection)
-	f := engine.NewOperator[engine.SingleStreamSelectionN[T], TOut](op, inStream, outputStream)
+	f := engine.NewOperator[engine.SingleStreamSelectionN[T], TOut](op, inStream, outputStream.ID())
 	return f
 }
 
@@ -76,7 +76,7 @@ func TemplateQueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](
 
 func createMultipleEventsOverSingleStreamSelection1[T any, TOut any](inputStream pubsub.StreamID, op func(engine.SingleStreamSelection1[T]) []events.Event[TOut], outputStream pubsub.Stream[TOut]) engine.OperatorControl {
 	inStream := engine.NewSingleStreamInput1[T](inputStream)
-	f := engine.NewOperatorN[engine.SingleStreamSelection1[T], TOut](op, inStream, outputStream)
+	f := engine.NewOperatorN[engine.SingleStreamSelection1[T], TOut](op, inStream, outputStream.ID())
 	return f
 }
 
@@ -94,7 +94,7 @@ func TemplateQueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](
 	outputStream := pubsub.NewStream[TOUT](out, false)
 
 	inStream := engine.NewDoubleStreamInputN[TIN1, TIN2](inputStream1.ID(), selection1, inputStream2.ID(), selection2)
-	f := engine.NewOperator[engine.DoubleInputSelectionN[TIN1, TIN2], TOUT](op, inStream, outputStream)
+	f := engine.NewOperator[engine.DoubleInputSelectionN[TIN1, TIN2], TOUT](op, inStream, outputStream.ID())
 
 	queryControl := newQueryControl(outputStream.ID())
 	queryControl.addStreams(inputStream1, inputStream2, outputStream)
@@ -115,7 +115,7 @@ func TemplateQueryOverDoubleStreamSelection1[TIN1, TIN2, TOUT any](
 	outputStream := pubsub.NewStream[TOUT](out, false)
 
 	inStream := engine.NewDoubleStreamInput1[TIN1, TIN2](inputStream1.ID(), inputStream2.ID())
-	f := engine.NewOperator[engine.DoubleInputSelection1[TIN1, TIN2], TOUT](op, inStream, outputStream)
+	f := engine.NewOperator[engine.DoubleInputSelection1[TIN1, TIN2], TOUT](op, inStream, outputStream.ID())
 
 	queryControl := newQueryControl(outputStream.ID())
 	queryControl.addStreams(inputStream1, inputStream2, outputStream)

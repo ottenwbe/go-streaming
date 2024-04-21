@@ -10,7 +10,36 @@ var len = 100000
 
 func main() {
 
-	result1 := make(chan time.Duration)
+	c := make([]chan int, 0)
+	out := make(chan int)
+	fin := make(chan bool)
+
+	for i := 0; i < 10; i++ {
+		c = append(c, make(chan int))
+
+		go func() {
+			c[i-1] <- i - 1
+		}()
+	}
+
+	go func() {
+		for i := range c {
+			select {
+			case out <- i:
+			}
+		}
+	}()
+
+	go func() {
+		for _ = range c {
+			fmt.Println(<-out)
+		}
+		fin <- true
+	}()
+
+	<-fin
+
+	/*result1 := make(chan time.Duration)
 	result2 := make(chan time.Duration)
 	result3 := make(chan time.Duration)
 
@@ -18,7 +47,7 @@ func main() {
 	sim2(result2)
 	sim1(result1)
 
-	fmt.Printf("1: %v, 2: %v, 3: %v", <-result1, <-result2, <-result3)
+	fmt.Printf("1: %v, 2: %v, 3: %v", <-result1, <-result2, <-result3)*/
 }
 
 func sim1(result chan time.Duration) {

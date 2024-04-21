@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"errors"
+	"github.com/google/uuid"
 	"go-stream-processing/internal/buffer"
 	"go-stream-processing/pkg/events"
 	"sync"
@@ -35,9 +36,40 @@ func (m notificationMap[T]) notify(e events.Event[T]) {
 	}
 }
 
-type Publisher[T any] interface {
-	Publish(events.Event[T]) error
-	ID() StreamID
+type PublisherID uuid.UUID
+
+type PublisherNew[T any] interface {
+	Publish(event events.Event[T]) error
+	ID() PublisherID
+	StreamID() StreamID
+}
+
+type SynchronizedPublisher[T any] struct {
+	mutex  sync.Mutex
+	stream Stream[T]
+	id     PublisherID
+}
+
+func (p *SynchronizedPublisher[T]) StreamID() StreamID {
+	return p.stream.ID()
+}
+
+func (p *SynchronizedPublisher[T]) ID() PublisherID {
+	return p.id
+}
+
+func (p *SynchronizedPublisher[T]) Publish(event events.Event[T]) error {
+	p.mutex.Lock()
+	p.mutex.Unlock()
+
+	return p.stream.publish(event)
+}
+
+func NewPublisher[T any](stream Stream[T]) PublisherNew[T] {
+	return &SynchronizedPublisher[T]{
+		id:     PublisherID(uuid.New()),
+		stream: stream,
+	}
 }
 
 type StreamControl interface {
@@ -54,7 +86,7 @@ type StreamControl interface {
 type Stream[T any] interface {
 	StreamControl
 
-	Publish(events.Event[T]) error
+	publish(events.Event[T]) error
 
 	subscribe() (*StreamReceiver[T], error)
 	unsubscribe(id StreamReceiverID)
@@ -63,11 +95,14 @@ type Stream[T any] interface {
 
 	events() buffer.Buffer[T]
 	setEvents(buffer.Buffer[T])
+	newPublisher() PublisherNew[T]
+	removePublisher(id PublisherID)
 }
 
 type LocalSyncStream[T any] struct {
 	description StreamDescription
 
+	publisherMap  map[PublisherID]PublisherNew[T]
 	subscriberMap notificationMap[T]
 	notifyMutex   sync.Mutex
 }
@@ -78,6 +113,7 @@ type LocalAsyncStream[T any] struct {
 	inChannel events.EventChannel[T]
 	buffer    buffer.Buffer[T]
 
+	publisherMap  map[PublisherID]PublisherNew[T]
 	subscriberMap notificationMap[T]
 	notifyMutex   sync.Mutex
 
@@ -105,6 +141,7 @@ func NewLocalSyncStream[T any](description StreamDescription) *LocalSyncStream[T
 	return &LocalSyncStream[T]{
 		description:   description,
 		subscriberMap: make(notificationMap[T]),
+		publisherMap:  make(map[PublisherID]PublisherNew[T]),
 	}
 }
 
@@ -114,16 +151,17 @@ func NewLocalAsyncStream[T any](description StreamDescription) *LocalAsyncStream
 		description:   description,
 		active:        false,
 		subscriberMap: make(notificationMap[T]),
+		publisherMap:  make(map[PublisherID]PublisherNew[T]),
 	}
 	return a
 }
 
 func (s *LocalSyncStream[T]) HasPublishersOrSubscribers() bool {
-	return len(s.subscriberMap) > 0
+	return len(s.subscriberMap) > 0 || len(s.publisherMap) > 0
 }
 
 func (l *LocalAsyncStream[T]) HasPublishersOrSubscribers() bool {
-	return len(l.subscriberMap) > 0
+	return len(l.subscriberMap) > 0 || len(l.publisherMap) > 0
 }
 
 func (s *LocalSyncStream[T]) events() buffer.Buffer[T] {
@@ -213,7 +251,7 @@ func (l *LocalAsyncStream[T]) ID() StreamID {
 	return l.description.StreamID()
 }
 
-func (l *LocalAsyncStream[T]) Publish(event events.Event[T]) error {
+func (l *LocalAsyncStream[T]) publish(event events.Event[T]) error {
 	// Handle stream inactive error
 	if !l.active {
 		return StreamInactiveError()
@@ -221,6 +259,23 @@ func (l *LocalAsyncStream[T]) Publish(event events.Event[T]) error {
 	// Publish event...
 	l.inChannel <- event
 	return nil
+}
+
+func (l *LocalAsyncStream[T]) removePublisher(id PublisherID) {
+	l.notifyMutex.Lock()
+	l.notifyMutex.Unlock()
+
+	delete(l.publisherMap, id)
+}
+
+func (l *LocalAsyncStream[T]) newPublisher() PublisherNew[T] {
+	l.notifyMutex.Lock()
+	l.notifyMutex.Unlock()
+
+	p := NewPublisher[T](l)
+	l.publisherMap[p.ID()] = p
+
+	return p
 }
 
 func (l *LocalAsyncStream[T]) subscribe() (*StreamReceiver[T], error) {
@@ -244,7 +299,7 @@ func (s *LocalSyncStream[T]) ID() StreamID {
 	return s.description.StreamID()
 }
 
-func (s *LocalSyncStream[T]) Publish(e events.Event[T]) error {
+func (s *LocalSyncStream[T]) publish(e events.Event[T]) error {
 	s.subscriberMap.notify(e)
 	return nil
 }
@@ -271,6 +326,23 @@ func (s *LocalSyncStream[T]) unsubscribe(id StreamReceiverID) {
 		delete(s.subscriberMap, id)
 		close(c)
 	}
+}
+
+func (s *LocalSyncStream[T]) newPublisher() PublisherNew[T] {
+	s.notifyMutex.Lock()
+	s.notifyMutex.Unlock()
+
+	p := NewPublisher[T](s)
+	s.publisherMap[p.ID()] = p
+
+	return p
+}
+
+func (s *LocalSyncStream[T]) removePublisher(id PublisherID) {
+	s.notifyMutex.Lock()
+	s.notifyMutex.Unlock()
+
+	delete(s.publisherMap, id)
 }
 
 func (s *LocalSyncStream[T]) subscribe() (*StreamReceiver[T], error) {

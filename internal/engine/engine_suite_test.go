@@ -36,7 +36,7 @@ var _ = Describe("OperatorRepository", func() {
 
 		}
 
-		op = engine.NewOperatorN[engine.SingleStreamSelection1[int], int](smaller, inStream, streamOut)
+		op = engine.NewOperatorN[engine.SingleStreamSelection1[int], int](smaller, inStream, streamOut.ID())
 	})
 
 	Context("Get and put", func() {

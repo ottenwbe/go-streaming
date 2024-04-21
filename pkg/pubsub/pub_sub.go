@@ -2,7 +2,6 @@ package pubsub
 
 import (
 	"errors"
-	"go-stream-processing/pkg/events"
 	"sync"
 )
 
@@ -181,18 +180,18 @@ func Unsubscribe[T any](rec *StreamReceiver[T]) {
 	}
 }
 
-func PublishByTopic[T any](topic string, event events.Event[T]) error {
-	id := MakeStreamID[T](topic)
+func RegisterPublisher[T any](id StreamID) (PublisherNew[T], error) {
 	if s, err := getAndConvertStreamByID[T](id); err == nil {
-		return s.Publish(event)
+		return s.newPublisher(), nil
 	} else {
-		return err
+		return nil, err
 	}
 }
 
-func Publish[T any](id StreamID, event events.Event[T]) error {
-	if s, err := getAndConvertStreamByID[T](id); err == nil {
-		return s.Publish(event)
+func UnRegisterPublisher[T any](publisher PublisherNew[T]) error {
+	if s, err := getAndConvertStreamByID[T](publisher.StreamID()); err == nil {
+		s.removePublisher(publisher.ID())
+		return nil
 	} else {
 		return err
 	}

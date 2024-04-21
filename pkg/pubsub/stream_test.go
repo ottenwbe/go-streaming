@@ -61,7 +61,10 @@ var _ = Describe("LocalSyncStream", func() {
 				bChan <- true
 			}()
 
-			stream.Publish(event)
+			p, _ := pubsub.RegisterPublisher[string](stream.ID())
+			defer pubsub.UnRegisterPublisher[string](p)
+
+			p.Publish(event)
 			<-bChan
 
 			Expect(eventResult.GetContent()).To(Equal(event.GetContent()))
@@ -125,9 +128,11 @@ var _ = Describe("LocalAsyncStream", func() {
 
 			receiver, _ := pubsub.Subscribe[string](stream.ID())
 
-			stream.Publish(event1)
-			stream.Publish(event2)
-			stream.Publish(event3)
+			publisher, _ := pubsub.RegisterPublisher[string](stream.ID())
+
+			publisher.Publish(event1)
+			publisher.Publish(event2)
+			publisher.Publish(event3)
 
 			go func() {
 				fmt.Print("test consumed event")
