@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-func StreamInactive() error {
+func StreamInactiveError() error {
 	return streamInactive
 }
 
@@ -216,7 +216,7 @@ func (l *LocalAsyncStream[T]) ID() StreamID {
 func (l *LocalAsyncStream[T]) Publish(event events.Event[T]) error {
 	// Handle stream inactive error
 	if !l.active {
-		return StreamInactive()
+		return StreamInactiveError()
 	}
 	// Publish event...
 	l.inChannel <- event
@@ -233,7 +233,7 @@ func (l *LocalAsyncStream[T]) subscribe() (*StreamReceiver[T], error) {
 		return rec, nil
 	}
 
-	return nil, StreamInactive()
+	return nil, StreamInactiveError()
 }
 
 func (s *LocalSyncStream[T]) Description() StreamDescription {

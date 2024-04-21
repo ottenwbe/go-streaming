@@ -81,14 +81,15 @@ func ForceRemoveStream(streamID StreamID) {
 	}
 }
 
-func AddStreams(streams ...StreamControl) {
+func GetOrAddStreams(streams []StreamControl) []StreamControl {
 	mapAccessMutex.Lock()
 	defer mapAccessMutex.Unlock()
 
-	for _, stream := range streams {
-		GetOrAddStream(stream)
+	for i, stream := range streams {
+		streams[i], _ = GetOrAddStream(stream)
 	}
 
+	return streams
 }
 
 func TryRemoveStreams(streams ...StreamControl) {

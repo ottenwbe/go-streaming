@@ -38,7 +38,7 @@ func Close[T any](qs *TypedContinuousQuery[T]) {
 	qs = nil
 }
 
-func Run[T any](c *ContinuousQuery, err ...error) (*TypedContinuousQuery[T], []error) {
+func RunAndSubscribe[T any](c *ContinuousQuery, err ...error) (*TypedContinuousQuery[T], []error) {
 
 	err, done := anyErrorExists(err, c)
 	if done {
@@ -112,7 +112,7 @@ func (c *ContinuousQuery) close() {
 
 func (c *ContinuousQuery) run() error {
 
-	pubsub.AddStreams(c.streams...)
+	c.streams = pubsub.GetOrAddStreams(c.streams)
 
 	c.startEverything()
 

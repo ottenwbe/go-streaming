@@ -22,7 +22,7 @@ func main() {
 	}
 
 	// start the query
-	qs, runErr := query.Run[int](q, defErr)
+	qs, runErr := query.RunAndSubscribe[int](q, defErr)
 	if len(runErr) > 0 {
 		zap.S().Error("could not run the query", zap.Errors("errors", runErr))
 	}

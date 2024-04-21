@@ -23,7 +23,7 @@ func main() {
 		Build()
 
 	// start the continuous query
-	qs, _ := query.Run[float64](q, err...)
+	qs, _ := query.RunAndSubscribe[float64](q, err...)
 
 	// always close your query when no longer needed to free resources
 	defer query.Close(qs)

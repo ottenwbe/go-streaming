@@ -19,7 +19,7 @@ func main() {
 
 	// merge the continuous queries and
 	// start the composed query
-	qs, err := query.Run[int](q1.ComposeWith(q2))
+	qs, err := query.RunAndSubscribe[int](q1.ComposeWith(q2))
 	if err != nil {
 		zap.S().Error("could not subscribe to query", zap.Errors("errors", err))
 	}

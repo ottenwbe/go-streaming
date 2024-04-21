@@ -135,6 +135,24 @@ async: true
 				Expect(func() { pubsub.Unsubscribe[string](rec) }).NotTo(Panic())
 			})
 		})
+		Context("streams with same name and different types", func() {
+			It("can exist", func() {
+				s1 := pubsub.NewLocalSyncStream[int](pubsub.MakeStreamDescription[int]("same", false))
+				s2 := pubsub.NewLocalSyncStream[float64](pubsub.MakeStreamDescription[float64]("same", true))
+
+				pubsub.AddOrReplaceStream[int](s1)
+				pubsub.AddOrReplaceStream[float64](s2)
+
+				r1, err1 := pubsub.GetStream[int](s1.ID())
+				r2, err2 := pubsub.GetStream[float64](s2.ID())
+
+				Expect(err1).To(BeNil())
+				Expect(err2).To(BeNil())
+				Expect(r1.ID().Topic).To(Equal(r2.ID().Topic))
+				Expect(r1.ID().TopicType).ToNot(Equal(r2.ID().TopicType))
+
+			})
+		})
 		Context("a stream", func() {
 			It("sends and receives event via the pub sub system", func() {
 				var topic = "test-send-rec-1"

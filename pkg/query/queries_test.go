@@ -28,7 +28,7 @@ var _ = Describe("Add Operator1", func() {
 		It("should correctly perform the operation on pubsub", func() {
 
 			c, err1 := query.ContinuousAdd[int]("test-add-in1", "test-add-in2", "test-add-out")
-			qs, _ := query.Run[int](c, err1)
+			qs, _ := query.RunAndSubscribe[int](c, err1)
 			defer query.Close(qs)
 
 			event := events.NewEvent(8)
@@ -54,7 +54,7 @@ var _ = Describe("Convert Operator1", func() {
 		It("should change the type", func() {
 
 			c, err1 := query.ContinuousConvert[int, float32]("convert-test-in", "convert-test-out")
-			qs, _ := query.Run[float32](c, err1)
+			qs, _ := query.RunAndSubscribe[float32](c, err1)
 			defer query.Close(qs)
 
 			event := events.NewEvent(8)
@@ -77,7 +77,7 @@ var _ = Describe("Sum Operator1", func() {
 
 			selection := selection.NewCountingWindowPolicy[int](2, 2)
 
-			qs, _ := query.Run[int](query.ContinuousBatchSum[int]("int values", "sum values", selection))
+			qs, _ := query.RunAndSubscribe[int](query.ContinuousBatchSum[int]("int values", "sum values", selection))
 			defer query.Close(qs)
 
 			event := events.NewEvent(10)
@@ -108,7 +108,7 @@ var _ = Describe("Count Operator1", func() {
 		It("should sum all values over a window", func() {
 
 			selection := selection.NewCountingWindowPolicy[float32](2, 2)
-			qs, _ := query.Run[int](query.ContinuousBatchCount[float32, int]("countable floats", "counted floats", selection))
+			qs, _ := query.RunAndSubscribe[int](query.ContinuousBatchCount[float32, int]("countable floats", "counted floats", selection))
 			defer query.Close(qs)
 
 			event := events.NewEvent[float32](1.0)
@@ -138,7 +138,7 @@ var _ = Describe("Smaller OperatorControl", func() {
 	Context("when executed", func() {
 		It("should remove large events", func() {
 
-			qs, _ := query.Run[int](query.ContinuousSmaller[int]("q-s-1", "res-s-1", 11))
+			qs, _ := query.RunAndSubscribe[int](query.ContinuousSmaller[int]("q-s-1", "res-s-1", 11))
 			defer query.Close(qs)
 
 			streamIn, _ := pubsub.GetStreamByTopic[int]("q-s-1")
@@ -169,7 +169,7 @@ var _ = Describe("Greater OperatorControl", func() {
 	Context("when executed", func() {
 		It("should remove small events", func() {
 
-			qs, _ := query.Run[int](query.ContinuousGreater("test-greater-11", "test-greater-11-out", 11))
+			qs, _ := query.RunAndSubscribe[int](query.ContinuousGreater("test-greater-11", "test-greater-11-out", 11))
 			defer query.Close(qs)
 
 			event := events.NewEvent(10)
