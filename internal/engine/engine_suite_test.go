@@ -22,8 +22,8 @@ var _ = Describe("OperatorRepository", func() {
 	)
 
 	BeforeEach(func() {
-		streamIn := pubsub2.NewLocalSyncStream[int](pubsub2.MakeStreamDescription("int values", false))
-		streamOut := pubsub2.NewLocalSyncStream[int](pubsub2.MakeStreamDescription("summed up values", false))
+		streamIn := pubsub2.NewLocalSyncStream[int](pubsub2.MakeStreamDescription[int]("int values", false))
+		streamOut := pubsub2.NewLocalSyncStream[int](pubsub2.MakeStreamDescription[int]("summed up values", false))
 
 		inStream := engine.NewSingleStreamInput1[int](streamIn.ID())
 

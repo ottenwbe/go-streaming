@@ -85,8 +85,8 @@ type LocalAsyncStream[T any] struct {
 	closed sync.WaitGroup
 }
 
-func NewStream[T any](id StreamID, async bool) Stream[T] {
-	return NewStreamD[T](MakeStreamDescription(id, async))
+func NewStream[T any](topic string, async bool) Stream[T] {
+	return NewStreamD[T](MakeStreamDescription[T](topic, async))
 }
 
 func NewStreamD[T any](description StreamDescription) Stream[T] {

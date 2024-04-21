@@ -8,11 +8,32 @@ import (
 
 // StreamDescription details the stream configurations
 type StreamDescription struct {
-	ID    StreamID `yaml:"id"`
-	Async bool     `yaml:"async"`
+	ID    StreamID `yaml,json:"id"`
+	Async bool     `yaml,json:"async"`
 }
 
-func MakeStreamDescription(id StreamID, async bool) StreamDescription {
+func MakeStreamDescriptionByID(id StreamID, async bool) StreamDescription {
+	return StreamDescription{
+		ID:    id,
+		Async: async,
+	}
+}
+
+func MakeStreamDescriptionTypeless(topic string, async bool) StreamDescription {
+	return StreamDescription{
+		ID:    MakeStreamID[any](topic),
+		Async: async,
+	}
+}
+
+func MakeStreamDescription[T any](topic string, async bool) StreamDescription {
+	return StreamDescription{
+		ID:    MakeStreamID[T](topic),
+		Async: async,
+	}
+}
+
+func MakeStreamDescriptionID(id StreamID, async bool) StreamDescription {
 	return StreamDescription{
 		ID:    id,
 		Async: async,
@@ -29,7 +50,7 @@ func (d StreamDescription) StreamID() StreamID {
 
 func StreamDescriptionEnrichment(d StreamDescription) (StreamDescription, error) {
 
-	if d.ID == "" {
+	if d.ID.IsNil() {
 		return StreamDescription{}, errors.New("no id provided")
 	}
 

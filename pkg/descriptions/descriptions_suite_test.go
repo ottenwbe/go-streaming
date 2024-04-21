@@ -3,6 +3,7 @@ package descriptions_test
 import (
 	"go-stream-processing/internal/engine"
 	"go-stream-processing/pkg/descriptions"
+	"go-stream-processing/pkg/pubsub"
 	"reflect"
 	"testing"
 
@@ -24,7 +25,7 @@ var _ = Describe("Operator Description", func() {
 			o := descriptions.OperatorDescription{
 				ID:     engine.OperatorID{},
 				Inputs: nil,
-				Output: "",
+				Output: pubsub.MakeStreamID[any](""),
 				Engine: 0,
 			}
 

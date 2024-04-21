@@ -29,6 +29,10 @@ type TypedContinuousQuery[T any] struct {
 }
 
 func Close[T any](qs *TypedContinuousQuery[T]) {
+	if qs == nil {
+		return //TODO error
+	}
+
 	pubsub.Unsubscribe(qs.OutputReceiver)
 	qs.close()
 	qs = nil
@@ -100,14 +104,18 @@ func (c *ContinuousQuery) ID() ID {
 func (c *ContinuousQuery) close() {
 	c.stopEverything()
 
-	pubsub.TryRemoveStreams(c.streams)
+	pubsub.TryRemoveStreams(c.streams...)
 	engine.OperatorRepository().Remove(c.operators)
 
 	QueryRepository().remove(c.id)
 }
 
 func (c *ContinuousQuery) run() error {
+
+	pubsub.AddStreams(c.streams...)
+
 	c.startEverything()
+
 	err := QueryRepository().put(c)
 	return err
 }
@@ -168,8 +176,8 @@ func NewBuilder() *Builder {
 	}
 }
 
-func S[T any](id pubsub.StreamID, async bool) (pubsub.StreamControl, error) {
-	d := pubsub.MakeStreamDescription(id, async)
+func S[T any](topic string, async bool) (pubsub.StreamControl, error) {
+	d := pubsub.MakeStreamDescription[T](topic, async)
 	return pubsub.AddOrReplaceStreamD[T](d)
 }
 

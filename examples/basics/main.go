@@ -15,7 +15,7 @@ var (
 
 func main() {
 	// define the query
-	q, defErr := query.ContinuousGreater[int]("in", 50, "out")
+	q, defErr := query.ContinuousGreater[int]("in", "out", 50)
 	if defErr != nil {
 		zap.S().Error("could not create query", zap.Error(defErr))
 		return
@@ -36,10 +36,11 @@ func main() {
 	time.Sleep(time.Second * 10)
 }
 
-func receiveProcessedEvents(res *query.ResultSubscription[int]) {
+func receiveProcessedEvents(res *query.TypedContinuousQuery[int]) {
 	go func() {
 		for {
-			e := <-res.Notifier()
+			// wait until the next event notification arrives
+			e, _ := res.Notify()
 			zap.S().Infof("event received %v", e)
 		}
 	}()
@@ -49,7 +50,7 @@ func publishEvents() {
 	go func() {
 		for i := 0; i < numEvents; i++ {
 			// create events in the range of  0-100
-			if err := pubsub.Publish[int]("in", events.NewEvent[int](rand.Int()%100)); err != nil {
+			if err := pubsub.PublishByTopic[int]("in", events.NewEvent[int](rand.Int()%100)); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
 			}
 		}

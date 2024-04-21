@@ -34,8 +34,8 @@ var _ = Describe("Add Operator1", func() {
 			event := events.NewEvent(8)
 			event2 := events.NewEvent(3)
 
-			streamA, _ := pubsub.GetStream[int]("test-add-in1")
-			streamB, _ := pubsub.GetStream[int]("test-add-in2")
+			streamA, _ := pubsub.GetStreamByTopic[int]("test-add-in1")
+			streamB, _ := pubsub.GetStreamByTopic[int]("test-add-in2")
 
 			streamA.Publish(event)
 			streamB.Publish(event2)
@@ -59,7 +59,7 @@ var _ = Describe("Convert Operator1", func() {
 
 			event := events.NewEvent(8)
 
-			streamIn, _ := pubsub.GetStream[int]("convert-test-in")
+			streamIn, _ := pubsub.GetStreamByTopic[int]("convert-test-in")
 
 			streamIn.Publish(event)
 			result, _ := qs.Notify()
@@ -85,7 +85,7 @@ var _ = Describe("Sum Operator1", func() {
 			event2 := events.NewEvent(15)
 			event3 := events.NewEvent(15)
 
-			streamIn, _ := pubsub.GetStream[int]("int values")
+			streamIn, _ := pubsub.GetStreamByTopic[int]("int values")
 			streamIn.Publish(event)
 			streamIn.Publish(event1)
 			streamIn.Publish(event2)
@@ -116,7 +116,7 @@ var _ = Describe("Count Operator1", func() {
 			event2 := events.NewEvent[float32](1.2)
 			event3 := events.NewEvent[float32](1.3)
 
-			streamIn, _ := pubsub.GetStream[float32]("countable floats")
+			streamIn, _ := pubsub.GetStreamByTopic[float32]("countable floats")
 			streamIn.Publish(event)
 			streamIn.Publish(event1)
 			streamIn.Publish(event2)
@@ -141,7 +141,7 @@ var _ = Describe("Smaller OperatorControl", func() {
 			qs, _ := query.Run[int](query.ContinuousSmaller[int]("q-s-1", "res-s-1", 11))
 			defer query.Close(qs)
 
-			streamIn, _ := pubsub.GetStream[int]("q-s-1")
+			streamIn, _ := pubsub.GetStreamByTopic[int]("q-s-1")
 
 			event := events.NewEvent(9)
 			event1 := events.NewEvent(10)
@@ -169,7 +169,7 @@ var _ = Describe("Greater OperatorControl", func() {
 	Context("when executed", func() {
 		It("should remove small events", func() {
 
-			qs, _ := query.Run[int](query.ContinuousGreater("test-greater-11", 11, "test-greater-11-out"))
+			qs, _ := query.Run[int](query.ContinuousGreater("test-greater-11", "test-greater-11-out", 11))
 			defer query.Close(qs)
 
 			event := events.NewEvent(10)
@@ -177,7 +177,7 @@ var _ = Describe("Greater OperatorControl", func() {
 			event2 := events.NewEvent(15)
 			event3 := events.NewEvent(35)
 
-			streamIn, _ := pubsub.GetStream[int]("test-greater-11")
+			streamIn, _ := pubsub.GetStreamByTopic[int]("test-greater-11")
 			streamIn.Publish(event)
 			streamIn.Publish(event1)
 			streamIn.Publish(event2)
