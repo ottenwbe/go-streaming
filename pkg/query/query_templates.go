@@ -24,7 +24,7 @@ func TemplateQueryOverSingleStreamSelection1[T any, TOut any](
 	return queryControl, nil
 }
 
-func createOperationOverSingleStreamSelection1[T, TOut any](inputStream pubsub.StreamID, operation func(engine.SingleStreamSelection1[T]) events.Event[TOut], outputStream pubsub.Stream[TOut]) engine.OperatorControl {
+func createOperationOverSingleStreamSelection1[T, TOut any](inputStream pubsub.StreamID, operation func(engine.SingleStreamSelection1[T]) events.Event[TOut], outputStream pubsub.StreamControl) engine.OperatorControl {
 
 	inStream := engine.NewSingleStreamInput1[T](inputStream)
 

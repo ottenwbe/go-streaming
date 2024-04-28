@@ -19,7 +19,7 @@ type (
 		Close()
 	}
 	OperatorStreamSubscription[TSub any] struct {
-		streamReceiver *pubsub.StreamReceiver[TSub]
+		streamReceiver pubsub.StreamReceiver[TSub]
 		streamID       pubsub.StreamID
 		inputBuffer    buffer.Buffer[TSub]
 		active         bool
@@ -195,7 +195,7 @@ func (o *OperatorStreamSubscription[T]) Run() {
 
 	go func() {
 		for {
-			event, more := <-o.streamReceiver.Notify
+			event, more := <-o.streamReceiver.Notify()
 			if more {
 				o.inputBuffer.AddEvent(event)
 			} else {

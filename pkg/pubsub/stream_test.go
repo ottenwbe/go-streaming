@@ -8,7 +8,7 @@ import (
 	"go-stream-processing/pkg/pubsub"
 )
 
-var _ = Describe("LocalSyncStream", func() {
+var _ = Describe("localSyncStream", func() {
 	var (
 		stream pubsub.Stream[string]
 		topic  = "test"
@@ -57,7 +57,7 @@ var _ = Describe("LocalSyncStream", func() {
 			receiver, _ := pubsub.Subscribe[string](stream.ID())
 
 			go func() {
-				eventResult = <-receiver.Notify
+				eventResult = <-receiver.Notify()
 				bChan <- true
 			}()
 
@@ -72,7 +72,7 @@ var _ = Describe("LocalSyncStream", func() {
 	})
 })
 
-var _ = Describe("LocalAsyncStream", func() {
+var _ = Describe("localAsyncStream", func() {
 	var (
 		stream pubsub.Stream[string]
 		topic  = "test3"
@@ -136,9 +136,9 @@ var _ = Describe("LocalAsyncStream", func() {
 
 			go func() {
 				fmt.Print("test consumed event")
-				eventResult[0] = <-receiver.Notify
-				eventResult[1] = <-receiver.Notify
-				eventResult[2] = <-receiver.Notify
+				eventResult[0] = <-receiver.Notify()
+				eventResult[1] = <-receiver.Notify()
+				eventResult[2] = <-receiver.Notify()
 				fmt.Print("test consumed event finished")
 				bChan <- true
 			}()

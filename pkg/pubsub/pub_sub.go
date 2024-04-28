@@ -12,25 +12,28 @@ var (
 )
 
 var (
-	streamTypeMismatchError = errors.New("stream type mismatch")
-	streamNotFoundError     = errors.New("no stream found")
-	streamNameExistsError   = errors.New("stream id already exists")
-	streamIDNilError        = errors.New("stream id nil")
+	StreamTypeMismatchError = errors.New("pub sub: stream type mismatch")
+	StreamNotFoundError     = errors.New("pub sub: no stream found")
+	StreamNameExistsError   = errors.New("pub sub: stream id already exists")
+	StreamIDNilError        = errors.New("pub sub: stream id nil")
 )
 
-func StreamTypeMismatchError() error {
-	return streamTypeMismatchError
+// GetOrAddStreamD adds a stream to the pub sub system.
+// It is similar to GetOrAddStream, except that it takes a StreamDescription as input.
+func GetOrAddStreamD[T any](description StreamDescription) (StreamControl, error) {
+	stream := NewStreamD[T](description)
+	return GetOrAddStream(stream)
 }
-func StreamNotFoundError() error { return streamNotFoundError }
-func StreamNameExistsError() error {
-	return streamNameExistsError
-}
-func StreamIDNilError() error { return streamIDNilError }
 
-// GetOrAddStream adds a stream to the pub sub system or returns an existing one
-// Note: this should only be called if you are sure that the stream has the right type
+// GetOrAddStream adds a stream to the pub sub system or returns an existing one.
 func GetOrAddStream(stream StreamControl) (StreamControl, error) {
+	mapAccessMutex.Lock()
+	defer mapAccessMutex.Unlock()
 
+	return doGetOrAddStream(stream)
+}
+
+func doGetOrAddStream(stream StreamControl) (StreamControl, error) {
 	err := validateStream(stream)
 	if err != nil {
 		return stream, err
@@ -60,11 +63,7 @@ func AddOrReplaceStream[T any](newStream Stream[T]) error {
 	mapAccessMutex.Lock()
 	defer mapAccessMutex.Unlock()
 
-	if err := createOrReplaceStreamIndex(newStream); err != nil {
-		return err
-	}
-
-	return nil
+	return doAddOrReplaceStream(newStream)
 }
 
 func ForceRemoveStreamD(description StreamDescription) {
@@ -86,7 +85,7 @@ func GetOrAddStreams(streams []StreamControl) []StreamControl {
 	defer mapAccessMutex.Unlock()
 
 	for i, stream := range streams {
-		streams[i], _ = GetOrAddStream(stream)
+		streams[i], _ = doGetOrAddStream(stream)
 	}
 
 	return streams
@@ -104,7 +103,7 @@ func TryRemoveStreams(streams ...StreamControl) {
 
 }
 
-func createOrReplaceStreamIndex[T any](newStream Stream[T]) error {
+func doAddOrReplaceStream[T any](newStream Stream[T]) error {
 
 	err := validateStream(newStream)
 	if err != nil {
@@ -132,12 +131,12 @@ func addStream(newStream StreamControl) {
 func validateStream(newStream StreamControl) error {
 
 	if newStream.ID().IsNil() {
-		return StreamIDNilError()
+		return StreamIDNilError
 	}
 
 	//if stream is indexed, name should not be duplicated
 	if _, idFound := streamIndex[newStream.ID()]; idFound {
-		return StreamNameExistsError()
+		return StreamNameExistsError
 	}
 	return nil
 }
@@ -150,14 +149,14 @@ func getAndConvertStreamByID[T any](id StreamID) (Stream[T], error) {
 
 			return stream.(Stream[T]), nil
 		default:
-			return nil, StreamTypeMismatchError()
+			return nil, StreamTypeMismatchError
 		}
 	}
-	return nil, StreamNotFoundError()
+	return nil, StreamNotFoundError
 
 }
 
-func Subscribe[T any](id StreamID) (*StreamReceiver[T], error) {
+func Subscribe[T any](id StreamID) (StreamReceiver[T], error) {
 	mapAccessMutex.RLock()
 	defer mapAccessMutex.RUnlock()
 
@@ -168,7 +167,7 @@ func Subscribe[T any](id StreamID) (*StreamReceiver[T], error) {
 	}
 }
 
-func Unsubscribe[T any](rec *StreamReceiver[T]) {
+func Unsubscribe[T any](rec StreamReceiver[T]) {
 	mapAccessMutex.RLock()
 	defer mapAccessMutex.RUnlock()
 
@@ -176,14 +175,17 @@ func Unsubscribe[T any](rec *StreamReceiver[T]) {
 		return //TODO error?
 	}
 
-	if s, err := getAndConvertStreamByID[T](rec.StreamID); err == nil {
-		s.unsubscribe(rec.ID)
+	if s, err := getAndConvertStreamByID[T](rec.StreamID()); err == nil {
+		s.unsubscribe(rec.ID())
 	}
 }
 
-func InstantPublishByTopic[T any](topic string, event events.Event[T]) error {
+func InstantPublishByTopic[T any](topic string, event events.Event[T]) (err error) {
+	mapAccessMutex.RLock()
+	defer mapAccessMutex.RUnlock()
+
 	publisher, err := RegisterPublisher[T](MakeStreamID[T](topic))
-	defer func(publisher Publisher[T]) { _ = UnRegisterPublisher[T](publisher) }(publisher)
+	defer func(publisher Publisher[T]) { err = UnRegisterPublisher[T](publisher) }(publisher)
 
 	if err == nil {
 		err = publisher.Publish(event)
@@ -224,7 +226,7 @@ func GetDescription(id StreamID) (StreamDescription, error) {
 	if s, ok := streamIndex[id]; ok {
 		return s.Description(), nil
 	} else {
-		return StreamDescription{}, StreamNotFoundError()
+		return StreamDescription{}, StreamNotFoundError
 	}
 }
 

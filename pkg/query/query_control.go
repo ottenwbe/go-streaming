@@ -25,7 +25,7 @@ type ContinuousQuery struct {
 
 type TypedContinuousQuery[T any] struct {
 	*ContinuousQuery
-	OutputReceiver *pubsub.StreamReceiver[T]
+	OutputReceiver pubsub.StreamReceiver[T]
 }
 
 func Close[T any](qs *TypedContinuousQuery[T]) {
@@ -77,7 +77,7 @@ func anyErrorExists(err []error, c *ContinuousQuery) ([]error, bool) {
 }
 
 func (qs *TypedContinuousQuery[T]) Notify() (events.Event[T], bool) {
-	e, ok := <-qs.OutputReceiver.Notify
+	e, ok := <-qs.OutputReceiver.Notify()
 	return e, ok
 }
 

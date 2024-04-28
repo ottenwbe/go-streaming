@@ -96,22 +96,22 @@ var _ = Describe("StreamID", func() {
 		It("should fail for missing topic key (json)", func() {
 			var id pubsub.StreamID
 			err := json.Unmarshal([]byte(`{"type":"int"}`), &id)
-			Expect(err).To(Equal(pubsub.UnmarshallingTopicMissingKeyError()))
+			Expect(err).To(Equal(pubsub.UnmarshallingTopicMissingKeyError))
 		})
 		It("should fail for wrong topic type (json)", func() {
 			var id pubsub.StreamID
 			err := json.Unmarshal([]byte(`{"topic":1,"type":"int"}`), &id)
-			Expect(err).To(Equal(pubsub.UnmarshallingTopicNotStringError()))
+			Expect(err).To(Equal(pubsub.UnmarshallingTopicNotStringError))
 		})
 		It("should fail for missing topic key (yml)", func() {
 			var id pubsub.StreamID
 			err := yaml.Unmarshal([]byte(`type: int`), &id)
-			Expect(err).To(Equal(pubsub.UnmarshallingTopicMissingKeyError()))
+			Expect(err).To(Equal(pubsub.UnmarshallingTopicMissingKeyError))
 		})
 		It("should fail for wrong topic type (yml)", func() {
 			var id pubsub.StreamID
 			err := yaml.Unmarshal([]byte(`topic: 1`), &id)
-			Expect(err).To(Equal(pubsub.UnmarshallingTopicNotStringError()))
+			Expect(err).To(Equal(pubsub.UnmarshallingTopicNotStringError))
 		})
 
 		It("should be able to unmarshal a yaml", func() {

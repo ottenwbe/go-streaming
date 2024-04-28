@@ -14,17 +14,9 @@ const (
 )
 
 var (
-	unmarshallingTopicNotStringError  = errors.New("error unmarshalling topic: expected string")
-	unmarshallingTopicMissingKeyError = errors.New("error unmarshalling topic: missing key")
+	UnmarshallingTopicNotStringError  = errors.New("streamID: error unmarshalling topic; expected string")
+	UnmarshallingTopicMissingKeyError = errors.New("streamID: error unmarshalling topic; missing key")
 )
-
-func UnmarshallingTopicNotStringError() error {
-	return unmarshallingTopicNotStringError
-}
-
-func UnmarshallingTopicMissingKeyError() error {
-	return unmarshallingTopicMissingKeyError
-}
 
 type StreamID struct {
 	Topic     string
@@ -51,10 +43,10 @@ func (s *StreamID) UnmarshalJSON(data []byte) error {
 	if topic, ok := unmarshalled[topicKey]; ok {
 		s.Topic, ok = topic.(string)
 		if !ok {
-			return UnmarshallingTopicNotStringError()
+			return UnmarshallingTopicNotStringError
 		}
 	} else {
-		return UnmarshallingTopicMissingKeyError()
+		return UnmarshallingTopicMissingKeyError
 	}
 
 	if topicType, ok := unmarshalled[typeKey]; ok {
@@ -83,10 +75,10 @@ func (s *StreamID) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if topic, ok := unmarshalled[topicKey]; ok {
 		s.Topic, ok = topic.(string)
 		if !ok {
-			return UnmarshallingTopicNotStringError()
+			return UnmarshallingTopicNotStringError
 		}
 	} else {
-		return UnmarshallingTopicMissingKeyError()
+		return UnmarshallingTopicMissingKeyError
 	}
 
 	if topicType, ok := unmarshalled[typeKey]; ok {
@@ -111,7 +103,7 @@ var typeMap = map[string]reflect.Type{
 	"map[string]interface {}": reflect.TypeOf(map[string]interface{}{}),
 }
 
-func GetTypeFromString(typeName string) reflect.Type {
+func getTypeFromString(typeName string) reflect.Type {
 	if t, ok := typeMap[typeName]; ok {
 		return t
 	}
@@ -123,7 +115,7 @@ func convertInterfaceToTopicType(i interface{}) (reflect.Type, error) {
 	if !ok {
 		return nil, fmt.Errorf("expected string type for topicType, got %T", i)
 	}
-	return GetTypeFromString(typeName), nil
+	return getTypeFromString(typeName), nil
 }
 
 func (s StreamID) marshalStreamID() marshalledStreamID {

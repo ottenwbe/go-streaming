@@ -1,7 +1,6 @@
 package pubsub_test
 
 import (
-	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go-stream-processing/pkg/events"
@@ -28,7 +27,7 @@ async: true
 			})
 			It("not retrieves the stream when it does not exist", func() {
 				_, err := pubsub.GetStreamByTopic[int]("not-existing-name")
-				Expect(err).To(Equal(pubsub.StreamNotFoundError()))
+				Expect(err).To(Equal(pubsub.StreamNotFoundError))
 			})
 			It("not retrieves the stream when a type mismatches", func() {
 				var yml = `
@@ -41,7 +40,7 @@ async: true
 				pubsub.AddOrReplaceStreamD[map[string]interface{}](d)
 
 				_, err := pubsub.GetStream[int](d.ID)
-				Expect(err).To(Equal(pubsub.StreamTypeMismatchError()))
+				Expect(err).To(Equal(pubsub.StreamTypeMismatchError))
 			})
 		})
 
@@ -76,14 +75,14 @@ async: true
 				pubsub.ForceRemoveStreamD(d)
 
 				_, err = pubsub.GetStream[map[string]interface{}](d.StreamID())
-				Expect(err).To(Equal(pubsub.StreamNotFoundError()))
+				Expect(err).To(Equal(pubsub.StreamNotFoundError))
 
 			})
 		})
 		Context("adding new pubsub", func() {
 			It("is successful when the stream does not yet exists", func() {
 				var topic = "test-ps-1"
-				s := pubsub.NewLocalSyncStream[string](pubsub.MakeStreamDescription[string](topic, false))
+				s := pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, false))
 
 				_ = pubsub.AddOrReplaceStream[string](s)
 
@@ -93,10 +92,10 @@ async: true
 			})
 			It("is NOT successful when the stream id is invalid", func() {
 
-				s1 := pubsub.NewLocalSyncStream[map[string]interface{}](pubsub.MakeStreamDescriptionID(pubsub.NilStreamID(), false))
+				s1 := pubsub.NewStreamD[map[string]interface{}](pubsub.MakeStreamDescriptionFromID(pubsub.NilStreamID(), false))
 				err := pubsub.AddOrReplaceStream[map[string]interface{}](s1)
 
-				Expect(err).To(Equal(pubsub.StreamIDNilError()))
+				Expect(err).To(Equal(pubsub.StreamIDNilError))
 			})
 		})
 		Context("getting stream in pubsub system", func() {
@@ -116,7 +115,7 @@ async: true
 		Context("unsub from a stream", func() {
 			It("is successful when the stream exists", func() {
 				var topic = "test-unsub-1"
-				s := pubsub.NewLocalSyncStream[string](pubsub.MakeStreamDescription[string](topic, false))
+				s := pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, false))
 				pubsub.AddOrReplaceStream[string](s)
 
 				rec, _ := pubsub.Subscribe[string](s.ID())
@@ -126,19 +125,14 @@ async: true
 		})
 		Context("unsub from non existing stream", func() {
 			It("ends up in no error", func() {
-				rec := &pubsub.StreamReceiver[string]{
-					StreamID: pubsub.RandomStreamID(),
-					ID:       pubsub.StreamReceiverID(uuid.New()),
-					Notify:   make(chan events.Event[string]),
-				}
 
-				Expect(func() { pubsub.Unsubscribe[string](rec) }).NotTo(Panic())
+				Expect(func() { pubsub.Unsubscribe[string](nil) }).NotTo(Panic())
 			})
 		})
 		Context("streams with same name and different types", func() {
 			It("can exist", func() {
-				s1 := pubsub.NewLocalSyncStream[int](pubsub.MakeStreamDescription[int]("same", false))
-				s2 := pubsub.NewLocalSyncStream[float64](pubsub.MakeStreamDescription[float64]("same", true))
+				s1 := pubsub.NewStreamD[int](pubsub.MakeStreamDescription[int]("same", false))
+				s2 := pubsub.NewStreamD[float64](pubsub.MakeStreamDescription[float64]("same", true))
 
 				pubsub.AddOrReplaceStream[int](s1)
 				pubsub.AddOrReplaceStream[float64](s2)
@@ -156,7 +150,7 @@ async: true
 		Context("a stream", func() {
 			It("sends and receives event via the pub sub system", func() {
 				var topic = "test-send-rec-1"
-				s := pubsub.NewLocalSyncStream[string](pubsub.MakeStreamDescription[string](topic, false))
+				s := pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, false))
 				s.Run()
 				defer s.TryClose()
 
@@ -170,7 +164,7 @@ async: true
 					publisher, _ := pubsub.RegisterPublisher[string](s.ID())
 					publisher.Publish(e1)
 				}()
-				eResult := <-rec.Notify
+				eResult := <-rec.Notify()
 
 				Expect(e1).To(Equal(eResult))
 			})
