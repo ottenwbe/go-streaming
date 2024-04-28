@@ -28,7 +28,7 @@ func MakeStreamDescriptionFromID(id StreamID, async bool) StreamDescription {
 	}
 }
 
-func (d StreamDescription) Equal(comp StreamDescription) bool {
+func (d StreamDescription) EqualTo(comp StreamDescription) bool {
 	return d.ID == comp.ID
 }
 

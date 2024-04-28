@@ -39,24 +39,20 @@ func (r *streamReceiver[T]) Notify() events.EventChannel[T] {
 }
 
 func (r *streamReceiver[T]) Consume() (events.Event[T], error) {
-	return r.consumeNextEvent()
+	if e, more := <-r.notify; !more {
+		return e, errors.New("channel closed, no more events")
+	} else {
+		return e, nil
+	}
 }
 
-func newStreamReceiver[T any](stream Stream[T]) StreamReceiver[T] {
+func newStreamReceiver[T any](stream typedStream[T]) StreamReceiver[T] {
 	rec := &streamReceiver[T]{
 		streamID: stream.ID(),
 		iD:       StreamReceiverID(uuid.New()),
 		notify:   make(chan events.Event[T]),
 	}
 	return rec
-}
-
-func (r *streamReceiver[T]) consumeNextEvent() (events.Event[T], error) {
-	if e, more := <-r.Notify(); !more {
-		return e, errors.New("channel closed, no more events")
-	} else {
-		return e, nil
-	}
 }
 
 type notificationMap[T any] map[StreamReceiverID]events.EventChannel[T]

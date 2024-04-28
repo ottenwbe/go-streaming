@@ -19,7 +19,7 @@ type ContinuousQuery struct {
 	id ID
 
 	operators []engine.OperatorControl
-	streams   []pubsub.StreamControl
+	streams   []pubsub.Stream
 	output    pubsub.StreamID
 }
 
@@ -112,7 +112,7 @@ func (c *ContinuousQuery) close() {
 
 func (c *ContinuousQuery) run() error {
 
-	c.streams = pubsub.GetOrAddStreams(c.streams)
+	c.streams = pubsub.GetOrAddStreams(c.streams...)
 
 	c.startEverything()
 
@@ -124,12 +124,12 @@ func newQueryControl(outStream pubsub.StreamID) *ContinuousQuery {
 	return &ContinuousQuery{
 		id:        ID(uuid.New()),
 		operators: make([]engine.OperatorControl, 0),
-		streams:   []pubsub.StreamControl{},
+		streams:   []pubsub.Stream{},
 		output:    outStream,
 	}
 }
 
-func (c *ContinuousQuery) addStreams(streams ...pubsub.StreamControl) {
+func (c *ContinuousQuery) addStreams(streams ...pubsub.Stream) {
 	c.streams = append(c.streams, streams...)
 }
 
@@ -155,7 +155,7 @@ func (c *ContinuousQuery) stopEverything() {
 	}
 }
 
-func in(streams []pubsub.StreamControl, id pubsub.StreamID) bool {
+func in(streams []pubsub.Stream, id pubsub.StreamID) bool {
 	for _, stream := range streams {
 		if stream.ID() == id {
 			return true
@@ -169,14 +169,14 @@ func NewBuilder() *Builder {
 		q: &ContinuousQuery{
 			id:        ID(uuid.New()),
 			operators: make([]engine.OperatorControl, 0),
-			streams:   make([]pubsub.StreamControl, 0),
+			streams:   make([]pubsub.Stream, 0),
 			output:    pubsub.NilStreamID(),
 		},
 		error: make([]error, 0),
 	}
 }
 
-func S[T any](topic string, async bool) (pubsub.StreamControl, error) {
+func S[T any](topic string, async bool) (pubsub.Stream, error) {
 	d := pubsub.MakeStreamDescription[T](topic, async)
 	return pubsub.AddOrReplaceStreamD[T](d)
 }
@@ -195,7 +195,7 @@ func (b *Builder) Query(q *ContinuousQuery, pErr error) *Builder {
 	return b
 }
 
-func (b *Builder) Stream(s pubsub.StreamControl, err error) *Builder {
+func (b *Builder) Stream(s pubsub.Stream, err error) *Builder {
 	b.q.addStreams(s)
 	if err != nil {
 		b.error = append(b.error, err)

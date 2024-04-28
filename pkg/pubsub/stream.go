@@ -9,19 +9,21 @@ import (
 
 var StreamInactiveError = errors.New("streams: stream not active")
 
-type StreamControl interface {
+type Stream interface {
 	Run()
 	TryClose()
-	ForceClose()
+	forceClose()
 
 	HasPublishersOrSubscribers() bool
 
 	ID() StreamID
 	Description() StreamDescription
+
+	copyFrom(Stream)
 }
 
-type Stream[T any] interface {
-	StreamControl
+type typedStream[T any] interface {
+	Stream
 
 	publish(events.Event[T]) error
 
@@ -30,16 +32,15 @@ type Stream[T any] interface {
 	newPublisher() Publisher[T]
 	removePublisher(id PublisherID)
 
-	setNotifiers(notificationMap notificationMap[T])
-	notifiers() notificationMap[T]
+	subscribers() notificationMap[T]
+	publishers() publisherMap[T]
 	events() buffer.Buffer[T]
-	setEvents(buffer.Buffer[T])
 }
 
 type localSyncStream[T any] struct {
 	description StreamDescription
 
-	publisherMap  publisherSync[T]
+	publisherMap  publisherMap[T]
 	subscriberMap notificationMap[T]
 	notifyMutex   sync.Mutex
 }
@@ -50,7 +51,7 @@ type localAsyncStream[T any] struct {
 	inChannel events.EventChannel[T]
 	buffer    buffer.Buffer[T]
 
-	publisherMap  publisherSync[T]
+	publisherMap  publisherMap[T]
 	subscriberMap notificationMap[T]
 	notifyMutex   sync.Mutex
 
@@ -58,12 +59,12 @@ type localAsyncStream[T any] struct {
 	closed sync.WaitGroup
 }
 
-func NewStream[T any](topic string, async bool) Stream[T] {
+func NewStream[T any](topic string, async bool) typedStream[T] {
 	return NewStreamD[T](MakeStreamDescription[T](topic, async))
 }
 
-func NewStreamD[T any](description StreamDescription) Stream[T] {
-	var stream Stream[T]
+func NewStreamD[T any](description StreamDescription) typedStream[T] {
+	var stream typedStream[T]
 	if description.Async {
 		stream = newLocalAsyncStream[T](description)
 	} else {
@@ -106,19 +107,11 @@ func (s *localSyncStream[T]) events() buffer.Buffer[T] {
 	return buffer.NewSimpleAsyncBuffer[T]()
 }
 
-func (s *localSyncStream[T]) setEvents(buffer.Buffer[T]) {
-	// Intentional Event Loss
-}
-
 func (l *localAsyncStream[T]) events() buffer.Buffer[T] {
 	return l.buffer
 }
 
-func (l *localAsyncStream[T]) setEvents(b buffer.Buffer[T]) {
-	l.buffer.AddEvents(b.Dump())
-}
-
-func (l *localAsyncStream[T]) ForceClose() {
+func (l *localAsyncStream[T]) forceClose() {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
@@ -289,7 +282,7 @@ func (s *localSyncStream[T]) TryClose() {
 
 }
 
-func (s *localSyncStream[T]) ForceClose() {
+func (s *localSyncStream[T]) forceClose() {
 	s.subscriberMap.clear()
 	s.publisherMap.clear()
 }
@@ -300,14 +293,37 @@ func (s *localSyncStream[T]) setNotifiers(m notificationMap[T]) {
 	s.subscriberMap = m
 }
 
-func (s *localSyncStream[T]) notifiers() notificationMap[T] {
-	return s.subscriberMap
-}
-
 func (l *localAsyncStream[T]) setNotifiers(m notificationMap[T]) {
 	l.subscriberMap = m
 }
 
-func (l *localAsyncStream[T]) notifiers() notificationMap[T] {
+func (s *localSyncStream[T]) copyFrom(stream Stream) {
+	if oldStream, ok := stream.(typedStream[T]); ok {
+		s.subscriberMap = oldStream.subscribers()
+		s.publisherMap = oldStream.publishers()
+	}
+}
+
+func (l *localAsyncStream[T]) copyFrom(stream Stream) {
+	if oldStream, ok := stream.(typedStream[T]); ok {
+		l.subscriberMap = oldStream.subscribers()
+		l.publisherMap = oldStream.publishers()
+		l.buffer.AddEvents(oldStream.events().Dump())
+	}
+}
+
+func (s *localSyncStream[T]) publishers() publisherMap[T] {
+	return s.publisherMap
+}
+
+func (l *localAsyncStream[T]) publishers() publisherMap[T] {
+	return l.publisherMap
+}
+
+func (s *localSyncStream[T]) subscribers() notificationMap[T] {
+	return s.subscriberMap
+}
+
+func (l *localAsyncStream[T]) subscribers() notificationMap[T] {
 	return l.subscriberMap
 }

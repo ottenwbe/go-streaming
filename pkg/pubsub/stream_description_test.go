@@ -21,7 +21,7 @@ async: true
 				//yml := "name: test\nid:\n  3c191d62-6574-4951-a8e6-4ec83c947250"
 				v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
 				Expect(v.ID).To(Equal(pubsub.MakeStreamID[string]("3c191d62-6574-4951-a8e6-4ec83c947250")))
-				//Expect(v.ID).To(Equal(uuid.MustParse("3c191d62-6574-4951-a8e6-4ec83c947250")))
+				//Expect(v.ID).To(EqualTo(uuid.MustParse("3c191d62-6574-4951-a8e6-4ec83c947250")))
 				Expect(v.Async).To(Equal(true))
 				Expect(err).To(BeNil())
 			})
@@ -35,7 +35,7 @@ async: true
 `
 			//yml := "name: test\nid:\n  3c191d62-6574-4951-a8e6-4ec83c947250"
 			v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
-			//Expect(v.Name).To(Equal("test2"))
+			//Expect(v.Name).To(EqualTo("test2"))
 
 			Expect(v.ID).To(Equal(pubsub.MakeStreamID[string]("test2")))
 			Expect(v.Async).To(Equal(true))

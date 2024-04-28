@@ -7,49 +7,41 @@ import (
 )
 
 var (
-	streamIndex    map[StreamID]StreamControl
-	mapAccessMutex sync.RWMutex
+	streamIdx            map[StreamID]Stream
+	streamIdxAccessMutex sync.RWMutex
 )
 
 var (
 	StreamTypeMismatchError = errors.New("pub sub: stream type mismatch")
 	StreamNotFoundError     = errors.New("pub sub: no stream found")
-	StreamNameExistsError   = errors.New("pub sub: stream id already exists")
 	StreamIDNilError        = errors.New("pub sub: stream id nil")
+	StreamRecNilError       = errors.New("pub sub: stream receiver nil")
 )
 
-// GetOrAddStreamD adds a stream to the pub sub system.
-// It is similar to GetOrAddStream, except that it takes a StreamDescription as input.
-func GetOrAddStreamD[T any](description StreamDescription) (StreamControl, error) {
-	stream := NewStreamD[T](description)
-	return GetOrAddStream(stream)
-}
+// GetOrAddStreamD adds one streams to the pub sub system or returns an existing one.
+func GetOrAddStreamD[T any](streamDescription StreamDescription) (Stream, error) {
+	streamIdxAccessMutex.Lock()
+	defer streamIdxAccessMutex.Unlock()
 
-// GetOrAddStream adds a stream to the pub sub system or returns an existing one.
-func GetOrAddStream(stream StreamControl) (StreamControl, error) {
-	mapAccessMutex.Lock()
-	defer mapAccessMutex.Unlock()
-
+	stream := NewStreamD[T](streamDescription)
 	return doGetOrAddStream(stream)
 }
 
-func doGetOrAddStream(stream StreamControl) (StreamControl, error) {
-	err := validateStream(stream)
-	if err != nil {
-		return stream, err
+// GetOrAddStreams adds one or more streams to the pub sub system or returns an existing one.
+func GetOrAddStreams(streams ...Stream) []Stream {
+	streamIdxAccessMutex.Lock()
+	defer streamIdxAccessMutex.Unlock()
+
+	for i, stream := range streams {
+		streams[i], _ = doGetOrAddStream(stream)
 	}
 
-	if existingStream, ok := streamIndex[stream.ID()]; ok {
-		return existingStream, nil
-	} else {
-		addStream(stream)
-		return stream, nil
-	}
+	return streams
 }
 
-func AddOrReplaceStreamD[T any](description StreamDescription) (Stream[T], error) {
+func AddOrReplaceStreamD[T any](description StreamDescription) (Stream, error) {
 	var (
-		stream Stream[T]
+		stream typedStream[T]
 		err    error
 	)
 
@@ -59,106 +51,43 @@ func AddOrReplaceStreamD[T any](description StreamDescription) (Stream[T], error
 	return stream, err
 }
 
-func AddOrReplaceStream[T any](newStream Stream[T]) error {
-	mapAccessMutex.Lock()
-	defer mapAccessMutex.Unlock()
+func AddOrReplaceStream(newStream Stream) error {
+	streamIdxAccessMutex.Lock()
+	defer streamIdxAccessMutex.Unlock()
 
 	return doAddOrReplaceStream(newStream)
 }
 
-func ForceRemoveStreamD(description StreamDescription) {
-	ForceRemoveStream(description.StreamID())
-}
-
-func ForceRemoveStream(streamID StreamID) {
-	mapAccessMutex.Lock()
-	defer mapAccessMutex.Unlock()
-
-	if s, ok := streamIndex[streamID]; ok {
-		s.ForceClose()
-		delete(streamIndex, streamID)
-	}
-}
-
-func GetOrAddStreams(streams []StreamControl) []StreamControl {
-	mapAccessMutex.Lock()
-	defer mapAccessMutex.Unlock()
-
-	for i, stream := range streams {
-		streams[i], _ = doGetOrAddStream(stream)
-	}
-
-	return streams
-}
-
-func TryRemoveStreams(streams ...StreamControl) {
-	mapAccessMutex.Lock()
-	defer mapAccessMutex.Unlock()
+// ForceRemoveStream takes StreamDescriptions and ensures that all resources are closed.
+// The streams will be removed from the central pub sub system.
+func ForceRemoveStream(streams ...StreamDescription) {
+	streamIdxAccessMutex.Lock()
+	defer streamIdxAccessMutex.Unlock()
 
 	for _, stream := range streams {
-		if !stream.HasPublishersOrSubscribers() {
-			delete(streamIndex, stream.ID())
+		if s, ok := streamIdx[stream.ID]; ok {
+			s.forceClose()
+			delete(streamIdx, stream.ID)
 		}
 	}
-
 }
 
-func doAddOrReplaceStream[T any](newStream Stream[T]) error {
+func TryRemoveStreams(streams ...Stream) {
+	streamIdxAccessMutex.Lock()
+	defer streamIdxAccessMutex.Unlock()
 
-	err := validateStream(newStream)
-	if err != nil {
-		return err
-	}
-
-	tryCopyExistingStreamToNewStream[T](newStream)
-
-	addStream(newStream)
-
-	return nil
-}
-
-func tryCopyExistingStreamToNewStream[T any](newStream Stream[T]) {
-	if s, ok := streamIndex[newStream.ID()]; ok {
-		newStream.setNotifiers(s.(Stream[T]).notifiers())
-		newStream.setEvents(s.(Stream[T]).events())
-	}
-}
-
-func addStream(newStream StreamControl) {
-	streamIndex[newStream.ID()] = newStream
-}
-
-func validateStream(newStream StreamControl) error {
-
-	if newStream.ID().IsNil() {
-		return StreamIDNilError
-	}
-
-	//if stream is indexed, name should not be duplicated
-	if _, idFound := streamIndex[newStream.ID()]; idFound {
-		return StreamNameExistsError
-	}
-	return nil
-}
-
-func getAndConvertStreamByID[T any](id StreamID) (Stream[T], error) {
-
-	if stream, ok := streamIndex[id]; ok {
-		switch stream.(type) {
-		case Stream[T]:
-
-			return stream.(Stream[T]), nil
-		default:
-			return nil, StreamTypeMismatchError
+	for _, stream := range streams {
+		if s, ok := streamIdx[stream.ID()]; ok && !s.HasPublishersOrSubscribers() {
+			s.TryClose()
+			delete(streamIdx, stream.ID())
 		}
 	}
-	return nil, StreamNotFoundError
 
 }
 
 func Subscribe[T any](id StreamID) (StreamReceiver[T], error) {
-	mapAccessMutex.RLock()
-	defer mapAccessMutex.RUnlock()
+	streamIdxAccessMutex.RLock()
+	defer streamIdxAccessMutex.RUnlock()
 
 	if stream, err := getAndConvertStreamByID[T](id); err == nil {
 		return stream.subscribe()
@@ -167,22 +96,26 @@ func Subscribe[T any](id StreamID) (StreamReceiver[T], error) {
 	}
 }
 
-func Unsubscribe[T any](rec StreamReceiver[T]) {
-	mapAccessMutex.RLock()
-	defer mapAccessMutex.RUnlock()
+func Unsubscribe[T any](rec StreamReceiver[T]) error {
+	streamIdxAccessMutex.RLock()
+	defer streamIdxAccessMutex.RUnlock()
 
 	if rec == nil {
-		return //TODO error?
+		return StreamRecNilError
 	}
 
 	if s, err := getAndConvertStreamByID[T](rec.StreamID()); err == nil {
 		s.unsubscribe(rec.ID())
 	}
+
+	return nil
 }
 
+// InstantPublishByTopic routes the event to the given topic, iff the stream exists.
+// Note, this is only a helper function and for consistent streaming register a publisher; see RegisterPublisher.
 func InstantPublishByTopic[T any](topic string, event events.Event[T]) (err error) {
-	mapAccessMutex.RLock()
-	defer mapAccessMutex.RUnlock()
+	streamIdxAccessMutex.RLock()
+	defer streamIdxAccessMutex.RUnlock()
 
 	publisher, err := RegisterPublisher[T](MakeStreamID[T](topic))
 	defer func(publisher Publisher[T]) { err = UnRegisterPublisher[T](publisher) }(publisher)
@@ -214,22 +147,85 @@ func UnRegisterPublisher[T any](publisher Publisher[T]) error {
 	}
 }
 
-func GetStreamByTopic[T any](topic string) (Stream[T], error) {
+func GetStreamByTopic[T any](topic string) (Stream, error) {
 	return getAndConvertStreamByID[T](MakeStreamID[T](topic))
 }
 
-func GetStream[T any](id StreamID) (Stream[T], error) {
-	return getAndConvertStreamByID[T](id)
+func GetStream(id StreamID) (Stream, error) {
+	if s, ok := streamIdx[id]; ok {
+		return s, nil
+	}
+	return nil, StreamNotFoundError
 }
 
 func GetDescription(id StreamID) (StreamDescription, error) {
-	if s, ok := streamIndex[id]; ok {
+	if s, ok := streamIdx[id]; ok {
 		return s.Description(), nil
 	} else {
 		return StreamDescription{}, StreamNotFoundError
 	}
 }
 
+func doGetOrAddStream(stream Stream) (Stream, error) {
+	err := validateStream(stream)
+	if err != nil {
+		return stream, err
+	}
+
+	if existingStream, ok := streamIdx[stream.ID()]; ok {
+		return existingStream, nil
+	} else {
+		addStream(stream)
+		return stream, nil
+	}
+}
+
+func doAddOrReplaceStream(newStream Stream) error {
+
+	err := validateStream(newStream)
+	if err != nil {
+		return err
+	}
+
+	tryCopyExistingStreamToNewStream(newStream)
+	addStream(newStream)
+
+	return nil
+}
+
+func tryCopyExistingStreamToNewStream(newStream Stream) {
+	if s, ok := streamIdx[newStream.ID()]; ok {
+		newStream.copyFrom(s)
+	}
+}
+
+func addStream(newStream Stream) {
+	streamIdx[newStream.ID()] = newStream
+}
+
+func validateStream(newStream Stream) error {
+	if newStream.ID().IsNil() {
+		return StreamIDNilError
+	}
+
+	return nil
+}
+
+func getAndConvertStreamByID[T any](id StreamID) (typedStream[T], error) {
+
+	if stream, ok := streamIdx[id]; ok {
+		switch stream.(type) {
+		case typedStream[T]:
+
+			return stream.(typedStream[T]), nil
+		default:
+			return nil, StreamTypeMismatchError
+		}
+	}
+	return nil, StreamNotFoundError
+
+}
+
 func init() {
-	streamIndex = make(map[StreamID]StreamControl)
+	streamIdx = make(map[StreamID]Stream)
 }
