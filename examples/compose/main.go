@@ -46,9 +46,9 @@ func defineContinuousQueries() (*query.ContinuousQuery, *query.ContinuousQuery) 
 	return q1, q2
 }
 
-func receiveProcessedEvents(res *query.ResultSubscription[int]) {
+func receiveProcessedEvents(res *query.TypedContinuousQuery[int]) {
 	for i := 0; i < numEvents/shift; i++ {
-		e := <-res.Notifier()
+		e, _ := res.Notify()
 		zap.S().Infof("event received %v", e)
 	}
 }
@@ -56,7 +56,7 @@ func receiveProcessedEvents(res *query.ResultSubscription[int]) {
 func publishEvents() {
 	go func() {
 		for i := 0; i < numEvents; i++ {
-			if err := pubsub.Publish[float64]("in", events.NewEvent[float64](rand.Float64())); err != nil {
+			if err := pubsub.InstantPublishByTopic[float64]("in", events.NewEvent[float64](rand.Float64())); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
 			}
 		}
