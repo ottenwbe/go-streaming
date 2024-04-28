@@ -23,8 +23,7 @@ func main() {
 		Build()
 
 	// start the continuous query
-	qs, _ := query.Run[float64](q, err...)
-
+	qs, _ := query.RunAndSubscribe[float64](q, err...)
 	// always close your query when no longer needed to free resources
 	defer query.Close(qs)
 
@@ -32,9 +31,9 @@ func main() {
 	waitForProcessedEvents(qs)
 }
 
-func waitForProcessedEvents(res *query.ResultSubscription[float64]) {
+func waitForProcessedEvents(res *query.TypedContinuousQuery[float64]) {
 	for i := 0; i < numEvents/shift; i++ {
-		if e, more := <-res.Notifier(); more {
+		if e, more := res.Notify(); more {
 			zap.S().Infof("event received %v", e)
 		}
 	}
@@ -43,7 +42,7 @@ func waitForProcessedEvents(res *query.ResultSubscription[float64]) {
 func publishEvents() {
 	go func() {
 		for i := 0; i < numEvents; i++ {
-			if err := pubsub.Publish[float64]("in", events.NewEvent[float64](rand.Float64())); err != nil {
+			if err := pubsub.InstantPublishByTopic[float64]("in", events.NewEvent[float64](rand.Float64())); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
 			}
 		}

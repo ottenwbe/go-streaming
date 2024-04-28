@@ -3,7 +3,7 @@ package engine_test
 import (
 	"go-stream-processing/internal/engine"
 	"go-stream-processing/pkg/events"
-	pubsub2 "go-stream-processing/pkg/pubsub"
+	"go-stream-processing/pkg/pubsub"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -22,8 +22,8 @@ var _ = Describe("OperatorRepository", func() {
 	)
 
 	BeforeEach(func() {
-		streamIn := pubsub2.NewLocalSyncStream[int](pubsub2.MakeStreamDescription("int values", false))
-		streamOut := pubsub2.NewLocalSyncStream[int](pubsub2.MakeStreamDescription("summed up values", false))
+		streamIn := pubsub.NewStreamD[int](pubsub.MakeStreamDescription[int]("int values", false))
+		streamOut := pubsub.NewStreamD[int](pubsub.MakeStreamDescription[int]("summed up values", false))
 
 		inStream := engine.NewSingleStreamInput1[int](streamIn.ID())
 
@@ -36,7 +36,7 @@ var _ = Describe("OperatorRepository", func() {
 
 		}
 
-		op = engine.NewOperatorN[engine.SingleStreamSelection1[int], int](smaller, inStream, streamOut)
+		op = engine.NewOperatorN[engine.SingleStreamSelection1[int], int](smaller, inStream, streamOut.ID())
 	})
 
 	Context("Get and put", func() {

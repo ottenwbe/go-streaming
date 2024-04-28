@@ -8,71 +8,85 @@ import (
 	"go-stream-processing/pkg/pubsub"
 )
 
-type QueryDescription struct {
-	operators []engine.OperatorControl
-	streams   map[pubsub.StreamID]pubsub.StreamDescription
-	output    pubsub.StreamID
-}
+var nilContinuousError = errors.New("continuous error is empty")
 
-func (q *QueryDescription) AddOutput(outputID pubsub.StreamID) {
-	q.output = outputID
-}
-
-func (q *QueryDescription) AddStreams(stream pubsub.StreamDescription) {
-	if _, ok := q.streams[stream.ID]; !ok {
-		q.streams[stream.StreamID()] = stream
-	}
-}
-
-func (q *QueryDescription) Streams() map[pubsub.StreamID]pubsub.StreamDescription {
-	return q.streams
-}
-
-func (q *QueryDescription) Operators() []engine.OperatorControl {
-	return q.operators
-}
-
-func (q *QueryDescription) AddOperator(operator engine.OperatorControl) {
-	q.operators = append(q.operators, operator)
-}
-
-func NewQueryDescription() *QueryDescription {
-	return &QueryDescription{
-		operators: make([]engine.OperatorControl, 0),
-		streams:   make(map[pubsub.StreamID]pubsub.StreamDescription),
-		output:    pubsub.NilStreamID(),
-	}
+type Builder struct {
+	q     *ContinuousQuery
+	error []error
 }
 
 type ContinuousQuery struct {
 	id ID
 
 	operators []engine.OperatorControl
-	streams   []pubsub.StreamControl
-	Output    pubsub.StreamID
+	streams   []pubsub.Stream
+	output    pubsub.StreamID
 }
 
-type Builder struct {
-	q *ContinuousQuery
-
-	error []error
+type TypedContinuousQuery[T any] struct {
+	*ContinuousQuery
+	OutputReceiver pubsub.StreamReceiver[T]
 }
 
-type ResultSubscription[T any] struct {
-	continuousQuery *ContinuousQuery
-	receiver        *pubsub.StreamReceiver[T]
+func Close[T any](qs *TypedContinuousQuery[T]) {
+	if qs == nil {
+		return //TODO error
+	}
+
+	pubsub.Unsubscribe(qs.OutputReceiver)
+	qs.close()
+	qs = nil
 }
 
-func (qs *ResultSubscription[T]) Notifier() events.EventChannel[T] {
-	return qs.receiver.Notify
+func RunAndSubscribe[T any](c *ContinuousQuery, err ...error) (*TypedContinuousQuery[T], []error) {
+
+	err, done := anyErrorExists(err, c)
+	if done {
+		return nil, err
+	}
+
+	if runErr := c.run(); runErr != nil {
+		c.close()
+		return nil, append(err, runErr)
+	}
+
+	res, subErr := pubsub.Subscribe[T](c.output)
+	if subErr != nil {
+		c.close()
+		return nil, append(err, subErr)
+	}
+
+	return &TypedContinuousQuery[T]{
+		ContinuousQuery: c,
+		OutputReceiver:  res,
+	}, err
+}
+
+func anyErrorExists(err []error, c *ContinuousQuery) ([]error, bool) {
+	for i, _ := range err {
+		if err[i] == nil {
+			err = append(err[:i], err[i+1:]...)
+		}
+	}
+
+	if c == nil {
+		err = append(err, nilContinuousError)
+	}
+
+	return err, len(err) > 0
+}
+
+func (qs *TypedContinuousQuery[T]) Notify() (events.Event[T], bool) {
+	e, ok := <-qs.OutputReceiver.Notify()
+	return e, ok
 }
 
 func (c *ContinuousQuery) ComposeWith(c2 *ContinuousQuery) (*ContinuousQuery, error) {
 
-	if !c2.Output.IsNil() && in(c.streams, c2.Output) {
-		c2.Output = c.Output
-	} else if (!c.Output.IsNil() && in(c2.streams, c.Output)) || (c.Output.IsNil() && !c2.Output.IsNil()) {
-		c.Output = c2.Output
+	if !c2.output.IsNil() && in(c.streams, c2.output) {
+		c2.output = c.output
+	} else if (!c.output.IsNil() && in(c2.streams, c.output)) || (c.output.IsNil() && !c2.output.IsNil()) {
+		c.output = c2.output
 	} else {
 		return nil, errors.New("output streams don't match")
 	}
@@ -87,51 +101,21 @@ func (c *ContinuousQuery) ID() ID {
 	return c.id
 }
 
-func Close[T any](qs *ResultSubscription[T]) {
-	pubsub.Unsubscribe(qs.receiver)
-	qs.continuousQuery.close()
-	qs = nil
-}
-
 func (c *ContinuousQuery) close() {
 	c.stopEverything()
 
-	pubsub.TryRemoveStreams(c.streams)
+	pubsub.TryRemoveStreams(c.streams...)
 	engine.OperatorRepository().Remove(c.operators)
 
 	QueryRepository().remove(c.id)
 }
 
-func Run[T any](c *ContinuousQuery, err ...error) (*ResultSubscription[T], []error) {
-
-	for i, _ := range err {
-		if err[i] == nil {
-			err = append(err[:i], err[i+1:]...)
-		}
-	}
-
-	if len(err) > 0 {
-		return nil, err
-	}
-
-	if runErr := c.run(); runErr != nil {
-		return nil, append(err, runErr)
-	}
-
-	res, subErr := pubsub.Subscribe[T](c.Output)
-	if subErr != nil {
-		c.close()
-		return nil, append(err, subErr)
-	}
-
-	return &ResultSubscription[T]{
-		continuousQuery: c,
-		receiver:        res,
-	}, err
-}
-
 func (c *ContinuousQuery) run() error {
+
+	c.streams = pubsub.GetOrAddStreams(c.streams...)
+
 	c.startEverything()
+
 	err := QueryRepository().put(c)
 	return err
 }
@@ -140,12 +124,12 @@ func newQueryControl(outStream pubsub.StreamID) *ContinuousQuery {
 	return &ContinuousQuery{
 		id:        ID(uuid.New()),
 		operators: make([]engine.OperatorControl, 0),
-		streams:   []pubsub.StreamControl{},
-		Output:    outStream,
+		streams:   []pubsub.Stream{},
+		output:    outStream,
 	}
 }
 
-func (c *ContinuousQuery) addStreams(streams ...pubsub.StreamControl) {
+func (c *ContinuousQuery) addStreams(streams ...pubsub.Stream) {
 	c.streams = append(c.streams, streams...)
 }
 
@@ -171,7 +155,7 @@ func (c *ContinuousQuery) stopEverything() {
 	}
 }
 
-func in(streams []pubsub.StreamControl, id pubsub.StreamID) bool {
+func in(streams []pubsub.Stream, id pubsub.StreamID) bool {
 	for _, stream := range streams {
 		if stream.ID() == id {
 			return true
@@ -185,15 +169,15 @@ func NewBuilder() *Builder {
 		q: &ContinuousQuery{
 			id:        ID(uuid.New()),
 			operators: make([]engine.OperatorControl, 0),
-			streams:   make([]pubsub.StreamControl, 0),
-			Output:    pubsub.NilStreamID(),
+			streams:   make([]pubsub.Stream, 0),
+			output:    pubsub.NilStreamID(),
 		},
 		error: make([]error, 0),
 	}
 }
 
-func S[T any](id pubsub.StreamID, async bool) (pubsub.StreamControl, error) {
-	d := pubsub.MakeStreamDescription(id, async)
+func S[T any](topic string, async bool) (pubsub.Stream, error) {
+	d := pubsub.MakeStreamDescription[T](topic, async)
 	return pubsub.AddOrReplaceStreamD[T](d)
 }
 
@@ -211,7 +195,7 @@ func (b *Builder) Query(q *ContinuousQuery, pErr error) *Builder {
 	return b
 }
 
-func (b *Builder) Stream(s pubsub.StreamControl, err error) *Builder {
+func (b *Builder) Stream(s pubsub.Stream, err error) *Builder {
 	b.q.addStreams(s)
 	if err != nil {
 		b.error = append(b.error, err)

@@ -9,8 +9,8 @@ import (
 
 type ID uuid.UUID
 
-func (q ID) String() string {
-	return uuid.UUID(q).String()
+func (id ID) String() string {
+	return uuid.UUID(id).String()
 }
 
 type (
@@ -29,7 +29,7 @@ func (c concreteQueryRepository) String() string {
 
 	s := "ContinuousQueryRepository {"
 	for id, _ := range c.List() {
-		s = fmt.Sprintf("%v %v ", s, id)
+		s = fmt.Sprintf("%v %v, \n", s, id)
 	}
 	s += "}"
 	return s
@@ -46,11 +46,10 @@ func (c concreteQueryRepository) remove(id ID) {
 
 func (c concreteQueryRepository) put(q *ContinuousQuery) error {
 	if q.ID() == ID(uuid.Nil) {
-		return errors.New("invalid query id")
+		return errors.New("invalid query ID")
 	}
-
 	if _, ok := c.Get(q.ID()); ok {
-		return errors.New("query already exists")
+		return errors.New("query with this ID already exists")
 	}
 
 	c[q.ID()] = q

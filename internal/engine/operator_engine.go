@@ -19,7 +19,7 @@ type (
 		Close()
 	}
 	OperatorStreamSubscription[TSub any] struct {
-		streamReceiver *pubsub.StreamReceiver[TSub]
+		streamReceiver pubsub.StreamReceiver[TSub]
 		streamID       pubsub.StreamID
 		inputBuffer    buffer.Buffer[TSub]
 		active         bool
@@ -195,7 +195,7 @@ func (o *OperatorStreamSubscription[T]) Run() {
 
 	go func() {
 		for {
-			event, more := <-o.streamReceiver.Notify
+			event, more := <-o.streamReceiver.Notify()
 			if more {
 				o.inputBuffer.AddEvent(event)
 			} else {
@@ -222,8 +222,9 @@ type Operator1[TIN any, TOUT any] struct {
 	active bool
 	fin    chan bool
 
-	Input  Consumable[TIN]
-	Output pubsub.Publisher[TOUT]
+	Input    Consumable[TIN]
+	Output   pubsub.Publisher[TOUT]
+	OutputID pubsub.StreamID
 }
 
 type OperatorN[TIN any, TOUT any] struct {
@@ -233,12 +234,14 @@ type OperatorN[TIN any, TOUT any] struct {
 	active bool
 	fin    chan bool
 
-	Input  Consumable[TIN]
-	Output pubsub.Publisher[TOUT]
+	Input    Consumable[TIN]
+	Output   pubsub.Publisher[TOUT]
+	OutputID pubsub.StreamID
 }
 
 func (op *Operator1[TIn, Tout]) Stop() {
 	if op.active == true {
+		_ = pubsub.UnRegisterPublisher[Tout](op.Output)
 		op.active = false
 		op.Input.Close()
 	}
@@ -254,6 +257,7 @@ func (op *Operator1[TIn, Tout]) Start() {
 		op.active = true
 
 		op.Input.Run()
+		op.Output, _ = pubsub.RegisterPublisher[Tout](op.OutputID)
 
 		go func() {
 
@@ -282,6 +286,7 @@ func (op *Operator1[TIn, Tout]) Start() {
 
 func (op *OperatorN[TIN, TOUT]) Stop() {
 	if op.active == true {
+		_ = pubsub.UnRegisterPublisher[TOUT](op.Output)
 		op.active = false
 		op.Input.Close()
 	}
@@ -296,6 +301,7 @@ func (op *OperatorN[TIN, TOUT]) Start() {
 		op.active = true
 
 		op.Input.Run()
+		op.Output, _ = pubsub.RegisterPublisher[TOUT](op.OutputID)
 
 		go func() {
 
@@ -324,27 +330,27 @@ func (op *OperatorN[TIN, TOUT]) Start() {
 	}
 }
 
-func NewOperator[TIn, Tout any](f func(TIn) events.Event[Tout], in Consumable[TIn], out pubsub.Publisher[Tout]) OperatorControl {
+func NewOperator[TIn, Tout any](f func(TIn) events.Event[Tout], in Consumable[TIn], outId pubsub.StreamID) OperatorControl {
 	o := &Operator1[TIn, Tout]{
-		id:     OperatorID(uuid.New()),
-		f:      f,
-		Input:  in,
-		Output: out,
-		active: false,
-		fin:    make(chan bool),
+		id:       OperatorID(uuid.New()),
+		f:        f,
+		Input:    in,
+		OutputID: outId,
+		active:   false,
+		fin:      make(chan bool),
 	}
 
 	return o
 }
 
-func NewOperatorN[TIn, Tout any](f func(TIn) []events.Event[Tout], in Consumable[TIn], out pubsub.Publisher[Tout]) OperatorControl {
+func NewOperatorN[TIn, Tout any](f func(TIn) []events.Event[Tout], in Consumable[TIn], outID pubsub.StreamID) OperatorControl {
 	return &OperatorN[TIn, Tout]{
-		id:     OperatorID(uuid.New()),
-		f:      f,
-		Input:  in,
-		Output: out,
-		active: false,
-		fin:    make(chan bool),
+		id:       OperatorID(uuid.New()),
+		f:        f,
+		Input:    in,
+		OutputID: outID,
+		active:   false,
+		fin:      make(chan bool),
 	}
 }
 
