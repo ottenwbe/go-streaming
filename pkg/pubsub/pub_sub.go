@@ -83,6 +83,7 @@ func TryRemoveStreams(streams ...Stream) {
 			if s.TryClose() {
 				delete(streamIdx, stream.ID())
 			}
+
 		}
 	}
 }
@@ -113,6 +114,7 @@ func Unsubscribe[T any](rec StreamReceiver[T]) error {
 	} else {
 		return err
 	}
+}
 
 }
 

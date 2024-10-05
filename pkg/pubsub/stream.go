@@ -268,6 +268,7 @@ func (s *localSyncStream[T]) removePublisher(id PublisherID) {
 	s.publisherMap.remove(id)
 }
 
+
 func (s *localSyncStream[T]) subscribe() (StreamReceiver[T], error) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
