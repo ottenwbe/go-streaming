@@ -12,11 +12,14 @@ func (i StreamReceiverID) String() string {
 	return uuid.UUID(i).String()
 }
 
-// StreamReceiver allows subscribers to get notified about the streams
+// StreamReceiver allows subscribers to get notified about events published in the streams
 type StreamReceiver[T any] interface {
 	StreamID() StreamID
 	ID() StreamReceiverID
+	// Notify can be called to directly get notified by the underlying event channel
 	Notify() events.EventChannel[T]
+	// Consume can be called to wait for and receive (asynchronously) an individual event.
+	// Errors occur when the underlying event channel is closed and no more events can be received.
 	Consume() (events.Event[T], error)
 }
 
@@ -71,11 +74,11 @@ func (m notificationMap[T]) remove(id StreamReceiverID) {
 }
 func (m notificationMap[T]) notifyAll(events []events.Event[T]) {
 	for _, e := range events {
-		m.notify(e)
+		m.doNotify(e)
 	}
 }
 
-func (m notificationMap[T]) notify(e events.Event[T]) {
+func (m notificationMap[T]) doNotify(e events.Event[T]) {
 	for _, notifier := range m {
 		/*
 			The code should never panic here, because notifiers are unsubscribed before stream closes.

@@ -28,17 +28,19 @@ func GetOrAddStreamD[T any](streamDescription StreamDescription) (Stream, error)
 }
 
 // GetOrAddStreams adds one or more streams to the pub sub system or returns an existing one.
+// Note: Ignores Errors.
 func GetOrAddStreams(streams ...Stream) []Stream {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
 
 	for i, stream := range streams {
-		streams[i], _ = doGetOrAddStream(stream)
+		streams[i], _ = doGetOrAddStream(stream) // TODO: what about the error
 	}
 
 	return streams
 }
 
+// AddOrReplaceStreamD uses a description of a stream to add it or replace it to the pub sub system
 func AddOrReplaceStreamD[T any](description StreamDescription) (Stream, error) {
 	var (
 		stream typedStream[T]
@@ -78,13 +80,14 @@ func TryRemoveStreams(streams ...Stream) {
 
 	for _, stream := range streams {
 		if s, ok := streamIdx[stream.ID()]; ok && !s.HasPublishersOrSubscribers() {
-			s.TryClose()
-			delete(streamIdx, stream.ID())
+			if s.TryClose() {
+				delete(streamIdx, stream.ID())
+			}
 		}
 	}
-
 }
 
+// Subscribe to a stream by the stream's id
 func Subscribe[T any](id StreamID) (StreamReceiver[T], error) {
 	streamIdxAccessMutex.RLock()
 	defer streamIdxAccessMutex.RUnlock()
@@ -106,9 +109,11 @@ func Unsubscribe[T any](rec StreamReceiver[T]) error {
 
 	if s, err := getAndConvertStreamByID[T](rec.StreamID()); err == nil {
 		s.unsubscribe(rec.ID())
+		return nil
+	} else {
+		return err
 	}
 
-	return nil
 }
 
 // InstantPublishByTopic routes the event to the given topic, iff the stream exists.
