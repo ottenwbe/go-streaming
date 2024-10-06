@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// Deprecated!
+
 var len = 100000
 
 func main() {

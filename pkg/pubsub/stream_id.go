@@ -24,8 +24,8 @@ type StreamID struct {
 }
 
 type marshalledStreamID struct {
-	Topic     string `yaml:"topic"`
-	TopicType string `yaml:"type"` // include topicType as a string
+	Topic     string `yaml:"topic"` // include topic as a string
+	TopicType string `yaml:"type"`  // include topicType as a string
 }
 
 func (s StreamID) MarshalJSON() ([]byte, error) {

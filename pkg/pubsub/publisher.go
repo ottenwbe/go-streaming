@@ -25,14 +25,6 @@ type (
 		// StreamID of the stream that an event of this publisher is published to
 		StreamID() StreamID
 	}
-	defaultPublisher[T any] struct {
-		publish  func(event events.Event[T]) error
-		id       PublisherID
-		streamID StreamID
-	}
-)
-
-type (
 	publisherMap[T any] interface {
 		publish(event events.Event[T]) error
 		streamID() StreamID
@@ -40,6 +32,11 @@ type (
 		newPublisher() Publisher[T]
 		remove(id PublisherID)
 		clear()
+	}
+	defaultPublisher[T any] struct {
+		publish  func(event events.Event[T]) error
+		id       PublisherID
+		streamID StreamID
 	}
 	publisherMapMutexSync[T any] struct {
 		publishers []*defaultPublisher[T]

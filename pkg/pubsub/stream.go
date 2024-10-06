@@ -9,9 +9,11 @@ import (
 
 var StreamInactiveError = errors.New("streams: stream not active")
 
+// Stream is a generic interface that is common to all streams with different types.
+// Actual streams have a type, i.e., basic ones like int or more complex ones.
 type Stream interface {
 	Run()
-	TryClose()
+	TryClose() bool
 	forceClose()
 
 	HasPublishersOrSubscribers() bool
@@ -118,24 +120,26 @@ func (l *localAsyncStream[T]) forceClose() {
 	l.subscriberMap.clear()
 	l.publisherMap.clear()
 
-	l.doClose(true)
+	l.doTryClose(true)
 }
 
-func (l *localAsyncStream[T]) TryClose() {
+func (l *localAsyncStream[T]) TryClose() bool {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
-	l.doClose(false)
+	return l.doTryClose(false)
 }
 
-func (l *localAsyncStream[T]) doClose(force bool) {
+func (l *localAsyncStream[T]) doTryClose(force bool) bool {
 	if (len(l.subscriberMap) == 0 || force) && l.active {
 		l.active = false
 		close(l.inChannel)
 		l.buffer.StopBlocking()
 
 		l.closed.Wait()
+		return true
 	}
+	return false
 }
 
 func (l *localAsyncStream[T]) Run() {
@@ -166,7 +170,7 @@ func (l *localAsyncStream[T]) Run() {
 		// read buffer and publish via subscriberMap
 		go func() {
 			for l.active {
-				l.subscriberMap.notify(l.buffer.GetAndRemoveNextEvent())
+				l.subscriberMap.doNotify(l.buffer.GetAndRemoveNextEvent())
 			}
 			l.closed.Done()
 		}()
@@ -230,7 +234,7 @@ func (s *localSyncStream[T]) ID() StreamID {
 }
 
 func (s *localSyncStream[T]) publish(e events.Event[T]) error {
-	s.subscriberMap.notify(e)
+	s.subscriberMap.doNotify(e)
 	return nil
 }
 
@@ -264,6 +268,7 @@ func (s *localSyncStream[T]) removePublisher(id PublisherID) {
 	s.publisherMap.remove(id)
 }
 
+
 func (s *localSyncStream[T]) subscribe() (StreamReceiver[T], error) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
@@ -278,8 +283,8 @@ func (s *localSyncStream[T]) Run() {
 
 }
 
-func (s *localSyncStream[T]) TryClose() {
-
+func (s *localSyncStream[T]) TryClose() bool {
+	return true
 }
 
 func (s *localSyncStream[T]) forceClose() {
