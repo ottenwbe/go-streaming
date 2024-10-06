@@ -9,6 +9,7 @@ import (
 
 var defaultBufferCapacity = 5
 
+// basicBuffer is an (internal) alias for an event array
 type basicBuffer[T any] []events.Event[T]
 
 // Buffer interface to interact with any buffer
@@ -30,8 +31,9 @@ type iterator[T any] struct {
 	buffer Buffer[T]
 }
 
-// AsyncBuffer represents an asynchronous buffer.
-type AsyncBuffer[T any] struct {
+// asyncBuffer represents an asynchronous buffer.
+// This is the base for all other buffers, like the SimpleAsyncBuffer
+type asyncBuffer[T any] struct {
 	buffer      basicBuffer[T]
 	id          uuid.UUID
 	bufferMutex sync.Mutex
@@ -43,14 +45,14 @@ type AsyncBuffer[T any] struct {
 // The Read operations GetNextEvent and RemoveNextEvent either return the next event,
 // if any is available in the buffer or wait until next event is available.
 type SimpleAsyncBuffer[T any] struct {
-	*AsyncBuffer[T]
+	*asyncBuffer[T]
 }
 
 // ConsumableAsyncBuffer allows to sync exactly one reader and n writer.
 // The Read operations PeekNextEvent and RemoveNextEvent either return the next event,
 // if any is available in the buffer or wait until next event is available.
 type ConsumableAsyncBuffer[T any] struct {
-	*AsyncBuffer[T]
+	*asyncBuffer[T]
 	selectionPolicy selection.Policy[T]
 }
 
@@ -62,8 +64,8 @@ func (b basicBuffer[T]) Len() int {
 	return len(b)
 }
 
-func newAsyncBuffer[T any]() *AsyncBuffer[T] {
-	s := &AsyncBuffer[T]{
+func newAsyncBuffer[T any]() *asyncBuffer[T] {
+	s := &asyncBuffer[T]{
 		buffer:      make(basicBuffer[T], 0, defaultBufferCapacity),
 		bufferMutex: sync.Mutex{},
 		stopped:     false,
@@ -75,28 +77,28 @@ func newAsyncBuffer[T any]() *AsyncBuffer[T] {
 
 func NewSimpleAsyncBuffer[T any]() Buffer[T] {
 	s := &SimpleAsyncBuffer[T]{
-		AsyncBuffer: newAsyncBuffer[T](),
+		asyncBuffer: newAsyncBuffer[T](),
 	}
 	return s
 }
 
 func NewConsumableAsyncBuffer[T any](policy selection.Policy[T]) Buffer[T] {
 	s := &ConsumableAsyncBuffer[T]{
-		AsyncBuffer:     newAsyncBuffer[T](),
+		asyncBuffer:     newAsyncBuffer[T](),
 		selectionPolicy: policy,
 	}
 	s.selectionPolicy.SetBuffer(&s.buffer)
 	return s
 }
 
-func (s *AsyncBuffer[T]) StartBlocking() {
+func (s *asyncBuffer[T]) StartBlocking() {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
 	s.stopped = false
 }
 
-func (s *AsyncBuffer[T]) StopBlocking() {
+func (s *asyncBuffer[T]) StopBlocking() {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
@@ -104,15 +106,15 @@ func (s *AsyncBuffer[T]) StopBlocking() {
 	s.cond.Broadcast()
 }
 
-func (s *AsyncBuffer[T]) Len() int {
+func (s *asyncBuffer[T]) Len() int {
 	return len(s.buffer)
 }
 
-func (s *AsyncBuffer[T]) Get(i int) events.Event[T] {
+func (s *asyncBuffer[T]) Get(i int) events.Event[T] {
 	return s.buffer[i]
 }
 
-func (s *AsyncBuffer[T]) Dump() []events.Event[T] {
+func (s *asyncBuffer[T]) Dump() []events.Event[T] {
 	destination := make([]events.Event[T], s.Len())
 	copy(destination, s.buffer)
 	return destination
@@ -121,7 +123,7 @@ func (s *AsyncBuffer[T]) Dump() []events.Event[T] {
 // PeekNextEvent returns the next buffered event, but no event will be removed from the buffer.
 // Blocks until at least one event buffered.
 // When stopped, returns nil.
-func (s *AsyncBuffer[T]) PeekNextEvent() events.Event[T] {
+func (s *asyncBuffer[T]) PeekNextEvent() events.Event[T] {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
@@ -135,7 +137,7 @@ func (s *AsyncBuffer[T]) PeekNextEvent() events.Event[T] {
 	return nil
 }
 
-func (s *AsyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
+func (s *asyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
@@ -155,7 +157,7 @@ func (s *AsyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
 }
 
 func (s *SimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
-	return []events.Event[T]{s.AsyncBuffer.GetAndRemoveNextEvent()}
+	return []events.Event[T]{s.asyncBuffer.GetAndRemoveNextEvent()}
 }
 
 func (s *SimpleAsyncBuffer[T]) AddEvents(events []events.Event[T]) {
@@ -194,7 +196,7 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	}
 
 	selection = s.selectionPolicy.NextSelection()
-	if selection.IsValid() {
+	if selection.IsValid() { // Selection is in some cases not valid if s.stopped
 		// Extract selected events from the buffer
 		selectedEvents = s.buffer[selection.Start : selection.End+1]
 	}

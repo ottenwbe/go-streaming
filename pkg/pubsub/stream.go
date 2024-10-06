@@ -114,23 +114,22 @@ func (l *localAsyncStream[T]) events() buffer.Buffer[T] {
 }
 
 func (l *localAsyncStream[T]) forceClose() {
-	l.notifyMutex.Lock()
-	defer l.notifyMutex.Unlock()
-
-	l.subscriberMap.clear()
-	l.publisherMap.clear()
-
 	l.doTryClose(true)
 }
 
 func (l *localAsyncStream[T]) TryClose() bool {
-	l.notifyMutex.Lock()
-	defer l.notifyMutex.Unlock()
-
 	return l.doTryClose(false)
 }
 
 func (l *localAsyncStream[T]) doTryClose(force bool) bool {
+	l.notifyMutex.Lock()
+	defer l.notifyMutex.Unlock()
+
+	if force {
+		l.subscriberMap.clear()
+		l.publisherMap.clear()
+	}
+
 	if (len(l.subscriberMap) == 0 || force) && l.active {
 		l.active = false
 		close(l.inChannel)
@@ -267,7 +266,6 @@ func (s *localSyncStream[T]) removePublisher(id PublisherID) {
 
 	s.publisherMap.remove(id)
 }
-
 
 func (s *localSyncStream[T]) subscribe() (StreamReceiver[T], error) {
 	s.notifyMutex.Lock()
