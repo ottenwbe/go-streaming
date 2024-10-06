@@ -1,27 +1,23 @@
-package main
+package pubsub
 
-import "fmt"
+import (
+	"fmt"
+	"go-stream-processing/pkg/events"
+	"go-stream-processing/pkg/pubsub"
+)
 
 func main() {
-	e1 := []int{1, 2, 3, 4}
-	e2 := e1[1:3]
-	fmt.Println(e2)
-
-	fmt.Println(e1)
-}
-
-/*func main() {
-	p, _ := zap.NewProduction() //TODO - handle error
-	zap.ReplaceGlobals(p)
-	router := gin.Default()
-
-	zap.S().Info("Started Server")
-
-	api.CreateRestAPI(router)
-
-	if err := router.Build("localhost:8080"); err != nil {
-		zap.S().Error("", zap.String("module", "main"))
+	streamConfig := pubsub.MakeStreamDescription[int]("int stream", false)
+	if intStream, err := pubsub.AddOrReplaceStreamD[int](streamConfig); err != nil {
+		fmt.Printf("intStream could not be created: %v", err)
 	}
 
+	go func() {
+		s,err := pubsub.Subscribe[int]("int stream")
+	}()
+
+	go func() {
+		intStream. <- events.NewEvent(1)
+	}()
+
 }
-*/
