@@ -9,25 +9,64 @@ import (
 
 var _ = Describe("Buffer", func() {
 
-	var (
-		buf buffer.Buffer[string]
-		e1  events.Event[string]
-		e2  events.Event[string]
-		e3  events.Event[string]
-	)
+	Describe("LimitedSimpleAsyncBuffer", func() {
 
-	BeforeEach(func() {
-		buf = buffer.NewSimpleAsyncBuffer[string]()
-		e1 = events.NewEvent("e1")
-		e2 = events.NewEvent("e2")
-		e3 = events.NewEvent("e3")
-	})
+		var (
+			buf buffer.Buffer[string]
+			e1  events.Event[string]
+			e2  events.Event[string]
+			e3  events.Event[string]
+		)
 
-	AfterEach(func() {
-		buf.StopBlocking()
+		BeforeEach(func() {
+			buf = buffer.NewLimitedSimpleAsyncBuffer[string](1)
+			e1 = events.NewEvent("e1")
+			e2 = events.NewEvent("e2")
+			e3 = events.NewEvent("e3")
+		})
+
+		AfterEach(func() {
+			buf.StopBlocking()
+		})
+
+		Context("Buffer with max length 1", func() {
+			It("should throw an error when a second event is added", func() {
+
+				err1 := buf.AddEvent(e1)
+				err2 := buf.AddEvent(e2)
+
+				Expect(err1).To(BeNil())
+				Expect(err2).To(Not(BeNil()))
+			})
+			It("should throw an error when more than two events are added", func() {
+
+				err1 := buf.AddEvents([]events.Event[string]{e1, e2, e3})
+				Expect(err1).To(Not(BeNil()))
+			})
+		})
+
 	})
 
 	Describe("SimpleAsyncBuffer", func() {
+
+		var (
+			buf buffer.Buffer[string]
+			e1  events.Event[string]
+			e2  events.Event[string]
+			e3  events.Event[string]
+		)
+
+		BeforeEach(func() {
+			buf = buffer.NewSimpleAsyncBuffer[string]()
+			e1 = events.NewEvent("e1")
+			e2 = events.NewEvent("e2")
+			e3 = events.NewEvent("e3")
+		})
+
+		AfterEach(func() {
+			buf.StopBlocking()
+		})
+
 		Context("GetAndConsumeNextEvent", func() {
 			It("reads and deletes in a fifo manner events from a buffer", func() {
 

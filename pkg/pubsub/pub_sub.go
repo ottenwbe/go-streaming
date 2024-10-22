@@ -212,7 +212,6 @@ func validateStream(newStream Stream) error {
 	if newStream.ID().IsNil() {
 		return StreamIDNilError
 	}
-
 	return nil
 }
 

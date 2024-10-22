@@ -55,7 +55,7 @@ func NewEventFromJSON(b []byte) (Event[map[string]interface{}], error) {
 	}
 
 	return &TemporalEvent[map[string]interface{}]{
-		TimeStamp: time.Now(),
+		TimeStamp: GetTimeStamp(),
 		Content:   content,
 	}, nil
 }

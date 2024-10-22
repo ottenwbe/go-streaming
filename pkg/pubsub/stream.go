@@ -61,10 +61,14 @@ type localAsyncStream[T any] struct {
 	closed sync.WaitGroup
 }
 
+// NewStream creates and returns a new stream
+// TODO unexport function or remove
 func NewStream[T any](topic string, async bool) typedStream[T] {
 	return NewStreamD[T](MakeStreamDescription[T](topic, async))
 }
 
+// NewStreamD creates and returns a typedStream of a given stream type T
+// TODO unexport function
 func NewStreamD[T any](description StreamDescription) typedStream[T] {
 	var stream typedStream[T]
 	if description.Async {
@@ -216,7 +220,7 @@ func (l *localAsyncStream[T]) subscribe() (StreamReceiver[T], error) {
 	defer l.notifyMutex.Unlock()
 
 	if l.active {
-		rec := newStreamReceiver[T](l)
+		rec := newStreamReceiver[T](l.ID())
 		l.subscriberMap[rec.ID()] = rec.Notify()
 		return rec, nil
 	}
@@ -271,7 +275,7 @@ func (s *localSyncStream[T]) subscribe() (StreamReceiver[T], error) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
 
-	rec := newStreamReceiver[T](s)
+	rec := newStreamReceiver[T](s.ID())
 	s.subscriberMap[rec.ID()] = rec.Notify()
 
 	return rec, nil
