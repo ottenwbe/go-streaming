@@ -2,49 +2,53 @@ package events
 
 import (
 	"encoding/json"
-	"time"
 )
 
-// Event interface for arbitrary events with any content of type T
-type Event[T any] interface {
-	GetTimestamp() time.Time
-	GetContent() T
-}
-
-func Arr[T any](events ...Event[T]) []Event[T] {
-	return events
-}
-
-type EventChannel[T any] chan Event[T]
-
-type TemporalEvent[T any] struct {
-	TimeStamp time.Time
-	Content   T
-}
-
-// NumericConstraint constraint to limit the type parameter to numeric types
-type NumericConstraint interface {
-	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64
-}
-
-type NumericEvent[T NumericConstraint] struct {
-	TemporalEvent[T]
-}
-
-func NewEvent[T any](content T) Event[T] {
-	return &TemporalEvent[T]{
-		TimeStamp: time.Now(),
-		Content:   content,
+type (
+	// Event interface for arbitrary events with any content of type T
+	Event[TContent any] interface {
+		GetStamp() TimeStamp
+		GetContent() TContent
 	}
-}
+	// TemporalEvent is an event with a TimeStamp, which allows to record the start and end time of an event
+	TemporalEvent[TContent any] struct {
+		Stamp   TimeStamp
+		Content TContent
+	}
+	EventChannel[TContent any] chan Event[TContent]
+)
+
+type (
+	// NumericConstraint constraint to limit the type parameter to numeric types
+	NumericConstraint interface {
+		~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64
+	}
+	// NumericEvent restricts the content to numeric data types
+	NumericEvent[T NumericConstraint] struct {
+		TemporalEvent[T]
+	}
+)
 
 func NewNumericEvent[T NumericConstraint](content T) Event[T] {
 	return &NumericEvent[T]{
-		TemporalEvent[T]{
-			TimeStamp: time.Now(),
-			Content:   content,
-		},
+		TemporalEvent: *NewEvent[T](content).(*TemporalEvent[T]),
 	}
+}
+
+func NewEvent[TContent any](content TContent) Event[TContent] {
+	return newStampedEvent[TContent](content, nil)
+}
+
+func NewEventFromOthers[TContent any](content TContent, others ...Event[TContent]) Event[TContent] {
+	return newStampedEventFromOthers[TContent](content, nil, others...)
+}
+
+func NewEventM[TContent any](content TContent, meta StampMeta) Event[TContent] {
+	return newStampedEvent[TContent](content, meta)
+}
+
+func NewEventFromOthersM[TContent any](content TContent, meta StampMeta, others ...Event[TContent]) Event[TContent] {
+	return newStampedEventFromOthers[TContent](content, meta, others...)
 }
 
 func NewEventFromJSON(b []byte) (Event[map[string]interface{}], error) {
@@ -54,16 +58,45 @@ func NewEventFromJSON(b []byte) (Event[map[string]interface{}], error) {
 		return nil, err
 	}
 
-	return &TemporalEvent[map[string]interface{}]{
-		TimeStamp: GetTimeStamp(),
-		Content:   content,
-	}, nil
+	return newStampedEvent[map[string]interface{}](content, nil), err
 }
 
-func (e *TemporalEvent[T]) GetTimestamp() time.Time {
-	return e.TimeStamp
+func newStampedEvent[TContent any](
+	content TContent,
+	meta StampMeta,
+) *TemporalEvent[TContent] {
+
+	return &TemporalEvent[TContent]{
+		Stamp:   createStamp(meta),
+		Content: content,
+	}
 }
 
-func (e *TemporalEvent[T]) GetContent() T {
+func newStampedEventFromOthers[TContent any](
+	content TContent,
+	meta StampMeta,
+	others ...Event[TContent],
+) *TemporalEvent[TContent] {
+
+	otherStamps := make([]TimeStamp, 0)
+	for _, other := range others {
+		otherStamps = append(otherStamps, other.GetStamp())
+	}
+
+	return &TemporalEvent[TContent]{
+		Stamp:   createStampBasedOnOthers(meta, otherStamps...),
+		Content: content,
+	}
+}
+
+func (e *TemporalEvent[TContent]) GetStamp() TimeStamp {
+	return e.Stamp
+}
+
+func (e *TemporalEvent[TContent]) GetContent() TContent {
 	return e.Content
+}
+
+func Arr[TContent any](events ...Event[TContent]) []Event[TContent] {
+	return events
 }

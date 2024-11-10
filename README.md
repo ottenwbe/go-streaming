@@ -7,8 +7,6 @@ That said the idea is to build a simple event streaming playground.
 The processing engine is mainly designed for flexibility and extendability to test features.
 Hence, also no specific language like CQL is supported.
 
-
-
 ## Examples
 
 A few examples are in place. Check them out:

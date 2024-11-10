@@ -1,20 +1,54 @@
 package events
 
-import "time"
+import (
+	"maps"
+	"time"
+)
 
-func GetTimeStamp() time.Time {
-	return time.Now()
+func createStamp(meta StampMeta) TimeStamp {
+
+	if meta == nil {
+		meta = StampMeta{}
+	}
+	now := getTime()
+
+	return TimeStamp{
+		StartTime: now,
+		EndTime:   now,
+		Meta:      meta,
+	}
 }
 
-func MaxTimeStamp(t ...time.Time) time.Time {
-	if len(t) > 0 {
-		maxTime := t[0]
-		for _, t2 := range t {
-			if t2.After(maxTime) {
-				maxTime = t2
+func createStampBasedOnOthers(meta StampMeta, stamps ...TimeStamp) TimeStamp {
+	if len(stamps) > 0 {
+		minTime := stamps[0].StartTime
+		maxTime := stamps[0].EndTime
+
+		newMeta := StampMeta{}
+		maps.Copy(newMeta, meta)
+
+		for _, eventStamp := range stamps {
+
+			if minTime.After(eventStamp.StartTime) {
+				minTime = eventStamp.StartTime
 			}
+
+			if maxTime.Before(eventStamp.EndTime) {
+				maxTime = eventStamp.EndTime
+			}
+
+			maps.Copy(newMeta, eventStamp.Meta)
 		}
-		return maxTime
+
+		return TimeStamp{
+			StartTime: minTime,
+			EndTime:   maxTime,
+			Meta:      newMeta,
+		}
 	}
-	return GetTimeStamp()
+	return createStamp(meta)
+}
+
+func getTime() time.Time {
+	return time.Now()
 }

@@ -126,7 +126,7 @@ func (s *CountingWindowPolicy[T]) Offset(offset int) {
 
 // NextSelectionReady checks if there are no more events within the window
 func (s *TemporalWindowPolicy[T]) NextSelectionReady() bool {
-	return s.buffer.Get(s.buffer.Len() - 1).GetTimestamp().After(s.windowEnd)
+	return s.buffer.Get(s.buffer.Len() - 1).GetStamp().StartTime.After(s.windowEnd)
 }
 
 // NextSelection returns the EventSelection for the current window
@@ -137,7 +137,7 @@ func (s *TemporalWindowPolicy[T]) NextSelection() EventSelection {
 // UpdateSelection updates the window based on the new event's timestamp
 func (s *TemporalWindowPolicy[T]) UpdateSelection() {
 	for i := s.currentRange.End + 1; i < s.buffer.Len(); {
-		ts := s.buffer.Get(i).GetTimestamp()
+		ts := s.buffer.Get(i).GetStamp().StartTime
 		if (ts.After(s.windowStart) || ts.Equal(s.windowStart)) && ts.Before(s.windowEnd) {
 			s.currentRange.End = i
 		} else if ts.After(s.windowEnd) || ts.Equal(s.windowEnd) {

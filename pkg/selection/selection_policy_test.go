@@ -55,23 +55,39 @@ var _ = Describe("Policy", func() {
 			It("can select and slide based on time", func() {
 
 				e1 := &events.TemporalEvent[string]{
-					TimeStamp: time.Now(),
-					Content:   "e1",
+					Stamp: events.TimeStamp{
+						StartTime: time.Now(),
+						EndTime:   time.Now(),
+						Meta:      map[string]interface{}{},
+					},
+					Content: "e1",
 				}
 				e2 := &events.TemporalEvent[string]{
-					TimeStamp: e1.TimeStamp.Add(time.Minute * 10),
-					Content:   "e2",
+					Stamp: events.TimeStamp{
+						StartTime: e1.Stamp.StartTime.Add(time.Minute * 10),
+						EndTime:   e1.Stamp.StartTime.Add(time.Minute * 10),
+						Meta:      map[string]interface{}{},
+					},
+					Content: "e2",
 				}
 				e3 := &events.TemporalEvent[string]{
-					TimeStamp: e1.TimeStamp.Add(time.Minute * 65),
-					Content:   "e3",
+					Stamp: events.TimeStamp{
+						StartTime: e1.Stamp.StartTime.Add(time.Minute * 65),
+						EndTime:   e1.Stamp.StartTime.Add(time.Minute * 65),
+						Meta:      map[string]interface{}{},
+					},
+					Content: "e3",
 				}
 				e4 := &events.TemporalEvent[string]{
-					TimeStamp: e1.TimeStamp.Add(time.Hour * 24),
-					Content:   "e4",
+					Stamp: events.TimeStamp{
+						StartTime: e1.Stamp.StartTime.Add(time.Hour * 24),
+						EndTime:   e1.Stamp.StartTime.Add(time.Hour * 24),
+						Meta:      map[string]interface{}{},
+					},
+					Content: "e4",
 				}
 
-				w := selection.NewTemporalWindowPolicy[string](e1.GetTimestamp(), time.Hour, time.Minute*10)
+				w := selection.NewTemporalWindowPolicy[string](e1.GetStamp().StartTime, time.Hour, time.Minute*10)
 				b := buffer.NewConsumableAsyncBuffer(w)
 
 				b.AddEvents(events.Arr[string](e1, e2, e3, e4))
@@ -85,27 +101,47 @@ var _ = Describe("Policy", func() {
 			It("can have empty windows", func() {
 
 				e1 := &events.TemporalEvent[string]{
-					TimeStamp: time.Now(),
-					Content:   "e1",
+					Stamp: events.TimeStamp{
+						StartTime: time.Now(),
+						EndTime:   time.Now(),
+						Meta:      map[string]interface{}{},
+					},
+					Content: "e1",
 				}
 				e2 := &events.TemporalEvent[string]{
-					TimeStamp: e1.TimeStamp.Add(time.Minute * 10),
-					Content:   "e2",
+					Stamp: events.TimeStamp{
+						StartTime: e1.GetStamp().StartTime.Add(time.Minute * 10),
+						EndTime:   e1.GetStamp().StartTime.Add(time.Minute * 10),
+						Meta:      map[string]interface{}{},
+					},
+					Content: "e2",
 				}
 				e3 := &events.TemporalEvent[string]{
-					TimeStamp: e1.TimeStamp.Add(time.Minute * 12),
-					Content:   "e3",
+					Stamp: events.TimeStamp{
+						StartTime: e1.GetStamp().StartTime.Add(time.Minute * 12),
+						EndTime:   e1.GetStamp().StartTime.Add(time.Minute * 12),
+						Meta:      map[string]interface{}{},
+					},
+					Content: "e3",
 				}
 				e4 := &events.TemporalEvent[string]{
-					TimeStamp: e1.TimeStamp.Add(time.Minute * 75),
-					Content:   "e4",
+					Stamp: events.TimeStamp{
+						StartTime: e1.GetStamp().StartTime.Add(time.Minute * 75),
+						EndTime:   e1.GetStamp().StartTime.Add(time.Minute * 75),
+						Meta:      map[string]interface{}{},
+					},
+					Content: "e4",
 				}
 				e5 := &events.TemporalEvent[string]{
-					TimeStamp: e1.TimeStamp.Add(time.Hour * 75),
-					Content:   "e5",
+					Stamp: events.TimeStamp{
+						StartTime: e1.GetStamp().StartTime.Add(time.Hour * 75),
+						EndTime:   e1.GetStamp().StartTime.Add(time.Hour * 75),
+						Meta:      map[string]interface{}{},
+					},
+					Content: "e5",
 				}
 
-				w := selection.NewTemporalWindowPolicy[string](e1.GetTimestamp(), time.Minute*30, time.Minute*30)
+				w := selection.NewTemporalWindowPolicy[string](e1.GetStamp().StartTime, time.Minute*30, time.Minute*30)
 				b := buffer.NewConsumableAsyncBuffer(w)
 
 				b.AddEvents(events.Arr[string](e1, e2, e3, e4, e5))

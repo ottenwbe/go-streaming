@@ -15,7 +15,7 @@ var _ = Describe("localSyncStream", func() {
 	)
 
 	BeforeEach(func() {
-		stream = pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, false))
+		stream = pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, false, false))
 		stream.Run()
 		pubsub.AddOrReplaceStream(stream)
 	})
@@ -26,7 +26,7 @@ var _ = Describe("localSyncStream", func() {
 
 	Context("description", func() {
 		It("should be retrievable", func() {
-			Expect(stream.Description()).To(Equal(pubsub.MakeStreamDescription[string](topic, false)))
+			Expect(stream.Description()).To(Equal(pubsub.MakeStreamDescription[string](topic, false, false)))
 		})
 		It("should contain a valid id", func() {
 			Expect(stream.ID().IsNil()).ToNot(BeTrue())
@@ -79,7 +79,7 @@ var _ = Describe("localAsyncStream", func() {
 	)
 
 	BeforeEach(func() {
-		stream = pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, true))
+		stream = pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, true, false))
 		stream.Run()
 		pubsub.AddOrReplaceStream(stream)
 	})
@@ -90,7 +90,7 @@ var _ = Describe("localAsyncStream", func() {
 
 	Context("description", func() {
 		It("should be retrievable", func() {
-			Expect(stream.Description()).To(Equal(pubsub.MakeStreamDescription[string](topic, true)))
+			Expect(stream.Description()).To(Equal(pubsub.MakeStreamDescription[string](topic, true, false)))
 		})
 		It("should contain a valid id", func() {
 			Expect(stream.ID().IsNil()).ToNot(BeTrue())

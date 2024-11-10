@@ -31,18 +31,18 @@ type typedStream[T any] interface {
 
 	subscribe() (StreamReceiver[T], error)
 	unsubscribe(id StreamReceiverID)
-	newPublisher() Publisher[T]
+	newPublisher() (Publisher[T], error)
 	removePublisher(id PublisherID)
 
 	subscribers() notificationMap[T]
-	publishers() publisherMap[T]
+	publishers() publisherFanIn[T]
 	events() buffer.Buffer[T]
 }
 
 type localSyncStream[T any] struct {
 	description StreamDescription
 
-	publisherMap  publisherMap[T]
+	publisherMap  publisherFanIn[T]
 	subscriberMap notificationMap[T]
 	notifyMutex   sync.Mutex
 }
@@ -53,7 +53,7 @@ type localAsyncStream[T any] struct {
 	inChannel events.EventChannel[T]
 	buffer    buffer.Buffer[T]
 
-	publisherMap  publisherMap[T]
+	publisherMap  publisherFanIn[T]
 	subscriberMap notificationMap[T]
 	notifyMutex   sync.Mutex
 
@@ -63,8 +63,8 @@ type localAsyncStream[T any] struct {
 
 // NewStream creates and returns a new stream
 // TODO unexport function or remove
-func NewStream[T any](topic string, async bool) typedStream[T] {
-	return NewStreamD[T](MakeStreamDescription[T](topic, async))
+func NewStream[T any](topic string, async bool, singleFanIn bool) typedStream[T] {
+	return NewStreamD[T](MakeStreamDescription[T](topic, async, singleFanIn))
 }
 
 // NewStreamD creates and returns a typedStream of a given stream type T
@@ -86,7 +86,7 @@ func newLocalSyncStream[T any](description StreamDescription) *localSyncStream[T
 		description:   description,
 		subscriberMap: make(notificationMap[T]),
 	}
-	l.publisherMap = newPublisherSync[T](l)
+	l.publisherMap = newPublisherSync[T](l, description.SingleFanIn)
 	return l
 }
 
@@ -97,7 +97,7 @@ func newLocalAsyncStream[T any](description StreamDescription) *localAsyncStream
 		active:        false,
 		subscriberMap: make(notificationMap[T]),
 	}
-	a.publisherMap = newPublisherSync[T](a)
+	a.publisherMap = newPublisherSync[T](a, description.SingleFanIn)
 	return a
 }
 
@@ -206,13 +206,11 @@ func (l *localAsyncStream[T]) removePublisher(id PublisherID) {
 	l.publisherMap.remove(id)
 }
 
-func (l *localAsyncStream[T]) newPublisher() Publisher[T] {
+func (l *localAsyncStream[T]) newPublisher() (Publisher[T], error) {
 	l.notifyMutex.Lock()
 	l.notifyMutex.Unlock()
 
-	p := l.publisherMap.newPublisher()
-
-	return p
+	return l.publisherMap.newPublisher()
 }
 
 func (l *localAsyncStream[T]) subscribe() (StreamReceiver[T], error) {
@@ -255,13 +253,11 @@ func (s *localSyncStream[T]) unsubscribe(id StreamReceiverID) {
 	s.subscriberMap.remove(id)
 }
 
-func (s *localSyncStream[T]) newPublisher() Publisher[T] {
+func (s *localSyncStream[T]) newPublisher() (Publisher[T], error) {
 	s.notifyMutex.Lock()
 	s.notifyMutex.Unlock()
 
-	p := s.publisherMap.newPublisher()
-
-	return p
+	return s.publisherMap.newPublisher()
 }
 
 func (s *localSyncStream[T]) removePublisher(id PublisherID) {
@@ -319,11 +315,11 @@ func (l *localAsyncStream[T]) copyFrom(stream Stream) {
 	}
 }
 
-func (s *localSyncStream[T]) publishers() publisherMap[T] {
+func (s *localSyncStream[T]) publishers() publisherFanIn[T] {
 	return s.publisherMap
 }
 
-func (l *localAsyncStream[T]) publishers() publisherMap[T] {
+func (l *localAsyncStream[T]) publishers() publisherFanIn[T] {
 	return l.publisherMap
 }
 

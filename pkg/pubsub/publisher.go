@@ -8,6 +8,11 @@ import (
 	"sync"
 )
 
+var (
+	SinglePublisherFanInMoreThanOneError = errors.New("singlePublisherFanIn allows only one publisher")
+	EmptyPublisherFanInPublisherError    = errors.New("emptyPublisherFanIn does not allow creation of publishers")
+)
+
 type PublisherID uuid.UUID
 
 // String representation of the PublisherID
@@ -20,92 +25,179 @@ type (
 	Publisher[T any] interface {
 		// Publish an event to a stream with a given StreamID
 		Publish(event events.Event[T]) error
+		// PublishC publishes content to a stream with a given StreamID
+		PublishC(content T) error
 		// ID that identifies this publisher
 		ID() PublisherID
 		// StreamID of the stream that an event of this publisher is published to
 		StreamID() StreamID
 	}
-	publisherMap[T any] interface {
-		publish(event events.Event[T]) error
-		streamID() StreamID
-		len() int
-		newPublisher() Publisher[T]
-		remove(id PublisherID)
-		clear()
-	}
 	defaultPublisher[T any] struct {
-		publish  func(event events.Event[T]) error
+		fanIn    publisherFanIn[T]
 		id       PublisherID
 		streamID StreamID
 	}
-	publisherMapMutexSync[T any] struct {
+)
+type (
+	publisherFanIn[T any] interface {
+		publish(event events.Event[T]) error
+		publishC(content T) error
+		streamID() StreamID
+		len() int
+		newPublisher() (Publisher[T], error)
+		remove(id PublisherID)
+		clear()
+	}
+	publisherFanInMutexSync[T any] struct {
 		publishers []*defaultPublisher[T]
 		stream     typedStream[T]
 		mutex      sync.Mutex
 	}
+	singlePublisherFanIn[T any] struct {
+		publisher *defaultPublisher[T]
+		stream    typedStream[T]
+	}
+	emptyPublisherFanIn[T any] struct {
+	}
 )
 
-func newDefaultPublisher[T any](streamID StreamID, publish func(event events.Event[T]) error) *defaultPublisher[T] {
+func (e emptyPublisherFanIn[T]) publish(events.Event[T]) error {
+	return nil
+}
+
+func (e emptyPublisherFanIn[T]) publishC(T) error {
+	return nil
+}
+
+func (e emptyPublisherFanIn[T]) streamID() StreamID {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (e emptyPublisherFanIn[T]) len() int {
+	return 0
+}
+
+func (e emptyPublisherFanIn[T]) newPublisher() (Publisher[T], error) {
+	return nil, EmptyPublisherFanInPublisherError
+}
+
+func (e emptyPublisherFanIn[T]) remove(PublisherID) {
+}
+
+func (e emptyPublisherFanIn[T]) clear() {
+}
+
+func (s *singlePublisherFanIn[T]) publish(event events.Event[T]) error {
+	return s.stream.publish(event)
+}
+
+func (s *singlePublisherFanIn[T]) publishC(content T) error {
+
+	event := events.NewEvent(content)
+
+	return s.stream.publish(event)
+}
+
+func (s *singlePublisherFanIn[T]) streamID() StreamID {
+	return s.stream.ID()
+}
+
+func (s *singlePublisherFanIn[T]) len() int {
+	if s.publisher == nil {
+		return 0
+	}
+	return 1
+}
+
+func (s *singlePublisherFanIn[T]) newPublisher() (Publisher[T], error) {
+	if s.publisher == nil {
+		return newDefaultPublisher[T](s.streamID(), s), nil
+	}
+	return nil, SinglePublisherFanInMoreThanOneError
+}
+
+func (s *singlePublisherFanIn[T]) remove(id PublisherID) {
+	if s.publisher != nil && s.publisher.id == id {
+		s.publisher = nil
+	}
+}
+
+func (s *singlePublisherFanIn[T]) clear() {
+	s.publisher = nil
+}
+
+func newDefaultPublisher[T any](streamID StreamID, fanIn publisherFanIn[T]) *defaultPublisher[T] {
 	return &defaultPublisher[T]{
 		id:       PublisherID(uuid.New()),
 		streamID: streamID,
-		publish:  publish,
+		fanIn:    fanIn,
 	}
 }
 
-func newPublisherSync[T any](stream typedStream[T]) publisherMap[T] {
-	return &publisherMapMutexSync[T]{
-		publishers: make([]*defaultPublisher[T], 0),
-		stream:     stream,
+func newPublisherSync[T any](stream typedStream[T], singleFanIn bool) publisherFanIn[T] {
+	if singleFanIn {
+		return &singlePublisherFanIn[T]{
+			publisher: nil,
+			stream:    stream,
+		}
+	} else {
+		return &publisherFanInMutexSync[T]{
+			publishers: make([]*defaultPublisher[T], 0),
+			stream:     stream,
+		}
 	}
 }
 
-func (p *publisherMapMutexSync[T]) clear() {
+func (p *publisherFanInMutexSync[T]) clear() {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	// ensure no publisher is dangling
 	for _, publisher := range p.publishers {
 		if publisher != nil {
-			publisher.publish = emptyPublishFunc[T]()
+			publisher.fanIn = emptyPublisherFanIn[T]{}
 		}
 	}
 
 	p.publishers = make([]*defaultPublisher[T], 0)
 }
 
-func emptyPublishFunc[T any]() func(event events.Event[T]) error {
-	return func(event events.Event[T]) error {
-		return errors.New("publisher: has been deleted")
-	}
-}
-
-func (p *publisherMapMutexSync[T]) len() int {
+func (p *publisherFanInMutexSync[T]) len() int {
 	return len(p.publishers)
 }
 
-func (p *publisherMapMutexSync[T]) streamID() StreamID {
+func (p *publisherFanInMutexSync[T]) streamID() StreamID {
 	return p.stream.ID()
 }
 
-func (p *publisherMapMutexSync[T]) publish(e events.Event[T]) error {
+func (p *publisherFanInMutexSync[T]) publishC(content T) error {
+	p.mutex.Lock()
+	p.mutex.Unlock()
+
+	e := events.NewEvent(content)
+
+	return p.publish(e)
+}
+
+func (p *publisherFanInMutexSync[T]) publish(e events.Event[T]) error {
 	p.mutex.Lock()
 	p.mutex.Unlock()
 
 	return p.stream.publish(e)
 }
 
-func (p *publisherMapMutexSync[T]) newPublisher() Publisher[T] {
+func (p *publisherFanInMutexSync[T]) newPublisher() (Publisher[T], error) {
 	p.mutex.Lock()
 	p.mutex.Unlock()
 
-	publisher := newDefaultPublisher[T](p.streamID(), p.publish)
+	publisher := newDefaultPublisher[T](p.streamID(), p)
 	p.publishers = append(p.publishers, publisher)
 
-	return publisher
+	return publisher, nil
 }
 
-func (p *publisherMapMutexSync[T]) remove(publisherID PublisherID) {
+func (p *publisherFanInMutexSync[T]) remove(publisherID PublisherID) {
 	p.mutex.Lock()
 	p.mutex.Unlock()
 
@@ -122,6 +214,10 @@ func (p *defaultPublisher[T]) ID() PublisherID {
 	return p.id
 }
 
+func (p *defaultPublisher[T]) PublishC(content T) error {
+	return p.fanIn.publishC(content)
+}
+
 func (p *defaultPublisher[T]) Publish(event events.Event[T]) error {
-	return p.publish(event)
+	return p.fanIn.publish(event)
 }
