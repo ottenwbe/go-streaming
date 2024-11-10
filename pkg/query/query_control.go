@@ -176,8 +176,8 @@ func NewBuilder() *Builder {
 	}
 }
 
-func S[T any](topic string, async bool) (pubsub.Stream, error) {
-	d := pubsub.MakeStreamDescription[T](topic, async)
+func S[T any](topic string, async bool, singleFanIn bool) (pubsub.Stream, error) {
+	d := pubsub.MakeStreamDescription[T](topic, async, singleFanIn)
 	return pubsub.AddOrReplaceStreamD[T](d)
 }
 

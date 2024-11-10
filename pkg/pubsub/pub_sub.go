@@ -7,7 +7,9 @@ import (
 )
 
 var (
-	streamIdx            map[StreamID]Stream
+	// streamIdx is the major dictionary to manage all streams locally
+	streamIdx map[StreamID]Stream
+	// streamIdxAccessMutex controls the access to streamIdx
 	streamIdxAccessMutex sync.RWMutex
 )
 
@@ -137,7 +139,7 @@ func InstantPublishByTopic[T any](topic string, event events.Event[T]) (err erro
 
 func RegisterPublisher[T any](id StreamID) (Publisher[T], error) {
 	if s, err := getAndConvertStreamByID[T](id); err == nil {
-		return s.newPublisher(), nil
+		return s.newPublisher()
 	} else {
 		return nil, err
 	}
@@ -212,7 +214,6 @@ func validateStream(newStream Stream) error {
 	if newStream.ID().IsNil() {
 		return StreamIDNilError
 	}
-
 	return nil
 }
 

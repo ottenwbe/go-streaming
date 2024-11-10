@@ -1,6 +1,7 @@
 package buffer
 
 import (
+	"fmt"
 	"github.com/google/uuid"
 	"go-stream-processing/pkg/events"
 	"go-stream-processing/pkg/selection"
@@ -9,14 +10,17 @@ import (
 
 var defaultBufferCapacity = 5
 
+const LimitExceededFormat = "LimitedSimpleAsyncBuffer: Limit exceeded (%v > %v)"
+
+// basicBuffer is an (internal) alias for an event array
 type basicBuffer[T any] []events.Event[T]
 
 // Buffer interface to interact with any buffer
 type Buffer[T any] interface {
 	GetAndConsumeNextEvents() []events.Event[T]
 	PeekNextEvent() events.Event[T]
-	AddEvent(event events.Event[T])
-	AddEvents(events []events.Event[T])
+	AddEvent(event events.Event[T]) error
+	AddEvents(events []events.Event[T]) error
 	Len() int
 	Get(x int) events.Event[T]
 	Dump() []events.Event[T]
@@ -30,8 +34,9 @@ type iterator[T any] struct {
 	buffer Buffer[T]
 }
 
-// AsyncBuffer represents an asynchronous buffer.
-type AsyncBuffer[T any] struct {
+// asyncBuffer represents an asynchronous buffer.
+// This is the base for all other buffers, like the SimpleAsyncBuffer
+type asyncBuffer[T any] struct {
 	buffer      basicBuffer[T]
 	id          uuid.UUID
 	bufferMutex sync.Mutex
@@ -43,14 +48,20 @@ type AsyncBuffer[T any] struct {
 // The Read operations GetNextEvent and RemoveNextEvent either return the next event,
 // if any is available in the buffer or wait until next event is available.
 type SimpleAsyncBuffer[T any] struct {
-	*AsyncBuffer[T]
+	*asyncBuffer[T]
+}
+
+type LimitedSimpleAsyncBuffer[T any] struct {
+	*SimpleAsyncBuffer[T]
+	limit int
 }
 
 // ConsumableAsyncBuffer allows to sync exactly one reader and n writer.
 // The Read operations PeekNextEvent and RemoveNextEvent either return the next event,
-// if any is available in the buffer or wait until next event is available.
+// if any is available in the buffer or wait until next event is available based on a selection policy.
+// see selection.Policy[T]
 type ConsumableAsyncBuffer[T any] struct {
-	*AsyncBuffer[T]
+	*asyncBuffer[T]
 	selectionPolicy selection.Policy[T]
 }
 
@@ -62,8 +73,8 @@ func (b basicBuffer[T]) Len() int {
 	return len(b)
 }
 
-func newAsyncBuffer[T any]() *AsyncBuffer[T] {
-	s := &AsyncBuffer[T]{
+func newAsyncBuffer[T any]() *asyncBuffer[T] {
+	s := &asyncBuffer[T]{
 		buffer:      make(basicBuffer[T], 0, defaultBufferCapacity),
 		bufferMutex: sync.Mutex{},
 		stopped:     false,
@@ -75,28 +86,38 @@ func newAsyncBuffer[T any]() *AsyncBuffer[T] {
 
 func NewSimpleAsyncBuffer[T any]() Buffer[T] {
 	s := &SimpleAsyncBuffer[T]{
-		AsyncBuffer: newAsyncBuffer[T](),
+		asyncBuffer: newAsyncBuffer[T](),
+	}
+	return s
+}
+
+func NewLimitedSimpleAsyncBuffer[T any](limit int) Buffer[T] {
+	s := &LimitedSimpleAsyncBuffer[T]{
+		SimpleAsyncBuffer: &SimpleAsyncBuffer[T]{
+			asyncBuffer: newAsyncBuffer[T](),
+		},
+		limit: limit,
 	}
 	return s
 }
 
 func NewConsumableAsyncBuffer[T any](policy selection.Policy[T]) Buffer[T] {
 	s := &ConsumableAsyncBuffer[T]{
-		AsyncBuffer:     newAsyncBuffer[T](),
+		asyncBuffer:     newAsyncBuffer[T](),
 		selectionPolicy: policy,
 	}
 	s.selectionPolicy.SetBuffer(&s.buffer)
 	return s
 }
 
-func (s *AsyncBuffer[T]) StartBlocking() {
+func (s *asyncBuffer[T]) StartBlocking() {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
 	s.stopped = false
 }
 
-func (s *AsyncBuffer[T]) StopBlocking() {
+func (s *asyncBuffer[T]) StopBlocking() {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
@@ -104,15 +125,15 @@ func (s *AsyncBuffer[T]) StopBlocking() {
 	s.cond.Broadcast()
 }
 
-func (s *AsyncBuffer[T]) Len() int {
+func (s *asyncBuffer[T]) Len() int {
 	return len(s.buffer)
 }
 
-func (s *AsyncBuffer[T]) Get(i int) events.Event[T] {
+func (s *asyncBuffer[T]) Get(i int) events.Event[T] {
 	return s.buffer[i]
 }
 
-func (s *AsyncBuffer[T]) Dump() []events.Event[T] {
+func (s *asyncBuffer[T]) Dump() []events.Event[T] {
 	destination := make([]events.Event[T], s.Len())
 	copy(destination, s.buffer)
 	return destination
@@ -121,7 +142,7 @@ func (s *AsyncBuffer[T]) Dump() []events.Event[T] {
 // PeekNextEvent returns the next buffered event, but no event will be removed from the buffer.
 // Blocks until at least one event buffered.
 // When stopped, returns nil.
-func (s *AsyncBuffer[T]) PeekNextEvent() events.Event[T] {
+func (s *asyncBuffer[T]) PeekNextEvent() events.Event[T] {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
@@ -135,7 +156,7 @@ func (s *AsyncBuffer[T]) PeekNextEvent() events.Event[T] {
 	return nil
 }
 
-func (s *AsyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
+func (s *asyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
@@ -155,23 +176,25 @@ func (s *AsyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
 }
 
 func (s *SimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
-	return []events.Event[T]{s.AsyncBuffer.GetAndRemoveNextEvent()}
+	return []events.Event[T]{s.asyncBuffer.GetAndRemoveNextEvent()}
 }
 
-func (s *SimpleAsyncBuffer[T]) AddEvents(events []events.Event[T]) {
+func (s *SimpleAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
 	s.buffer = append(s.buffer, events...)
 	s.cond.Broadcast()
+	return nil
 }
 
-func (s *SimpleAsyncBuffer[T]) AddEvent(event events.Event[T]) {
+func (s *SimpleAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
 	s.buffer = append(s.buffer, event)
 	s.cond.Broadcast()
+	return nil
 }
 
 // GetAndConsumeNextEvents returns the next buffered events and removes this event from the buffer.
@@ -194,7 +217,7 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	}
 
 	selection = s.selectionPolicy.NextSelection()
-	if selection.IsValid() {
+	if selection.IsValid() { // Selection is in some cases not valid if s.stopped
 		// Extract selected events from the buffer
 		selectedEvents = s.buffer[selection.Start : selection.End+1]
 	}
@@ -210,7 +233,7 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	return selectedEvents
 }
 
-func (s *ConsumableAsyncBuffer[T]) AddEvents(events []events.Event[T]) {
+func (s *ConsumableAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
@@ -218,9 +241,10 @@ func (s *ConsumableAsyncBuffer[T]) AddEvents(events []events.Event[T]) {
 	s.selectionPolicy.UpdateSelection()
 
 	s.cond.Broadcast()
+	return nil
 }
 
-func (s *ConsumableAsyncBuffer[T]) AddEvent(event events.Event[T]) {
+func (s *ConsumableAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
@@ -228,6 +252,42 @@ func (s *ConsumableAsyncBuffer[T]) AddEvent(event events.Event[T]) {
 	s.selectionPolicy.UpdateSelection()
 
 	s.cond.Broadcast()
+	return nil
+}
+
+func (s *LimitedSimpleAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
+	s.bufferMutex.Lock()
+	defer s.bufferMutex.Unlock()
+
+	err := ensureLimit(s.limit, s.buffer.Len()+len(events))
+	if err != nil {
+		return err
+	}
+
+	s.buffer = append(s.buffer, events...)
+	s.cond.Broadcast()
+	return nil
+}
+
+func (s *LimitedSimpleAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
+	s.bufferMutex.Lock()
+	defer s.bufferMutex.Unlock()
+
+	err := ensureLimit(s.limit, s.buffer.Len()+1)
+	if err != nil {
+		return err
+	}
+
+	s.buffer = append(s.buffer, event)
+	s.cond.Broadcast()
+	return nil
+}
+
+func ensureLimit(limit, newBufferLen int) error {
+	if limit < newBufferLen {
+		return fmt.Errorf(LimitExceededFormat, newBufferLen, limit)
+	}
+	return nil
 }
 
 func (i *iterator[T]) hasNext() bool {

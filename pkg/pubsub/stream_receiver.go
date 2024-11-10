@@ -49,9 +49,9 @@ func (r *streamReceiver[T]) Consume() (events.Event[T], error) {
 	}
 }
 
-func newStreamReceiver[T any](stream typedStream[T]) StreamReceiver[T] {
+func newStreamReceiver[T any](streamID StreamID) StreamReceiver[T] {
 	rec := &streamReceiver[T]{
-		streamID: stream.ID(),
+		streamID: streamID,
 		iD:       StreamReceiverID(uuid.New()),
 		notify:   make(chan events.Event[T]),
 	}
@@ -81,7 +81,7 @@ func (m notificationMap[T]) notifyAll(events []events.Event[T]) {
 func (m notificationMap[T]) doNotify(e events.Event[T]) {
 	for _, notifier := range m {
 		/*
-			The code should never panic here, because notifiers are unsubscribed before stream closes.
+			The code should never panic here, because notifiers are unsubscribed before the stream closes.
 			However, if the concept changes, consider to handle the panic here:
 
 			defer func() {

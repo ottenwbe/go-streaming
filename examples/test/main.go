@@ -6,8 +6,61 @@ import (
 	"time"
 )
 
-// Deprecated!
+var (
+	s   = make([]int, 0)
+	res = make([]int, 0)
+	m   = sync.Mutex{}
+)
 
+func main() {
+
+	run := true
+
+	go func() {
+		for run {
+			if len(s) > 0 {
+				syncDel()
+			}
+		}
+	}()
+
+	go func() {
+		var i = 0
+		for run {
+			i = syncAdd(i)
+		}
+	}()
+
+	time.Sleep(time.Second * 10)
+
+	for i, re := range res {
+		if i != re {
+			fmt.Printf("%v %v \n", i, re)
+			fmt.Printf("%v\n", res[i-10:i+10])
+			break
+		}
+	}
+
+}
+
+func syncAdd(i int) int {
+	m.Lock()
+	defer m.Unlock()
+	s = append(s, i)
+	i++
+	fmt.Printf("hui %v \n", len(s))
+	return i
+}
+
+func syncDel() {
+	m.Lock()
+	defer m.Unlock()
+	fmt.Printf("tada %v %v %p \n", s[0], len(s), &s)
+	res = append(res, s[0])
+	s = s[1:]
+}
+
+/*
 var len = 100000
 
 func main() {
@@ -49,7 +102,7 @@ func main() {
 	sim2(result2)
 	sim1(result1)
 
-	fmt.Printf("1: %v, 2: %v, 3: %v", <-result1, <-result2, <-result3)*/
+	fmt.Printf("1: %v, 2: %v, 3: %v", <-result1, <-result2, <-result3)
 }
 
 func sim1(result chan time.Duration) {
@@ -134,3 +187,4 @@ func sim3(result chan time.Duration) {
 		}
 	}()
 }
+*/
