@@ -48,14 +48,14 @@ func syncAdd(i int) int {
 	defer m.Unlock()
 	s = append(s, i)
 	i++
-	fmt.Printf("hui %v \n", len(s))
+	fmt.Printf("a %v \n", len(s))
 	return i
 }
 
 func syncDel() {
 	m.Lock()
 	defer m.Unlock()
-	fmt.Printf("tada %v %v %p \n", s[0], len(s), &s)
+	fmt.Printf("b %v %v %p \n", s[0], len(s), &s)
 	res = append(res, s[0])
 	s = s[1:]
 }
