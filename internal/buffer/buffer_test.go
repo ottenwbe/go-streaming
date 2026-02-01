@@ -1,10 +1,12 @@
 package buffer_test
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"go-stream-processing/internal/buffer"
 	"go-stream-processing/pkg/events"
+	"go-stream-processing/pkg/selection"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Buffer", func() {
@@ -45,6 +47,54 @@ var _ = Describe("Buffer", func() {
 			})
 		})
 
+	})
+
+	Describe("ConsumableAsyncBuffer", func() {
+		var (
+			buf buffer.Buffer[string]
+			e1  events.Event[string]
+		)
+
+		BeforeEach(func() {
+			buf = buffer.NewConsumableAsyncBuffer[string](selection.NewSelectNextPolicy[string]())
+			e1 = events.NewEvent("e1")
+		})
+
+		AfterEach(func() {
+			buf.StopBlocking()
+		})
+
+		It("consumes events based on policy", func() {
+			buf.AddEvent(e1)
+			res := buf.GetAndConsumeNextEvents()
+			Expect(res).To(HaveLen(1))
+			Expect(res[0]).To(Equal(e1))
+		})
+
+		It("blocks until policy is satisfied", func() {
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				buf.GetAndConsumeNextEvents()
+				close(done)
+			}()
+			Consistently(done).ShouldNot(BeClosed())
+			buf.AddEvent(e1)
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("returns empty when stopped while waiting", func() {
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				res := buf.GetAndConsumeNextEvents()
+				Expect(res).To(BeEmpty())
+				close(done)
+			}()
+			Consistently(done).ShouldNot(BeClosed())
+			buf.StopBlocking()
+			Eventually(done).Should(BeClosed())
+		})
 	})
 
 	Describe("SimpleAsyncBuffer", func() {
@@ -119,6 +169,7 @@ var _ = Describe("Buffer", func() {
 
 				var r2 events.Event[string]
 				go func() {
+					defer GinkgoRecover()
 					r2 = buf.PeekNextEvent()
 					bChan <- true
 				}()
@@ -136,6 +187,7 @@ var _ = Describe("Buffer", func() {
 				var testing = true
 
 				go func() {
+					defer GinkgoRecover()
 					for testing == true {
 						buf.StopBlocking()
 					}
@@ -154,6 +206,7 @@ var _ = Describe("Buffer", func() {
 				r := make([]events.Event[string], 0)
 
 				go func() {
+					defer GinkgoRecover()
 					for i := 0; i < 3; i++ {
 						r = append(r, buf.GetAndConsumeNextEvents()...)
 					}
@@ -167,6 +220,51 @@ var _ = Describe("Buffer", func() {
 				Expect(r[0]).To(Equal(e1))
 				Expect(r[1]).To(Equal(e2))
 				Expect(buf.Len()).To(Equal(0))
+			})
+		})
+
+		Context("Concurrency", func() {
+			It("handles concurrent writes correctly", func() {
+				const numRoutines = 10
+				const numEvents = 100
+
+				start := make(chan struct{})
+				done := make(chan struct{})
+
+				for i := 0; i < numRoutines; i++ {
+					go func() {
+						defer GinkgoRecover()
+						<-start
+						for j := 0; j < numEvents; j++ {
+							buf.AddEvent(events.NewEvent("data"))
+						}
+						done <- struct{}{}
+					}()
+				}
+
+				close(start)
+				for i := 0; i < numRoutines; i++ {
+					<-done
+				}
+
+				Expect(buf.Len()).To(Equal(numRoutines * numEvents))
+			})
+		})
+
+		Context("StopBlocking", func() {
+			It("unblocks GetAndConsumeNextEvents returning nil element", func() {
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					res := buf.GetAndConsumeNextEvents()
+					Expect(res).To(HaveLen(1))
+					Expect(res[0]).To(BeNil())
+					close(done)
+				}()
+
+				Consistently(done).ShouldNot(BeClosed())
+				buf.StopBlocking()
+				Eventually(done).Should(BeClosed())
 			})
 		})
 	})

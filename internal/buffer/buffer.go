@@ -173,6 +173,7 @@ func (s *asyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
 
 	if s.Len() > 0 {
 		e = s.buffer[0]
+		s.buffer[0] = nil
 		s.buffer = s.buffer[1:]
 		return e
 	}
@@ -227,13 +228,18 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	selection = s.selectionPolicy.NextSelection()
 	if selection.IsValid() { // Selection is in some cases not valid if s.stopped
 		// Extract selected events from the buffer
-		selectedEvents = s.buffer[selection.Start : selection.End+1]
+		src := s.buffer[selection.Start : selection.End+1]
+		selectedEvents = make([]events.Event[T], len(src))
+		copy(selectedEvents, src)
 	}
 
 	if selectionFound {
 		s.selectionPolicy.Shift()
 		s.selectionPolicy.UpdateSelection()
 		offset := s.selectionPolicy.NextSelection().Start
+		for i := range offset {
+			s.buffer[i] = nil
+		}
 		s.buffer = s.buffer[offset:]
 		s.selectionPolicy.Offset(offset)
 	}

@@ -201,14 +201,14 @@ func (l *localAsyncStream[T]) publish(event events.Event[T]) error {
 
 func (l *localAsyncStream[T]) removePublisher(id PublisherID) {
 	l.notifyMutex.Lock()
-	l.notifyMutex.Unlock()
+	defer l.notifyMutex.Unlock()
 
 	l.publisherMap.remove(id)
 }
 
 func (l *localAsyncStream[T]) newPublisher() (Publisher[T], error) {
 	l.notifyMutex.Lock()
-	l.notifyMutex.Unlock()
+	defer l.notifyMutex.Unlock()
 
 	return l.publisherMap.newPublisher()
 }
@@ -255,14 +255,14 @@ func (s *localSyncStream[T]) unsubscribe(id StreamReceiverID) {
 
 func (s *localSyncStream[T]) newPublisher() (Publisher[T], error) {
 	s.notifyMutex.Lock()
-	s.notifyMutex.Unlock()
+	defer s.notifyMutex.Unlock()
 
 	return s.publisherMap.newPublisher()
 }
 
 func (s *localSyncStream[T]) removePublisher(id PublisherID) {
 	s.notifyMutex.Lock()
-	s.notifyMutex.Unlock()
+	defer s.notifyMutex.Unlock()
 
 	s.publisherMap.remove(id)
 }
