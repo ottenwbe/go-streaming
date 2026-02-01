@@ -2,8 +2,9 @@ package pubsub
 
 import (
 	"errors"
-	"go-stream-processing/pkg/events"
 	"sync"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
 var (
@@ -20,17 +21,17 @@ var (
 	StreamRecNilError       = errors.New("pub sub: stream receiver nil")
 )
 
-// GetOrAddStreamD adds one streams to the pub sub system or returns an existing one.
-func GetOrAddStreamD[T any](streamDescription StreamDescription) (Stream, error) {
+// GetOrAddStream adds one streams to the pub sub system or returns an existing one.
+func GetOrAddStream[T any](streamDescription StreamDescription) (Stream, error) {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
 
-	stream := NewStreamD[T](streamDescription)
+	stream := NewStreamFromDescription[T](streamDescription)
 	return doGetOrAddStream(stream)
 }
 
 // GetOrAddStreams adds one or more streams to the pub sub system or returns an existing one.
-// Note: Ignores Errors.
+// Note: Ignores Errors, should be fixed
 func GetOrAddStreams(streams ...Stream) []Stream {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
@@ -42,19 +43,21 @@ func GetOrAddStreams(streams ...Stream) []Stream {
 	return streams
 }
 
-// AddOrReplaceStreamD uses a description of a stream to add it or replace it to the pub sub system
-func AddOrReplaceStreamD[T any](description StreamDescription) (Stream, error) {
+// AddOrReplaceStreamFromDescription uses a description of a stream to add it or replace it to the pub sub system
+func AddOrReplaceStreamFromDescription[T any](description StreamDescription) (Stream, error) {
 	var (
 		stream typedStream[T]
 		err    error
 	)
 
-	stream = NewStreamD[T](description)
+	stream = NewStreamFromDescription[T](description)
 	err = AddOrReplaceStream(stream)
 
 	return stream, err
 }
 
+// AddOrReplaceStream adds a new stream or replaces an existing one in the pub sub system.
+// Replacing could be, for instance, changing the stream from synchronous to asynchronous,
 func AddOrReplaceStream(newStream Stream) error {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
@@ -76,6 +79,8 @@ func ForceRemoveStream(streams ...StreamDescription) {
 	}
 }
 
+// TryRemoveStreams attempts to remove the provided streams from the pub sub system.
+// A stream is only removed if it has no active publishers or subscribers.
 func TryRemoveStreams(streams ...Stream) {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
@@ -90,8 +95,13 @@ func TryRemoveStreams(streams ...Stream) {
 	}
 }
 
-// Subscribe to a stream by the stream's id
-func Subscribe[T any](id StreamID) (StreamReceiver[T], error) {
+// SubscribeByTopic to get a stream for this topic with type T
+func SubscribeByTopic[T any](topic string) (StreamReceiver[T], error) {
+	return SubscribeByTopicID[T](MakeStreamID[T](topic))
+}
+
+// SubscribeByTopicID to a stream by the stream's id
+func SubscribeByTopicID[T any](id StreamID) (StreamReceiver[T], error) {
 	streamIdxAccessMutex.RLock()
 	defer streamIdxAccessMutex.RUnlock()
 
@@ -102,6 +112,7 @@ func Subscribe[T any](id StreamID) (StreamReceiver[T], error) {
 	}
 }
 
+// Unsubscribe removes a subscriber from a stream.
 func Unsubscribe[T any](rec StreamReceiver[T]) error {
 	streamIdxAccessMutex.RLock()
 	defer streamIdxAccessMutex.RUnlock()
@@ -121,11 +132,13 @@ func Unsubscribe[T any](rec StreamReceiver[T]) error {
 // InstantPublishByTopic routes the event to the given topic, iff the stream exists.
 // Note, this is only a helper function and for consistent streaming register a publisher; see RegisterPublisher.
 func InstantPublishByTopic[T any](topic string, event events.Event[T]) (err error) {
-	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
 
 	publisher, err := RegisterPublisher[T](MakeStreamID[T](topic))
-	defer func(publisher Publisher[T]) { err = UnRegisterPublisher[T](publisher) }(publisher)
+	defer func(publisher Publisher[T]) {
+		if publisher != nil {
+			err = UnRegisterPublisher[T](publisher)
+		}
+	}(publisher)
 
 	if err == nil {
 		err = publisher.Publish(event)
@@ -137,7 +150,11 @@ func InstantPublishByTopic[T any](topic string, event events.Event[T]) (err erro
 	return err
 }
 
+// RegisterPublisher creates and registers a new publisher for the stream identified by the given ID.
 func RegisterPublisher[T any](id StreamID) (Publisher[T], error) {
+	streamIdxAccessMutex.RLock()
+	defer streamIdxAccessMutex.RUnlock()
+
 	if s, err := getAndConvertStreamByID[T](id); err == nil {
 		return s.newPublisher()
 	} else {
@@ -145,7 +162,15 @@ func RegisterPublisher[T any](id StreamID) (Publisher[T], error) {
 	}
 }
 
+// UnRegisterPublisher removes a publisher from its associated stream.
 func UnRegisterPublisher[T any](publisher Publisher[T]) error {
+	streamIdxAccessMutex.RLock()
+	defer streamIdxAccessMutex.RUnlock()
+
+	if publisher == nil {
+		return nil
+	}
+
 	if s, err := getAndConvertStreamByID[T](publisher.StreamID()); err == nil {
 		s.removePublisher(publisher.ID())
 		return nil
@@ -154,18 +179,27 @@ func UnRegisterPublisher[T any](publisher Publisher[T]) error {
 	}
 }
 
+// GetStreamByTopic retrieves a stream by its topic name.
 func GetStreamByTopic[T any](topic string) (Stream, error) {
+	streamIdxAccessMutex.RLock()
+	defer streamIdxAccessMutex.RUnlock()
 	return getAndConvertStreamByID[T](MakeStreamID[T](topic))
 }
 
+// GetStream retrieves a stream by its ID.
 func GetStream(id StreamID) (Stream, error) {
+	streamIdxAccessMutex.RLock()
+	defer streamIdxAccessMutex.RUnlock()
 	if s, ok := streamIdx[id]; ok {
 		return s, nil
 	}
 	return nil, StreamNotFoundError
 }
 
+// GetDescription retrieves the description of a stream identified by the given ID.
 func GetDescription(id StreamID) (StreamDescription, error) {
+	streamIdxAccessMutex.RLock()
+	defer streamIdxAccessMutex.RUnlock()
 	if s, ok := streamIdx[id]; ok {
 		return s.Description(), nil
 	} else {

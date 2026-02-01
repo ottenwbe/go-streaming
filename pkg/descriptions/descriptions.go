@@ -1,9 +1,10 @@
 package descriptions
 
 import (
-	"go-stream-processing/internal/engine"
-	"go-stream-processing/pkg/pubsub"
 	"reflect"
+
+	"github.com/ottenwbe/go-streaming/internal/engine"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
 
 type Engine int

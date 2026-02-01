@@ -1,0 +1,166 @@
+package pubsub
+
+import (
+	"github.com/google/uuid"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/ottenwbe/go-streaming/pkg/events"
+)
+
+var _ = Describe("StreamReceiver", func() {
+
+	Describe("StreamReceiverID", func() {
+		It("should return its string representation", func() {
+			uid := uuid.New()
+			id := StreamReceiverID(uid)
+			Expect(id.String()).To(Equal(uid.String()))
+		})
+	})
+
+	Describe("streamReceiver (Unbuffered)", func() {
+		var (
+			rec      *streamReceiver[string]
+			streamID StreamID
+		)
+
+		BeforeEach(func() {
+			streamID = MakeStreamID[string]("test-topic")
+			rec = &streamReceiver[string]{
+				streamID: streamID,
+				iD:       StreamReceiverID(uuid.New()),
+				notify:   make(chan events.Event[string]),
+			}
+		})
+
+		It("should return the correct StreamID", func() {
+			Expect(rec.StreamID()).To(Equal(streamID))
+		})
+
+		It("should return the correct ID", func() {
+			Expect(rec.ID()).NotTo(BeNil())
+		})
+
+		It("should return the notify channel", func() {
+			Expect(rec.Notify()).To(Equal(rec.notify))
+		})
+
+		It("should consume events", func() {
+			event := events.NewEvent("test-event")
+			go func() {
+				rec.doNotify(event)
+			}()
+
+			received, err := rec.Consume()
+			Expect(err).To(BeNil())
+			Expect(received).To(Equal(event))
+		})
+
+		It("should close the channel", func() {
+			rec.close()
+			Eventually(rec.notify).Should(BeClosed())
+		})
+	})
+
+	Describe("bufferedStreamReceiver", func() {
+		var (
+			rec      StreamReceiver[string]
+			streamID StreamID
+			nMap     *notificationMap[string]
+		)
+
+		BeforeEach(func() {
+			streamID = MakeStreamID[string]("test-topic-buffered")
+			nMap = newNotificationMap[string]()
+			rec = nMap.newStreamReceiver(streamID, true)
+		})
+
+		AfterEach(func() {
+			if rec != nil {
+				rec.close()
+			}
+		})
+
+		It("should return the correct StreamID", func() {
+			Expect(rec.StreamID()).To(Equal(streamID))
+		})
+
+		It("should return the correct ID", func() {
+			Expect(rec.ID()).NotTo(BeNil())
+		})
+
+		It("should consume events asynchronously", func() {
+			event := events.NewEvent("test-buffered")
+			rec.doNotify(event)
+
+			received, err := rec.Consume()
+			Expect(err).To(BeNil())
+			Expect(received).To(Equal(event))
+		})
+
+		It("should return the notify channel", func() {
+			ch := rec.Notify()
+			Expect(ch).NotTo(BeNil())
+		})
+
+		It("should close resources", func() {
+			rec.close()
+			Eventually(func() error {
+				_, err := rec.Consume()
+				return err
+			}).Should(HaveOccurred())
+		})
+	})
+
+	Describe("notificationMap", func() {
+		var (
+			nMap *notificationMap[string]
+			sID  StreamID
+		)
+
+		BeforeEach(func() {
+			nMap = newNotificationMap[string]()
+			sID = MakeStreamID[string]("topic")
+		})
+
+		AfterEach(func() {
+			nMap.clear()
+		})
+
+		It("should create new receivers", func() {
+			rec := nMap.newStreamReceiver(sID, false)
+			Expect(rec).NotTo(BeNil())
+			Expect(nMap.Len()).To(Equal(1))
+		})
+
+		It("should notify all receivers", func() {
+			rec1 := nMap.newStreamReceiver(sID, true)
+			rec2 := nMap.newStreamReceiver(sID, true)
+
+			event := events.NewEvent("broadcast")
+			nMap.notifyAll([]events.Event[string]{event})
+
+			e1, err1 := rec1.Consume()
+			e2, err2 := rec2.Consume()
+
+			Expect(err1).To(BeNil())
+			Expect(err2).To(BeNil())
+			Expect(e1).To(Equal(event))
+			Expect(e2).To(Equal(event))
+		})
+
+		It("should remove receivers", func() {
+			rec := nMap.newStreamReceiver(sID, false)
+			Expect(nMap.Len()).To(Equal(1))
+			nMap.remove(rec.ID())
+			Expect(nMap.Len()).To(Equal(0))
+		})
+
+		It("should clear all receivers", func() {
+			nMap.newStreamReceiver(sID, false)
+			nMap.newStreamReceiver(sID, false)
+			Expect(nMap.Len()).To(Equal(2))
+			nMap.clear()
+			Expect(nMap.Len()).To(Equal(0))
+		})
+	})
+})

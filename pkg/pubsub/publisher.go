@@ -2,10 +2,12 @@ package pubsub
 
 import (
 	"errors"
-	"github.com/google/uuid"
-	"go-stream-processing/pkg/events"
 	"slices"
 	"sync"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
+
+	"github.com/google/uuid"
 )
 
 var (
@@ -13,6 +15,7 @@ var (
 	EmptyPublisherFanInPublisherError    = errors.New("emptyPublisherFanIn does not allow creation of publishers")
 )
 
+// PublisherID uniquely identifies a publisher.
 type PublisherID uuid.UUID
 
 // String representation of the PublisherID
@@ -124,6 +127,9 @@ func (s *singlePublisherFanIn[T]) remove(id PublisherID) {
 }
 
 func (s *singlePublisherFanIn[T]) clear() {
+	if s.publisher != nil {
+		s.publisher.fanIn = emptyPublisherFanIn[T]{}
+	}
 	s.publisher = nil
 }
 
@@ -173,7 +179,7 @@ func (p *publisherFanInMutexSync[T]) streamID() StreamID {
 
 func (p *publisherFanInMutexSync[T]) publishC(content T) error {
 	p.mutex.Lock()
-	p.mutex.Unlock()
+	defer p.mutex.Unlock()
 
 	e := events.NewEvent(content)
 
@@ -182,14 +188,14 @@ func (p *publisherFanInMutexSync[T]) publishC(content T) error {
 
 func (p *publisherFanInMutexSync[T]) publish(e events.Event[T]) error {
 	p.mutex.Lock()
-	p.mutex.Unlock()
+	defer p.mutex.Unlock()
 
 	return p.stream.publish(e)
 }
 
 func (p *publisherFanInMutexSync[T]) newPublisher() (Publisher[T], error) {
 	p.mutex.Lock()
-	p.mutex.Unlock()
+	defer p.mutex.Unlock()
 
 	publisher := newDefaultPublisher[T](p.streamID(), p)
 	p.publishers = append(p.publishers, publisher)
@@ -199,7 +205,7 @@ func (p *publisherFanInMutexSync[T]) newPublisher() (Publisher[T], error) {
 
 func (p *publisherFanInMutexSync[T]) remove(publisherID PublisherID) {
 	p.mutex.Lock()
-	p.mutex.Unlock()
+	defer p.mutex.Unlock()
 
 	if idx := slices.IndexFunc(p.publishers, func(publisher *defaultPublisher[T]) bool { return publisherID == publisher.ID() }); idx != -1 {
 		p.publishers = append(p.publishers[:idx], p.publishers[idx+1:]...)

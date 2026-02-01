@@ -1,12 +1,14 @@
 package main
 
 import (
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/pubsub"
-	"go-stream-processing/pkg/query"
-	"go-stream-processing/pkg/selection"
-	"go.uber.org/zap"
 	"math/rand"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
+	"github.com/ottenwbe/go-streaming/pkg/query"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
+
+	"go.uber.org/zap"
 )
 
 var (
@@ -19,7 +21,7 @@ func main() {
 	policy := selection.NewCountingWindowPolicy[float64](10, shift)
 	q, err := query.NewBuilder().
 		Stream(query.S[float64]("in", true, true)).
-		Query(query.ContinuousBatchSum[float64]("in", "out", policy)).
+		Query(query.ContinuousBatchSum("in", "out", policy)).
 		Build()
 
 	// start the continuous query
@@ -42,7 +44,7 @@ func waitForProcessedEvents(res *query.TypedContinuousQuery[float64]) {
 func publishEvents() {
 	go func() {
 		for i := 0; i < numEvents; i++ {
-			if err := pubsub.InstantPublishByTopic[float64]("in", events.NewEvent[float64](rand.Float64())); err != nil {
+			if err := pubsub.InstantPublishByTopic("in", events.NewEvent(rand.Float64())); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
 			}
 		}

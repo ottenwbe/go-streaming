@@ -3,12 +3,13 @@ package pubsub_test
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/pkg/pubsub"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"gopkg.in/yaml.v3"
-	"reflect"
 )
 
 var (

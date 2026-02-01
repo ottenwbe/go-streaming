@@ -1,11 +1,12 @@
 package descriptions_test
 
 import (
-	"go-stream-processing/internal/engine"
-	"go-stream-processing/pkg/descriptions"
-	"go-stream-processing/pkg/pubsub"
 	"reflect"
 	"testing"
+
+	"github.com/ottenwbe/go-streaming/internal/engine"
+	"github.com/ottenwbe/go-streaming/pkg/descriptions"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

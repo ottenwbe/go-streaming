@@ -2,10 +2,12 @@ package buffer
 
 import (
 	"fmt"
-	"github.com/google/uuid"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/selection"
 	"sync"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
+
+	"github.com/google/uuid"
 )
 
 var defaultBufferCapacity = 5
@@ -51,6 +53,7 @@ type SimpleAsyncBuffer[T any] struct {
 	*asyncBuffer[T]
 }
 
+// LimitedSimpleAsyncBuffer is a buffer with a fixed capacity limit.
 type LimitedSimpleAsyncBuffer[T any] struct {
 	*SimpleAsyncBuffer[T]
 	limit int
@@ -84,6 +87,7 @@ func newAsyncBuffer[T any]() *asyncBuffer[T] {
 	return s
 }
 
+// NewSimpleAsyncBuffer creates a new unbounded asynchronous buffer.
 func NewSimpleAsyncBuffer[T any]() Buffer[T] {
 	s := &SimpleAsyncBuffer[T]{
 		asyncBuffer: newAsyncBuffer[T](),
@@ -91,6 +95,7 @@ func NewSimpleAsyncBuffer[T any]() Buffer[T] {
 	return s
 }
 
+// NewLimitedSimpleAsyncBuffer creates a new asynchronous buffer with a maximum event limit.
 func NewLimitedSimpleAsyncBuffer[T any](limit int) Buffer[T] {
 	s := &LimitedSimpleAsyncBuffer[T]{
 		SimpleAsyncBuffer: &SimpleAsyncBuffer[T]{
@@ -101,6 +106,7 @@ func NewLimitedSimpleAsyncBuffer[T any](limit int) Buffer[T] {
 	return s
 }
 
+// NewConsumableAsyncBuffer creates a new buffer that consumes events based on a selection policy.
 func NewConsumableAsyncBuffer[T any](policy selection.Policy[T]) Buffer[T] {
 	s := &ConsumableAsyncBuffer[T]{
 		asyncBuffer:     newAsyncBuffer[T](),
@@ -168,6 +174,7 @@ func (s *asyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
 
 	if s.Len() > 0 {
 		e = s.buffer[0]
+		s.buffer[0] = nil
 		s.buffer = s.buffer[1:]
 		return e
 	}
@@ -175,10 +182,12 @@ func (s *asyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
 	return nil
 }
 
+// GetAndConsumeNextEvents returns the next event from the buffer and removes it.
 func (s *SimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	return []events.Event[T]{s.asyncBuffer.GetAndRemoveNextEvent()}
 }
 
+// AddEvents adds multiple events to the buffer.
 func (s *SimpleAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
@@ -188,6 +197,7 @@ func (s *SimpleAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
 	return nil
 }
 
+// AddEvent adds a single event to the buffer.
 func (s *SimpleAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
@@ -219,13 +229,18 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	selection = s.selectionPolicy.NextSelection()
 	if selection.IsValid() { // Selection is in some cases not valid if s.stopped
 		// Extract selected events from the buffer
-		selectedEvents = s.buffer[selection.Start : selection.End+1]
+		src := s.buffer[selection.Start : selection.End+1]
+		selectedEvents = make([]events.Event[T], len(src))
+		copy(selectedEvents, src)
 	}
 
 	if selectionFound {
 		s.selectionPolicy.Shift()
 		s.selectionPolicy.UpdateSelection()
 		offset := s.selectionPolicy.NextSelection().Start
+		for i := range offset {
+			s.buffer[i] = nil
+		}
 		s.buffer = s.buffer[offset:]
 		s.selectionPolicy.Offset(offset)
 	}
@@ -233,6 +248,7 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	return selectedEvents
 }
 
+// AddEvents adds multiple events to the buffer and updates the selection policy.
 func (s *ConsumableAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
@@ -244,6 +260,7 @@ func (s *ConsumableAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
 	return nil
 }
 
+// AddEvent adds a single event to the buffer and updates the selection policy.
 func (s *ConsumableAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
@@ -255,6 +272,7 @@ func (s *ConsumableAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
 	return nil
 }
 
+// AddEvents adds multiple events to the buffer, ensuring the limit is not exceeded.
 func (s *LimitedSimpleAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
@@ -269,6 +287,7 @@ func (s *LimitedSimpleAsyncBuffer[T]) AddEvents(events []events.Event[T]) error 
 	return nil
 }
 
+// AddEvent adds a single event to the buffer, ensuring the limit is not exceeded.
 func (s *LimitedSimpleAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()

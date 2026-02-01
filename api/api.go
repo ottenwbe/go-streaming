@@ -1,12 +1,14 @@
 package api
 
 import (
-	"github.com/gin-gonic/gin"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/pubsub"
-	"go.uber.org/zap"
 	"io"
 	"net/http"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func CreateRestAPI(router *gin.Engine) {
@@ -47,7 +49,7 @@ func CreateRestAPI(router *gin.Engine) {
 			c.String(http.StatusBadRequest, "invalid json body")
 			return
 		}
-		_, err = pubsub.AddOrReplaceStreamD[any](d)
+		_, err = pubsub.AddOrReplaceStreamFromDescription[any](d)
 		if err != nil {
 			zap.S().Error("could not instantiate stream", zap.String("module", "api"), zap.Error(err))
 			c.String(http.StatusNotFound, "error when instantiating stream")

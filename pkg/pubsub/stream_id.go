@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"reflect"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -18,6 +19,7 @@ var (
 	UnmarshallingTopicMissingKeyError = errors.New("streamID: error unmarshalling topic; missing key")
 )
 
+// StreamID uniquely identifies a stream by its topic and the type of data it carries.
 type StreamID struct {
 	Topic     string
 	TopicType reflect.Type
@@ -28,11 +30,13 @@ type marshalledStreamID struct {
 	TopicType string `yaml:"type"`  // include topicType as a string
 }
 
+// MarshalJSON implements the json.Marshaler interface for StreamID.
 func (s StreamID) MarshalJSON() ([]byte, error) {
 	data := s.marshalStreamID()
 	return json.Marshal(data)
 }
 
+// UnmarshalJSON implements the json.Unmarshaler interface for StreamID.
 func (s *StreamID) UnmarshalJSON(data []byte) error {
 	var unmarshalled map[string]interface{}
 	err := json.Unmarshal(data, &unmarshalled)
@@ -60,11 +64,13 @@ func (s *StreamID) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalYAML implements the yaml.Marshaler interface for StreamID.
 func (s StreamID) MarshalYAML() (interface{}, error) {
 	data := s.marshalStreamID()
 	return data, nil
 }
 
+// UnmarshalYAML implements the yaml.Unmarshaler interface for StreamID.
 func (s *StreamID) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var unmarshalled map[string]interface{}
 	err := unmarshal(&unmarshalled)
@@ -134,14 +140,17 @@ func (s StreamID) marshalStreamID() marshalledStreamID {
 
 const nilTopic = ""
 
+// IsNil checks if the StreamID is the zero value (nil topic).
 func (s StreamID) IsNil() bool {
 	return s.Topic == nilTopic
 }
 
+// String returns the topic string of the StreamID.
 func (s StreamID) String() string {
 	return s.Topic
 }
 
+// NilStreamID returns a StreamID representing a nil or empty stream.
 func NilStreamID() StreamID {
 	return StreamID{
 		Topic:     nilTopic,
@@ -149,10 +158,12 @@ func NilStreamID() StreamID {
 	}
 }
 
+// RandomStreamID generates a new StreamID with a random UUID as the topic.
 func RandomStreamID() StreamID {
 	return MakeStreamID[any](uuid.New().String())
 }
 
+// MakeStreamID creates a StreamID for a given topic and generic type T.
 func MakeStreamID[T any](topic string) StreamID {
 	var tmp T
 	return StreamID{

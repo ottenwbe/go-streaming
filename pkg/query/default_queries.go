@@ -1,9 +1,9 @@
 package query
 
 import (
-	"go-stream-processing/internal/engine"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/selection"
+	"github.com/ottenwbe/go-streaming/internal/engine"
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 // Constraint to limit the type parameter to numeric types
@@ -11,6 +11,7 @@ type number interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64
 }
 
+// ContinuousBatchSum creates a query that sums numeric events over a window defined by the selection policy.
 func ContinuousBatchSum[TEvent number](inEventType, outEvenType string, selectionPolicy selection.Policy[TEvent]) (*ContinuousQuery, error) {
 
 	batchSumF := func(input engine.SingleStreamSelectionN[TEvent]) events.Event[TEvent] {
@@ -24,6 +25,7 @@ func ContinuousBatchSum[TEvent number](inEventType, outEvenType string, selectio
 	return TemplateQueryOverSingleStreamSelectionN[TEvent, TEvent](inEventType, selectionPolicy, batchSumF, outEvenType)
 }
 
+// ContinuousBatchCount creates a query that counts events over a window defined by the selection policy.
 func ContinuousBatchCount[TEvent any, TOut number](inEventType, outEvenType string, selectionPolicy selection.Policy[TEvent]) (*ContinuousQuery, error) {
 
 	batchCount := func(input engine.SingleStreamSelectionN[TEvent]) events.Event[TOut] {
@@ -34,6 +36,7 @@ func ContinuousBatchCount[TEvent any, TOut number](inEventType, outEvenType stri
 	return TemplateQueryOverSingleStreamSelectionN[TEvent, TOut](inEventType, selectionPolicy, batchCount, outEvenType)
 }
 
+// ContinuousGreater creates a query that filters events greater than a specified value.
 func ContinuousGreater[T number](inEventType, outEvenType string, greaterThan T) (*ContinuousQuery, error) {
 
 	greater := func(input engine.SingleStreamSelection1[T]) []events.Event[T] {
@@ -47,6 +50,7 @@ func ContinuousGreater[T number](inEventType, outEvenType string, greaterThan T)
 	return TemplateQueryMultipleEventsOverSingleStreamSelection1[T, T](inEventType, greater, outEvenType)
 }
 
+// ContinuousSmaller creates a query that filters events smaller than a specified value.
 func ContinuousSmaller[T number](inEventType, outEvenType string, than T) (*ContinuousQuery, error) {
 
 	smaller := func(input engine.SingleStreamSelection1[T]) []events.Event[T] {
@@ -60,6 +64,7 @@ func ContinuousSmaller[T number](inEventType, outEvenType string, than T) (*Cont
 	return TemplateQueryMultipleEventsOverSingleStreamSelection1[T, T](inEventType, smaller, outEvenType)
 }
 
+// ContinuousAdd creates a query that adds values from two input streams.
 func ContinuousAdd[T number](inEventType1, inEventType2, outEventType string) (*ContinuousQuery, error) {
 
 	add := func(input engine.DoubleInputSelection1[T, T]) events.Event[T] {
@@ -70,6 +75,7 @@ func ContinuousAdd[T number](inEventType1, inEventType2, outEventType string) (*
 	return TemplateQueryOverDoubleStreamSelection1[T, T, T](inEventType1, inEventType2, add, outEventType)
 }
 
+// ContinuousConvert creates a query that converts events from one numeric type to another.
 func ContinuousConvert[TIn, TOut number](inEventType, outEventType string) (*ContinuousQuery, error) {
 
 	convert := func(input engine.SingleStreamSelection1[TIn]) events.Event[TOut] {

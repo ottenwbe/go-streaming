@@ -1,10 +1,11 @@
 package events_test
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/pkg/events"
-	"time"
+	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
 var _ = Describe("TimeStamp", func() {
