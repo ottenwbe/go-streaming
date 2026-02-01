@@ -1,10 +1,10 @@
 package query
 
 import (
-	"go-stream-processing/internal/engine"
-	"go-stream-processing/pkg/events"
-	pubsub "go-stream-processing/pkg/pubsub"
-	"go-stream-processing/pkg/selection"
+	"github.com/ottenwbe/go-streaming/internal/engine"
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	pubsub "github.com/ottenwbe/go-streaming/pkg/pubsub"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 // TemplateQueryOverSingleStreamSelection1 creates a query that processes single events from one input stream.

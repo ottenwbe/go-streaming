@@ -11,16 +11,17 @@ var StreamDescriptionWithoutID = errors.New("stream description: no id provided"
 
 // StreamDescription details the stream configurations
 type StreamDescription struct {
-	ID          StreamID `yaml,json:"id"`
-	Async       bool     `yaml,json:"async"`
-	SingleFanIn bool     `yaml,json:"singleFanIn"`
+	ID            StreamID `yaml:"id" json:"id"`
+	AsyncStream   bool     `yaml:"asyncStream" json:"asyncStream"`
+	AsyncReceiver bool     `yaml:"asyncReceiver" json:"asyncReceiver"`
+	SingleFanIn   bool     `yaml:"singleFanIn" json:"singleFanIn"`
 }
 
 // MakeStreamDescription creates a new StreamDescription with the provided parameters.
 func MakeStreamDescription[T any](topic string, async bool, singleFanIn bool) StreamDescription {
 	return StreamDescription{
 		ID:          MakeStreamID[T](topic),
-		Async:       async,
+		AsyncStream: async,
 		SingleFanIn: singleFanIn,
 	}
 }
@@ -29,7 +30,7 @@ func MakeStreamDescription[T any](topic string, async bool, singleFanIn bool) St
 func MakeStreamDescriptionFromID(id StreamID, async bool, singleFanIn bool) StreamDescription {
 	return StreamDescription{
 		ID:          id,
-		Async:       async,
+		AsyncStream: async,
 		SingleFanIn: singleFanIn,
 	}
 }

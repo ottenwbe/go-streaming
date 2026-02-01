@@ -1,12 +1,13 @@
 package main
 
 import (
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/pubsub"
-	"go-stream-processing/pkg/query"
-	"go.uber.org/zap"
 	"math/rand"
 	"time"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
+	"github.com/ottenwbe/go-streaming/pkg/query"
+	"go.uber.org/zap"
 )
 
 var (

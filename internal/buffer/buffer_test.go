@@ -1,9 +1,9 @@
 package buffer_test
 
 import (
-	"go-stream-processing/internal/buffer"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/selection"
+	"github.com/ottenwbe/go-streaming/internal/buffer"
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -159,7 +159,7 @@ var _ = Describe("Buffer", func() {
 				Expect(buf.Dump()).To(Equal(events.Arr(e1, e2, e3)))
 			})
 		})
-		Context("Async PeekNext", func() {
+		Context("AsyncStream PeekNext", func() {
 			It("wait for events if not available in buffer", func() {
 
 				bChan := make(chan bool)

@@ -1,10 +1,11 @@
 package api
 
 import (
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/pubsub"
 	"io"
 	"net/http"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"

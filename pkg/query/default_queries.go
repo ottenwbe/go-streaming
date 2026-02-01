@@ -1,9 +1,9 @@
 package query
 
 import (
-	"go-stream-processing/internal/engine"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/selection"
+	"github.com/ottenwbe/go-streaming/internal/engine"
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 // Constraint to limit the type parameter to numeric types

@@ -2,9 +2,10 @@ package pubsub
 
 import (
 	"errors"
-	"go-stream-processing/pkg/events"
 	"slices"
 	"sync"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
 
 	"github.com/google/uuid"
 )
@@ -126,6 +127,9 @@ func (s *singlePublisherFanIn[T]) remove(id PublisherID) {
 }
 
 func (s *singlePublisherFanIn[T]) clear() {
+	if s.publisher != nil {
+		s.publisher.fanIn = emptyPublisherFanIn[T]{}
+	}
 	s.publisher = nil
 }
 

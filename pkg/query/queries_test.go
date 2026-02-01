@@ -3,10 +3,10 @@ package query_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/pubsub"
-	"go-stream-processing/pkg/query"
-	"go-stream-processing/pkg/selection"
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
+	"github.com/ottenwbe/go-streaming/pkg/query"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 var _ = Describe("Query Builder", func() {

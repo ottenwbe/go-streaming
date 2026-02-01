@@ -1,8 +1,9 @@
 package selection
 
 import (
-	"go-stream-processing/pkg/events"
 	"time"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
 
 	"github.com/google/uuid"
 )

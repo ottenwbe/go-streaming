@@ -2,9 +2,10 @@ package buffer
 
 import (
 	"fmt"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/selection"
 	"sync"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 
 	"github.com/google/uuid"
 )

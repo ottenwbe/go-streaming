@@ -2,8 +2,9 @@ package pubsub_test
 
 import (
 	"fmt"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/pubsub"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -36,13 +37,13 @@ var _ = Describe("localSyncStream", func() {
 
 	Context("closing the stream", func() {
 		/*It("forcefully ensures that all resources are cleaned up", func() {
-			pubsub.Subscribe[string](stream.ID())
+			pubsub.SubscribeByTopicID[string](stream.ID())
 			Expect(stream.HasPublishersOrSubscribers()).To(BeTrue())
 			stream.forceClose()
 			Expect(stream.HasPublishersOrSubscribers()).To(BeFalse())
 		})*/
 		It("without force ensures that the stream receiver is still functioning after trying to close the stream", func() {
-			pubsub.Subscribe[string](stream.ID())
+			pubsub.SubscribeByTopicID[string](stream.ID())
 			Expect(stream.HasPublishersOrSubscribers()).To(BeTrue())
 			stream.TryClose()
 			Expect(stream.HasPublishersOrSubscribers()).To(BeTrue())
@@ -55,7 +56,7 @@ var _ = Describe("localSyncStream", func() {
 			event := events.NewEvent("test-1")
 			bChan := make(chan bool)
 
-			receiver, _ := pubsub.Subscribe[string](stream.ID())
+			receiver, _ := pubsub.SubscribeByTopicID[string](stream.ID())
 
 			go func() {
 				eventResult = <-receiver.Notify()
@@ -100,20 +101,20 @@ var _ = Describe("localAsyncStream", func() {
 
 	Context("closing the stream", func() {
 		/*It("forcefully ensures that all resources are cleaned up", func() {
-			pubsub.Subscribe[string](stream.ID())
+			pubsub.SubscribeByTopicID[string](stream.ID())
 			Expect(stream.HasPublishersOrSubscribers()).To(BeTrue())
 			stream.forceClose()
 			Expect(stream.HasPublishersOrSubscribers()).To(BeFalse())
 		})*/
 		It("without force ensures that the stream receiver is still functioning after trying to close the stream", func() {
-			pubsub.Subscribe[string](stream.ID())
+			pubsub.SubscribeByTopicID[string](stream.ID())
 			Expect(stream.HasPublishersOrSubscribers()).To(BeTrue())
 			stream.TryClose()
 			Expect(stream.HasPublishersOrSubscribers()).To(BeTrue())
 		})
 		It("should no longer be subscribable after closing the stream", func() {
 			stream.TryClose()
-			result, err := pubsub.Subscribe[string](stream.ID())
+			result, err := pubsub.SubscribeByTopicID[string](stream.ID())
 			Expect(result).To(BeNil())
 			Expect(err).ToNot(BeNil())
 		})
@@ -127,7 +128,7 @@ var _ = Describe("localAsyncStream", func() {
 			event3 := events.NewEvent("test-3-3")
 			bChan := make(chan bool)
 
-			receiver, _ := pubsub.Subscribe[string](stream.ID())
+			receiver, _ := pubsub.SubscribeByTopicID[string](stream.ID())
 
 			publisher, _ := pubsub.RegisterPublisher[string](stream.ID())
 

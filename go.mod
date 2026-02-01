@@ -1,4 +1,4 @@
-module go-stream-processing
+module github.com/ottenwbe/go-streaming
 
 go 1.24.0
 

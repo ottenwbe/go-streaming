@@ -2,27 +2,39 @@ package main
 
 import (
 	"fmt"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/pubsub"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
 
 func main() {
 	// 1. Define and register a stream
 	topic := "greetings"
 	// Stream of strings, synchronous (false), multiple publishers allowed (false for singleFanIn)
-	desc := pubsub.MakeStreamDescription[string](topic, false, false)
-	pubsub.AddOrReplaceStreamFromDescription[string](desc)
+	desc := pubsub.MakeStreamDescription[string](topic, true, false)
+	s, _ := pubsub.AddOrReplaceStreamFromDescription[string](desc)
+	s.Run()
+	defer pubsub.ForceRemoveStream(desc)
 
-	// 2. Subscribe
+	started := make(chan bool)
+	finished := make(chan bool)
+
 	// MakeStreamID creates a typed ID for the topic
 	streamID := pubsub.MakeStreamID[string](topic)
-	receiver, _ := pubsub.Subscribe[string](streamID)
 
+	go func(finished chan bool) {
+		// 2. SubscribeByTopicID
+		receiver, _ := pubsub.SubscribeByTopicID[string](streamID)
+		started <- true
+		// 4. Consume the event
+		event := <-receiver.Notify()
+		fmt.Printf("Received: %s\n", event.GetContent())
+		finished <- true
+	}(finished)
+
+	<-started
 	// 3. Publish
 	publisher, _ := pubsub.RegisterPublisher[string](streamID)
 	publisher.Publish(events.NewEvent("Hello World!"))
-
-	// 4. Consume
-	event := <-receiver.Notify()
-	fmt.Printf("Received: %s\n", event.GetContent())
+	<-finished
 }

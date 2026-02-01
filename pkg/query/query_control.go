@@ -2,9 +2,10 @@ package query
 
 import (
 	"errors"
-	"go-stream-processing/internal/engine"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/pubsub"
+
+	"github.com/ottenwbe/go-streaming/internal/engine"
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
 	"github.com/google/uuid"
 )
@@ -56,7 +57,7 @@ func RunAndSubscribe[T any](c *ContinuousQuery, err ...error) (*TypedContinuousQ
 		return nil, append(err, runErr)
 	}
 
-	res, subErr := pubsub.Subscribe[T](c.output)
+	res, subErr := pubsub.SubscribeByTopicID[T](c.output)
 	if subErr != nil {
 		c.close()
 		return nil, append(err, subErr)

@@ -2,11 +2,12 @@ package engine
 
 import (
 	"errors"
+
 	"github.com/google/uuid"
-	"go-stream-processing/internal/buffer"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/pubsub"
-	"go-stream-processing/pkg/selection"
+	"github.com/ottenwbe/go-streaming/internal/buffer"
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 	"go.uber.org/zap"
 )
 
@@ -187,7 +188,7 @@ func (o *OperatorStreamSubscription[T]) Run() {
 	o.active = true
 
 	var err error
-	o.streamReceiver, err = pubsub.Subscribe[T](o.streamID)
+	o.streamReceiver, err = pubsub.SubscribeByTopicID[T](o.streamID)
 	if err != nil {
 		zap.S().Error("operator subscription failed", zap.Error(err), zap.String("stream", o.streamID.String()))
 		return

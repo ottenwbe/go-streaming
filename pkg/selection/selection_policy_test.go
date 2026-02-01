@@ -2,12 +2,13 @@ package selection_test
 
 import (
 	"fmt"
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/internal/buffer"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/selection"
-	"time"
+	"github.com/ottenwbe/go-streaming/internal/buffer"
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 var _ = Describe("Policy", func() {

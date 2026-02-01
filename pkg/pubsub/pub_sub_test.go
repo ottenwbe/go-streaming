@@ -1,8 +1,8 @@
 package pubsub_test
 
 import (
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/pubsub"
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -112,7 +112,7 @@ async: true
 				defer pubsub.ForceRemoveStream(s.Description())
 
 				pubsub.AddOrReplaceStreamFromDescription[int](d)
-				pubsub.Subscribe[int](d.StreamID())
+				pubsub.SubscribeByTopicID[int](d.StreamID())
 
 				pubsub.TryRemoveStreams(s)
 
@@ -161,7 +161,7 @@ async: true
 		Context("subscribing to a non existing stream", func() {
 			It("ends up in an error", func() {
 				id := pubsub.RandomStreamID()
-				_, e := pubsub.Subscribe[int](id)
+				_, e := pubsub.SubscribeByTopicID[int](id)
 				Expect(e).NotTo(BeNil())
 			})
 		})
@@ -171,7 +171,7 @@ async: true
 				s := pubsub.NewStreamFromDescription[string](pubsub.MakeStreamDescription[string](topic, false, false))
 				pubsub.GetOrAddStreams(s)
 
-				rec, _ := pubsub.Subscribe[string](s.ID())
+				rec, _ := pubsub.SubscribeByTopicID[string](s.ID())
 
 				Expect(func() { _ = pubsub.Unsubscribe(rec) }).NotTo(Panic())
 			})
@@ -201,6 +201,23 @@ async: true
 				Expect(r1.ID().TopicType).ToNot(Equal(r2.ID().TopicType))
 
 			})
+			It("supports replacing streams", func() {
+				topic := "streamA"
+				s1 := pubsub.NewStreamFromDescription[int](pubsub.MakeStreamDescription[int](topic, false, false))
+				s2 := pubsub.NewStreamFromDescription[int](pubsub.MakeStreamDescription[int](topic, true, false))
+				defer pubsub.ForceRemoveStream(s1.Description())
+				defer pubsub.ForceRemoveStream(s2.Description())
+
+				pubsub.AddOrReplaceStream(s1)
+				pubsub.AddOrReplaceStream(s2)
+
+				r1, err1 := pubsub.GetStream(s1.ID())
+				_, err2 := pubsub.GetStream(s2.ID())
+
+				Expect(err1).To(BeNil())
+				Expect(err2).To(BeNil())
+				Expect(r1.Description().AsyncStream).To(BeTrue())
+			})
 		})
 		Context("a stream", func() {
 			It("sends and receives event via the pub sub system", func() {
@@ -212,7 +229,7 @@ async: true
 				id := s.ID()
 
 				pubsub.AddOrReplaceStream(s)
-				rec, _ := pubsub.Subscribe[string](id)
+				rec, _ := pubsub.SubscribeByTopicID[string](id)
 
 				e1 := events.NewEvent("test 1")
 				go func() {
@@ -222,6 +239,63 @@ async: true
 				eResult := <-rec.Notify()
 
 				Expect(e1).To(Equal(eResult))
+			})
+		})
+
+		Describe("GetOrAddStream", func() {
+			It("adds a new stream if it doesn't exist", func() {
+				topic := "get-or-add-1"
+				desc := pubsub.MakeStreamDescription[int](topic, false, false)
+				s, err := pubsub.GetOrAddStream[int](desc)
+				Expect(err).To(BeNil())
+				Expect(s).NotTo(BeNil())
+				Expect(s.ID().Topic).To(Equal(topic))
+				pubsub.ForceRemoveStream(desc)
+			})
+
+			It("returns existing stream if it exists", func() {
+				topic := "get-or-add-2"
+				desc := pubsub.MakeStreamDescription[int](topic, false, false)
+				s1, _ := pubsub.GetOrAddStream[int](desc)
+				s2, err := pubsub.GetOrAddStream[int](desc)
+				Expect(err).To(BeNil())
+				Expect(s1).To(Equal(s2))
+				pubsub.ForceRemoveStream(desc)
+			})
+		})
+
+		Describe("InstantPublishByTopic", func() {
+			It("fails if stream does not exist", func() {
+				err := pubsub.InstantPublishByTopic("non-existent-topic", events.NewEvent("hello"))
+				Expect(err).NotTo(BeNil())
+				Expect(err).To(Equal(pubsub.StreamNotFoundError))
+			})
+		})
+
+		Describe("UnRegisterPublisher", func() {
+			It("handles nil publisher gracefully", func() {
+				err := pubsub.UnRegisterPublisher[int](nil)
+				Expect(err).To(BeNil())
+			})
+		})
+
+		Describe("SubscribeByTopic", func() {
+			It("subscribes to an existing stream", func() {
+				topic := "subscribe-by-topic-1"
+				desc := pubsub.MakeStreamDescription[int](topic, false, false)
+				_, err := pubsub.AddOrReplaceStreamFromDescription[int](desc)
+				Expect(err).To(BeNil())
+				defer pubsub.ForceRemoveStream(desc)
+
+				rec, err := pubsub.SubscribeByTopic[int](topic)
+				Expect(err).To(BeNil())
+				Expect(rec).NotTo(BeNil())
+				Expect(rec.StreamID().Topic).To(Equal(topic))
+			})
+			It("fails if stream does not exist", func() {
+				rec, err := pubsub.SubscribeByTopic[int]("non-existent-topic-sub")
+				Expect(err).To(Equal(pubsub.StreamNotFoundError))
+				Expect(rec).To(BeNil())
 			})
 		})
 	})

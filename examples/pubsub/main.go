@@ -1,9 +1,10 @@
 package main
 
 import (
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/pubsub"
 	"time"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
 	"go.uber.org/zap"
 )
@@ -41,7 +42,7 @@ func publisher(intStream pubsub.Stream) {
 
 func startSubscriber2(intStream pubsub.Stream) {
 	go func() {
-		s, _ := pubsub.Subscribe[int](intStream.ID())
+		s, _ := pubsub.SubscribeByTopicID[int](intStream.ID())
 		for {
 			e, _ := s.Consume()
 			zap.S().Infof("event received by sub1: %v", e)
@@ -51,7 +52,7 @@ func startSubscriber2(intStream pubsub.Stream) {
 
 func startSubscriber1(intStream pubsub.Stream) {
 	go func() {
-		s, _ := pubsub.Subscribe[int](intStream.ID())
+		s, _ := pubsub.SubscribeByTopicID[int](intStream.ID())
 		for {
 			e, _ := s.Consume()
 			zap.S().Infof("event received by sub2: %v", e)

@@ -3,43 +3,75 @@ package pubsub_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"go-stream-processing/pkg/pubsub"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
 
 var _ = Describe("Descriptions", func() {
 
-	Describe("streams Description", func() {
-		Context("Parsing", func() {
-			It("it can be parsed correctly", func() {
+	Describe("Stream Description", func() {
+		Context("Parsing YAML", func() {
+			It("can be parsed correctly with all fields", func() {
 
 				var yml = `
+---
 id: 
   topic: 3c191d62-6574-4951-a8e6-4ec83c947250
   type: string
-async: true
+asyncStream: true
+asyncReceiver: true
+singleFanIn: true
 `
-				//yml := "name: test\nid:\n  3c191d62-6574-4951-a8e6-4ec83c947250"
 				v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
-				Expect(v.ID).To(Equal(pubsub.MakeStreamID[string]("3c191d62-6574-4951-a8e6-4ec83c947250")))
-				//Expect(v.ID).To(EqualTo(uuid.MustParse("3c191d62-6574-4951-a8e6-4ec83c947250")))
-				Expect(v.Async).To(Equal(true))
 				Expect(err).To(BeNil())
+				Expect(v.ID).To(Equal(pubsub.MakeStreamID[string]("3c191d62-6574-4951-a8e6-4ec83c947250")))
+				Expect(v.AsyncStream).To(BeTrue())
+				Expect(v.AsyncReceiver).To(BeTrue())
+				Expect(v.SingleFanIn).To(BeTrue())
+			})
+
+			It("parses correctly with default values", func() {
+				var yml = `
+id: 
+  topic: test-defaults
+  type: int
+`
+				v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
+				Expect(err).To(BeNil())
+				Expect(v.AsyncStream).To(BeFalse())
+				Expect(v.AsyncReceiver).To(BeFalse())
+				Expect(v.SingleFanIn).To(BeFalse())
 			})
 		})
-		It("creates an ID automatically if not provided", func() {
-			var yml = `
-id: 
-  topic: test2
-  type: string
-async: true
-`
-			//yml := "name: test\nid:\n  3c191d62-6574-4951-a8e6-4ec83c947250"
-			v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
-			//Expect(v.Name).To(EqualTo("test2"))
 
-			Expect(v.ID).To(Equal(pubsub.MakeStreamID[string]("test2")))
-			Expect(v.Async).To(Equal(true))
-			Expect(err).To(BeNil())
+		Context("Parsing JSON", func() {
+			It("can be parsed correctly", func() {
+				var jsonStr = `
+{
+  "id": {
+    "topic": "json-topic",
+    "type": "float64"
+  },
+  "asyncStream": true,
+  "asyncReceiver": false,
+  "singleFanIn": true
+}
+`
+				v, err := pubsub.StreamDescriptionFromJSON([]byte(jsonStr))
+				Expect(err).To(BeNil())
+				Expect(v.AsyncStream).To(BeTrue())
+				Expect(v.AsyncReceiver).To(BeFalse())
+				Expect(v.SingleFanIn).To(BeTrue())
+			})
+		})
+
+		Context("Validation", func() {
+			It("fails when ID is missing", func() {
+				var yml = `
+asyncStream: true
+`
+				_, err := pubsub.StreamDescriptionFromYML([]byte(yml))
+				Expect(err).To(Equal(pubsub.StreamDescriptionWithoutID))
+			})
 		})
 	})
 

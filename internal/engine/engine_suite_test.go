@@ -1,10 +1,11 @@
 package engine_test
 
 import (
-	"go-stream-processing/internal/engine"
-	"go-stream-processing/pkg/events"
-	"go-stream-processing/pkg/pubsub"
 	"testing"
+
+	"github.com/ottenwbe/go-streaming/internal/engine"
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
