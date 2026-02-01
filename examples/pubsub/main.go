@@ -3,8 +3,9 @@ package main
 import (
 	"go-stream-processing/pkg/events"
 	"go-stream-processing/pkg/pubsub"
-	"go.uber.org/zap"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -15,7 +16,7 @@ func main() {
 	)
 
 	streamConfig := pubsub.MakeStreamDescription[int]("int stream", false, true)
-	if intStream, err = pubsub.AddOrReplaceStreamD[int](streamConfig); err != nil {
+	if intStream, err = pubsub.AddOrReplaceStreamFromDescription[int](streamConfig); err != nil {
 		zap.S().Errorf("intStream could not be created: %v", err)
 	}
 

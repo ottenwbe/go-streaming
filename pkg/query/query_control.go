@@ -2,19 +2,22 @@ package query
 
 import (
 	"errors"
-	"github.com/google/uuid"
 	"go-stream-processing/internal/engine"
 	"go-stream-processing/pkg/events"
 	"go-stream-processing/pkg/pubsub"
+
+	"github.com/google/uuid"
 )
 
 var nilContinuousError = errors.New("continuous error is empty")
 
+// Builder helps construct a ContinuousQuery.
 type Builder struct {
 	q     *ContinuousQuery
 	error []error
 }
 
+// ContinuousQuery represents a running query that processes streams.
 type ContinuousQuery struct {
 	id ID
 
@@ -23,11 +26,13 @@ type ContinuousQuery struct {
 	output    pubsub.StreamID
 }
 
+// TypedContinuousQuery is a typed wrapper around ContinuousQuery that provides a typed output receiver.
 type TypedContinuousQuery[T any] struct {
 	*ContinuousQuery
 	OutputReceiver pubsub.StreamReceiver[T]
 }
 
+// Close stops the query and unsubscribes the output receiver.
 func Close[T any](qs *TypedContinuousQuery[T]) {
 	if qs == nil {
 		return //TODO error
@@ -38,6 +43,7 @@ func Close[T any](qs *TypedContinuousQuery[T]) {
 	qs = nil
 }
 
+// RunAndSubscribe starts the query and returns a typed wrapper with an active subscription to the output.
 func RunAndSubscribe[T any](c *ContinuousQuery, err ...error) (*TypedContinuousQuery[T], []error) {
 
 	err, done := anyErrorExists(err, c)
@@ -76,11 +82,13 @@ func anyErrorExists(err []error, c *ContinuousQuery) ([]error, bool) {
 	return err, len(err) > 0
 }
 
+// Notify waits for the next event from the query's output stream.
 func (qs *TypedContinuousQuery[T]) Notify() (events.Event[T], bool) {
 	e, ok := <-qs.OutputReceiver.Notify()
 	return e, ok
 }
 
+// ComposeWith merges another query into the current one, chaining their operations.
 func (c *ContinuousQuery) ComposeWith(c2 *ContinuousQuery) (*ContinuousQuery, error) {
 
 	if !c2.output.IsNil() && in(c.streams, c2.output) {
@@ -97,6 +105,7 @@ func (c *ContinuousQuery) ComposeWith(c2 *ContinuousQuery) (*ContinuousQuery, er
 	return c, nil
 }
 
+// ID returns the unique identifier of the query.
 func (c *ContinuousQuery) ID() ID {
 	return c.id
 }
@@ -164,6 +173,7 @@ func in(streams []pubsub.Stream, id pubsub.StreamID) bool {
 	return false
 }
 
+// NewBuilder creates a new query builder.
 func NewBuilder() *Builder {
 	return &Builder{
 		q: &ContinuousQuery{
@@ -176,11 +186,13 @@ func NewBuilder() *Builder {
 	}
 }
 
+// S creates or retrieves a stream with the given configuration.
 func S[T any](topic string, async bool, singleFanIn bool) (pubsub.Stream, error) {
 	d := pubsub.MakeStreamDescription[T](topic, async, singleFanIn)
-	return pubsub.AddOrReplaceStreamD[T](d)
+	return pubsub.AddOrReplaceStreamFromDescription[T](d)
 }
 
+// Query adds a sub-query to the builder.
 func (b *Builder) Query(q *ContinuousQuery, pErr error) *Builder {
 
 	if pErr != nil {
@@ -195,6 +207,7 @@ func (b *Builder) Query(q *ContinuousQuery, pErr error) *Builder {
 	return b
 }
 
+// Stream adds a stream to the query being built.
 func (b *Builder) Stream(s pubsub.Stream, err error) *Builder {
 	b.q.addStreams(s)
 	if err != nil {
@@ -203,10 +216,12 @@ func (b *Builder) Stream(s pubsub.Stream, err error) *Builder {
 	return b
 }
 
+// Errors returns any errors accumulated during the build process.
 func (b *Builder) Errors() []error {
 	return b.error
 }
 
+// Build constructs the final ContinuousQuery.
 func (b *Builder) Build() (*ContinuousQuery, []error) {
 	if len(b.error) > 0 {
 		return nil, b.error

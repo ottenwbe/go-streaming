@@ -2,12 +2,15 @@ package pubsub
 
 import (
 	"errors"
-	"github.com/google/uuid"
 	"go-stream-processing/pkg/events"
+
+	"github.com/google/uuid"
 )
 
+// StreamReceiverID uniquely identifies a stream receiver.
 type StreamReceiverID uuid.UUID
 
+// String returns the string representation of the StreamReceiverID.
 func (i StreamReceiverID) String() string {
 	return uuid.UUID(i).String()
 }

@@ -2,10 +2,11 @@ package pubsub_test
 
 import (
 	"fmt"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"go-stream-processing/pkg/events"
 	"go-stream-processing/pkg/pubsub"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("localSyncStream", func() {
@@ -15,7 +16,7 @@ var _ = Describe("localSyncStream", func() {
 	)
 
 	BeforeEach(func() {
-		stream = pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, false, false))
+		stream = pubsub.NewStreamFromDescription[string](pubsub.MakeStreamDescription[string](topic, false, false))
 		stream.Run()
 		pubsub.AddOrReplaceStream(stream)
 	})
@@ -79,7 +80,7 @@ var _ = Describe("localAsyncStream", func() {
 	)
 
 	BeforeEach(func() {
-		stream = pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, true, false))
+		stream = pubsub.NewStreamFromDescription[string](pubsub.MakeStreamDescription[string](topic, true, false))
 		stream.Run()
 		pubsub.AddOrReplaceStream(stream)
 	})

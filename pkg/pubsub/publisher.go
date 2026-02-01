@@ -2,10 +2,11 @@ package pubsub
 
 import (
 	"errors"
-	"github.com/google/uuid"
 	"go-stream-processing/pkg/events"
 	"slices"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 var (
@@ -13,6 +14,7 @@ var (
 	EmptyPublisherFanInPublisherError    = errors.New("emptyPublisherFanIn does not allow creation of publishers")
 )
 
+// PublisherID uniquely identifies a publisher.
 type PublisherID uuid.UUID
 
 // String representation of the PublisherID

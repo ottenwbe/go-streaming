@@ -1,9 +1,10 @@
 package selection
 
 import (
-	"github.com/google/uuid"
 	"go-stream-processing/pkg/events"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Reader allows read-only access to an underlying event buffer that implements
@@ -38,12 +39,14 @@ type (
 		SetBuffer(reader Reader[T])
 	}
 
+	// SelectNextPolicy selects events one by one as they arrive.
 	SelectNextPolicy[T any] struct {
 		PolicyID
 		buffer         Reader[T]
 		selectionReady bool
 		next           int
 	}
+	// CountingWindowPolicy selects a fixed number of events (n) with a sliding window (shift).
 	CountingWindowPolicy[T any] struct {
 		PolicyID
 		buffer       Reader[T]
@@ -51,6 +54,7 @@ type (
 		shift        int
 		currentRange EventSelection
 	}
+	// TemporalWindowPolicy selects events based on a time window.
 	TemporalWindowPolicy[T any] struct {
 		PolicyID
 		buffer       Reader[T]

@@ -7,6 +7,7 @@ import (
 	"go-stream-processing/pkg/selection"
 )
 
+// TemplateQueryOverSingleStreamSelection1 creates a query that processes single events from one input stream.
 func TemplateQueryOverSingleStreamSelection1[T any, TOut any](
 	in string,
 	operation func(engine.SingleStreamSelection1[T]) events.Event[TOut],
@@ -33,6 +34,7 @@ func createOperationOverSingleStreamSelection1[T, TOut any](inputStream pubsub.S
 	return f
 }
 
+// TemplateQueryOverSingleStreamSelectionN creates a query that processes a selection of multiple events from one input stream.
 func TemplateQueryOverSingleStreamSelectionN[T any, TOut any](
 	in string,
 	selection selection.Policy[T],
@@ -57,6 +59,7 @@ func createOperatorOverSingleStreamSelectionN[T any, TOut any](inputStream pubsu
 	return f
 }
 
+// TemplateQueryMultipleEventsOverSingleStreamSelection1 creates a query that maps a single input event to multiple output events.
 func TemplateQueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](
 	in string,
 	op func(engine.SingleStreamSelection1[T]) []events.Event[TOut],
@@ -80,6 +83,7 @@ func createMultipleEventsOverSingleStreamSelection1[T any, TOut any](inputStream
 	return f
 }
 
+// TemplateQueryOverDoubleStreamSelectionN creates a query that processes selections from two input streams.
 func TemplateQueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](
 	in1 string,
 	selection1 selection.Policy[TIN1],
@@ -103,6 +107,7 @@ func TemplateQueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](
 	return queryControl, nil
 }
 
+// TemplateQueryOverDoubleStreamSelection1 creates a query that processes single events from two input streams.
 func TemplateQueryOverDoubleStreamSelection1[TIN1, TIN2, TOUT any](
 	in1 string,
 	in2 string,

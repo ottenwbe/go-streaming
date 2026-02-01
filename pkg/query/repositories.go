@@ -7,13 +7,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// ID uniquely identifies a query in the repository.
 type ID uuid.UUID
 
+// String returns the string representation of the ID.
 func (id ID) String() string {
 	return uuid.UUID(id).String()
 }
 
 type (
+	// Repository manages the storage and retrieval of ContinuousQueries.
 	Repository interface {
 		fmt.Stringer
 		Get(id ID) (*ContinuousQuery, bool)
@@ -65,6 +68,7 @@ var (
 	queryRepository Repository
 )
 
+// QueryRepository returns the singleton instance of the query repository.
 func QueryRepository() Repository {
 	return queryRepository
 }

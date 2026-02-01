@@ -1,10 +1,11 @@
 package pubsub_test
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"go-stream-processing/pkg/events"
 	"go-stream-processing/pkg/pubsub"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("PubSub", func() {
@@ -19,7 +20,7 @@ id:
 async: true
 `
 			d, _ := pubsub.StreamDescriptionFromYML([]byte(yml))
-			pubsub.AddOrReplaceStreamD[int](d)
+			pubsub.AddOrReplaceStreamFromDescription[int](d)
 
 			It("retrieves the stream by id", func() {
 				r, err := pubsub.GetStream(d.ID)
@@ -50,7 +51,7 @@ id:
 async: true
 `
 				d, _ := pubsub.StreamDescriptionFromYML([]byte(yml))
-				pubsub.AddOrReplaceStreamD[map[string]interface{}](d)
+				pubsub.AddOrReplaceStreamFromDescription[map[string]interface{}](d)
 
 				_, err := pubsub.GetStream(d.StreamID())
 				Expect(err).To(BeNil())
@@ -67,7 +68,7 @@ id:
 async: true
 `
 				d, _ := pubsub.StreamDescriptionFromYML([]byte(yml))
-				s, err := pubsub.AddOrReplaceStreamD[map[string]interface{}](d)
+				s, err := pubsub.AddOrReplaceStreamFromDescription[map[string]interface{}](d)
 				s.Run()
 
 				pubsub.ForceRemoveStream(s.Description())
@@ -80,11 +81,11 @@ async: true
 		Describe("Try closing a stream", func() {
 			It("is successful if stream still has no subscribers/publishers", func() {
 				d := pubsub.MakeStreamDescription[int]("try-close-1", false, false)
-				s, err := pubsub.AddOrReplaceStreamD[map[string]interface{}](d)
+				s, err := pubsub.AddOrReplaceStreamFromDescription[map[string]interface{}](d)
 				s.Run()
 				defer pubsub.ForceRemoveStream(s.Description())
 
-				pubsub.AddOrReplaceStreamD[int](d)
+				pubsub.AddOrReplaceStreamFromDescription[int](d)
 				pubsub.TryRemoveStreams(s)
 
 				_, err = pubsub.GetStream(d.StreamID())
@@ -92,11 +93,11 @@ async: true
 			})
 			It("is not successful if stream still has publishers", func() {
 				d := pubsub.MakeStreamDescription[int]("try-close-3", false, false)
-				s, err := pubsub.AddOrReplaceStreamD[int](d)
+				s, err := pubsub.AddOrReplaceStreamFromDescription[int](d)
 				s.Run()
 				defer pubsub.ForceRemoveStream(s.Description())
 
-				pubsub.AddOrReplaceStreamD[int](d)
+				pubsub.AddOrReplaceStreamFromDescription[int](d)
 				pubsub.RegisterPublisher[int](d.StreamID())
 
 				pubsub.TryRemoveStreams(s)
@@ -106,11 +107,11 @@ async: true
 			})
 			It("is not successful if stream still has subscribers", func() {
 				d := pubsub.MakeStreamDescription[int]("try-close-2", false, false)
-				s, err := pubsub.AddOrReplaceStreamD[map[string]interface{}](d)
+				s, err := pubsub.AddOrReplaceStreamFromDescription[map[string]interface{}](d)
 				s.Run()
 				defer pubsub.ForceRemoveStream(s.Description())
 
-				pubsub.AddOrReplaceStreamD[int](d)
+				pubsub.AddOrReplaceStreamFromDescription[int](d)
 				pubsub.Subscribe[int](d.StreamID())
 
 				pubsub.TryRemoveStreams(s)
@@ -123,7 +124,7 @@ async: true
 		Context("Adding new Stream", func() {
 			It("is successful", func() {
 				var topic = "test-ps-1"
-				s := pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, false, false))
+				s := pubsub.NewStreamFromDescription[string](pubsub.MakeStreamDescription[string](topic, false, false))
 
 				_ = pubsub.AddOrReplaceStream(s)
 
@@ -133,8 +134,8 @@ async: true
 			})
 			It("is not successful if an existing stream should be preserved", func() {
 				var topic = "test-ps-2"
-				s1 := pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, false, false))
-				s2 := pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, true, false))
+				s1 := pubsub.NewStreamFromDescription[string](pubsub.MakeStreamDescription[string](topic, false, false))
+				s2 := pubsub.NewStreamFromDescription[string](pubsub.MakeStreamDescription[string](topic, true, false))
 
 				pubsub.GetOrAddStreams(s1)
 				sResult := pubsub.GetOrAddStreams(s2)
@@ -144,7 +145,7 @@ async: true
 			})
 			It("is NOT successful when the stream id is invalid", func() {
 
-				s1 := pubsub.NewStreamD[map[string]interface{}](pubsub.MakeStreamDescriptionFromID(pubsub.NilStreamID(), false, false))
+				s1 := pubsub.NewStreamFromDescription[map[string]interface{}](pubsub.MakeStreamDescriptionFromID(pubsub.NilStreamID(), false, false))
 				err := pubsub.AddOrReplaceStream(s1)
 
 				Expect(err).To(Equal(pubsub.StreamIDNilError))
@@ -167,7 +168,7 @@ async: true
 		Context("unsub from a stream", func() {
 			It("is successful when the stream exists", func() {
 				var topic = "test-unsub-1"
-				s := pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, false, false))
+				s := pubsub.NewStreamFromDescription[string](pubsub.MakeStreamDescription[string](topic, false, false))
 				pubsub.GetOrAddStreams(s)
 
 				rec, _ := pubsub.Subscribe[string](s.ID())
@@ -183,8 +184,8 @@ async: true
 		})
 		Context("streams with same name and different types", func() {
 			It("can exist", func() {
-				s1 := pubsub.NewStreamD[int](pubsub.MakeStreamDescription[int]("same", false, false))
-				s2 := pubsub.NewStreamD[float64](pubsub.MakeStreamDescription[float64]("same", true, false))
+				s1 := pubsub.NewStreamFromDescription[int](pubsub.MakeStreamDescription[int]("same", false, false))
+				s2 := pubsub.NewStreamFromDescription[float64](pubsub.MakeStreamDescription[float64]("same", true, false))
 				defer pubsub.ForceRemoveStream(s1.Description())
 				defer pubsub.ForceRemoveStream(s2.Description())
 
@@ -204,7 +205,7 @@ async: true
 		Context("a stream", func() {
 			It("sends and receives event via the pub sub system", func() {
 				var topic = "test-send-rec-1"
-				s := pubsub.NewStreamD[string](pubsub.MakeStreamDescription[string](topic, false, false))
+				s := pubsub.NewStreamFromDescription[string](pubsub.MakeStreamDescription[string](topic, false, false))
 				s.Run()
 				defer pubsub.ForceRemoveStream(s.Description())
 
