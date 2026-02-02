@@ -38,23 +38,19 @@ func WithSingleFanIn(singleFanIn bool) StreamOption {
 }
 
 // MakeStreamDescription creates a new StreamDescription with the provided parameters.
-func MakeStreamDescription[T any](topic string, opts ...StreamOption) StreamDescription {
-	sd := StreamDescription{
-		ID: MakeStreamID[T](topic),
-	}
-	for _, opt := range opts {
-		opt(&sd)
-	}
-	return sd
+func MakeStreamDescription[T any](topic string, options ...StreamOption) StreamDescription {
+	return MakeStreamDescriptionFromID(MakeStreamID[T](topic), options...)
 }
 
 // MakeStreamDescriptionFromID creates a new StreamDescription using an existing StreamID.
-func MakeStreamDescriptionFromID(id StreamID, async bool, singleFanIn bool) StreamDescription {
-	return StreamDescription{
-		ID:          id,
-		AsyncStream: async,
-		SingleFanIn: singleFanIn,
+func MakeStreamDescriptionFromID(id StreamID, options ...StreamOption) StreamDescription {
+	d := StreamDescription{
+		ID: id,
 	}
+	for _, option := range options {
+		option(&d)
+	}
+	return d
 }
 
 // EqualTo checks if two StreamDescriptions are equal based on their ID.

@@ -75,7 +75,7 @@ asyncStream: true
 		})
 		It("is NOT successful when the stream id is invalid", func() {
 
-			s1 := pubsub.MakeStreamDescriptionFromID(pubsub.NilStreamID(), false, false)
+			s1 := pubsub.MakeStreamDescriptionFromID(pubsub.NilStreamID())
 			_, err := pubsub.AddOrReplaceStreamFromDescription[string](s1)
 
 			Expect(err).To(Equal(pubsub.StreamIDNilError))

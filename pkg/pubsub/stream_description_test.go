@@ -8,6 +8,36 @@ import (
 
 var _ = Describe("Descriptions", func() {
 
+	Describe("MakeStreamDescription", func() {
+		It("creates a description with defaults", func() {
+			d := pubsub.MakeStreamDescription[int]("topic")
+			Expect(d.ID.Topic).To(Equal("topic"))
+			Expect(d.AsyncStream).To(BeFalse())
+			Expect(d.AsyncReceiver).To(BeFalse())
+			Expect(d.SingleFanIn).To(BeFalse())
+		})
+
+		It("applies options correctly", func() {
+			d := pubsub.MakeStreamDescription[int]("topic",
+				pubsub.WithAsyncStream(true),
+				pubsub.WithAsyncReceiver(true),
+				pubsub.WithSingleFanIn(true),
+			)
+			Expect(d.AsyncStream).To(BeTrue())
+			Expect(d.AsyncReceiver).To(BeTrue())
+			Expect(d.SingleFanIn).To(BeTrue())
+		})
+	})
+
+	Describe("MakeStreamDescriptionFromID", func() {
+		It("creates a description from ID with options", func() {
+			id := pubsub.MakeStreamID[string]("topic-id")
+			d := pubsub.MakeStreamDescriptionFromID(id, pubsub.WithAsyncStream(true))
+			Expect(d.ID).To(Equal(id))
+			Expect(d.AsyncStream).To(BeTrue())
+		})
+	})
+
 	Describe("Stream Description", func() {
 		Context("Parsing YAML", func() {
 			It("can be parsed correctly with all fields", func() {
