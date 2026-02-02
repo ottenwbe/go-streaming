@@ -22,7 +22,7 @@ var (
 )
 
 // GetOrAddStream adds one streams to the pub sub system or returns an existing one.
-func GetOrAddStream[T any](streamDescription StreamDescription) (Stream, error) {
+func GetOrAddStream[T any](streamDescription StreamDescription) (StreamID, error) {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
 
@@ -30,65 +30,46 @@ func GetOrAddStream[T any](streamDescription StreamDescription) (Stream, error) 
 	return doGetOrAddStream(stream)
 }
 
-// GetOrAddStreams adds one or more streams to the pub sub system or returns an existing one.
-// Note: Ignores Errors, should be fixed
-func GetOrAddStreams(streams ...Stream) []Stream {
-	streamIdxAccessMutex.Lock()
-	defer streamIdxAccessMutex.Unlock()
-
-	for i, stream := range streams {
-		streams[i], _ = doGetOrAddStream(stream) // TODO: what about the error
-	}
-
-	return streams
-}
-
 // AddOrReplaceStreamFromDescription uses a description of a stream to add it or replace it to the pub sub system
-func AddOrReplaceStreamFromDescription[T any](description StreamDescription) (Stream, error) {
+func AddOrReplaceStreamFromDescription[T any](description StreamDescription) (StreamID, error) {
 	var (
 		stream typedStream[T]
 		err    error
 	)
 
+	streamIdxAccessMutex.Lock()
+	defer streamIdxAccessMutex.Unlock()
+
 	stream = NewStreamFromDescription[T](description)
-	err = AddOrReplaceStream(stream)
 
-	return stream, err
+	err = doAddOrReplaceStream(stream)
+	return stream.ID(), err
 }
 
-// AddOrReplaceStream adds a new stream or replaces an existing one in the pub sub system.
-// Replacing could be, for instance, changing the stream from synchronous to asynchronous,
-func AddOrReplaceStream(newStream Stream) error {
-	streamIdxAccessMutex.Lock()
-	defer streamIdxAccessMutex.Unlock()
-
-	return doAddOrReplaceStream(newStream)
-}
-
-// ForceRemoveStream takes StreamDescriptions and ensures that all resources are closed.
+// ForceRemoveStream forces removal of streams by their id, ensuring all resources are closed.
 // The streams will be removed from the central pub sub system.
-func ForceRemoveStream(streams ...StreamDescription) {
+func ForceRemoveStream(streamIDs ...StreamID) {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
 
-	for _, stream := range streams {
-		if s, ok := streamIdx[stream.ID]; ok {
+	for _, id := range streamIDs {
+		if s, ok := streamIdx[id]; ok {
 			s.forceClose()
-			delete(streamIdx, stream.ID)
+			delete(streamIdx, id)
 		}
 	}
 }
 
 // TryRemoveStreams attempts to remove the provided streams from the pub sub system.
 // A stream is only removed if it has no active publishers or subscribers.
-func TryRemoveStreams(streams ...Stream) {
+func TryRemoveStreams(streamIDs ...StreamID) {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
 
-	for _, stream := range streams {
-		if s, ok := streamIdx[stream.ID()]; ok && !s.HasPublishersOrSubscribers() {
+	for _, id := range streamIDs {
+		if s, ok := streamIdx[id]; ok && !s.HasPublishersOrSubscribers() {
 			if s.TryClose() {
-				delete(streamIdx, stream.ID())
+				delete(streamIdx, id)
 			}
 
 		}
@@ -150,6 +131,11 @@ func InstantPublishByTopic[T any](topic string, event events.Event[T]) (err erro
 	return err
 }
 
+// RegisterPublisherByTopic creates and registers a new publisher for the stream identified by the given topic.
+func RegisterPublisherByTopic[T any](topic string) (Publisher[T], error) {
+	return RegisterPublisher[T](MakeStreamID[T](topic))
+}
+
 // RegisterPublisher creates and registers a new publisher for the stream identified by the given ID.
 func RegisterPublisher[T any](id StreamID) (Publisher[T], error) {
 	streamIdxAccessMutex.RLock()
@@ -179,23 +165,6 @@ func UnRegisterPublisher[T any](publisher Publisher[T]) error {
 	}
 }
 
-// GetStreamByTopic retrieves a stream by its topic name.
-func GetStreamByTopic[T any](topic string) (Stream, error) {
-	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
-	return getAndConvertStreamByID[T](MakeStreamID[T](topic))
-}
-
-// GetStream retrieves a stream by its ID.
-func GetStream(id StreamID) (Stream, error) {
-	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
-	if s, ok := streamIdx[id]; ok {
-		return s, nil
-	}
-	return nil, StreamNotFoundError
-}
-
 // GetDescription retrieves the description of a stream identified by the given ID.
 func GetDescription(id StreamID) (StreamDescription, error) {
 	streamIdxAccessMutex.RLock()
@@ -207,17 +176,17 @@ func GetDescription(id StreamID) (StreamDescription, error) {
 	}
 }
 
-func doGetOrAddStream(stream Stream) (Stream, error) {
+func doGetOrAddStream(stream Stream) (StreamID, error) {
 	err := validateStream(stream)
 	if err != nil {
-		return stream, err
+		return NilStreamID(), err
 	}
 
 	if existingStream, ok := streamIdx[stream.ID()]; ok {
-		return existingStream, nil
+		return existingStream.ID(), nil
 	} else {
 		addStream(stream)
-		return stream, nil
+		return stream.ID(), nil
 	}
 }
 

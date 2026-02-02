@@ -13,23 +13,29 @@ func TemplateQueryOverSingleStreamSelection1[T any, TOut any](
 	operation func(engine.SingleStreamSelection1[T]) events.Event[TOut],
 	out string) (*ContinuousQuery, error) {
 
-	inputStream := pubsub.NewStream[T](in, false, true)
-	outputStream := pubsub.NewStream[TOut](out, false, true)
+	inputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[T](pubsub.MakeStreamDescription[T](in, pubsub.WithSingleFanIn(true)))
+	if err != nil {
+		return nil, err
+	}
+	outputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[TOut](pubsub.MakeStreamDescription[TOut](out, pubsub.WithSingleFanIn(true)))
+	if err != nil {
+		return nil, err
+	}
 
-	f := createOperationOverSingleStreamSelection1(inputStream.ID(), operation, outputStream)
+	f := createOperationOverSingleStreamSelection1(inputStreamID, operation, outputStreamID)
 
-	queryControl := newQueryControl(outputStream.ID())
-	queryControl.addStreams(inputStream, outputStream)
+	queryControl := newQueryControl(outputStreamID)
+	queryControl.addStreams(inputStreamID, outputStreamID)
 	queryControl.addOperations(f)
 
 	return queryControl, nil
 }
 
-func createOperationOverSingleStreamSelection1[T, TOut any](inputStream pubsub.StreamID, operation func(engine.SingleStreamSelection1[T]) events.Event[TOut], outputStream pubsub.Stream) engine.OperatorControl {
+func createOperationOverSingleStreamSelection1[T, TOut any](inputStream pubsub.StreamID, operation func(engine.SingleStreamSelection1[T]) events.Event[TOut], outputStream pubsub.StreamID) engine.OperatorControl {
 
 	inStream := engine.NewSingleStreamInput1[T](inputStream)
 
-	f := engine.NewOperator[engine.SingleStreamSelection1[T], TOut](operation, inStream, outputStream.ID())
+	f := engine.NewOperator[engine.SingleStreamSelection1[T], TOut](operation, inStream, outputStream)
 
 	return f
 }
@@ -41,21 +47,27 @@ func TemplateQueryOverSingleStreamSelectionN[T any, TOut any](
 	op func(engine.SingleStreamSelectionN[T]) events.Event[TOut],
 	out string) (*ContinuousQuery, error) {
 
-	inputStream := pubsub.NewStream[T](in, false, true)
-	outputStream := pubsub.NewStream[TOut](out, false, true)
+	inputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[T](pubsub.MakeStreamDescription[T](in, pubsub.WithSingleFanIn(true)))
+	if err != nil {
+		return nil, err
+	}
+	outputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[TOut](pubsub.MakeStreamDescription[TOut](out, pubsub.WithSingleFanIn(true)))
+	if err != nil {
+		return nil, err
+	}
 
-	f := createOperatorOverSingleStreamSelectionN(inputStream.ID(), selection, op, outputStream)
+	f := createOperatorOverSingleStreamSelectionN(inputStreamID, selection, op, outputStreamID)
 
-	queryControl := newQueryControl(outputStream.ID())
-	queryControl.addStreams(inputStream, outputStream)
+	queryControl := newQueryControl(outputStreamID)
+	queryControl.addStreams(inputStreamID, outputStreamID)
 	queryControl.addOperations(f)
 
 	return queryControl, nil
 }
 
-func createOperatorOverSingleStreamSelectionN[T any, TOut any](inputStream pubsub.StreamID, selection selection.Policy[T], op func(engine.SingleStreamSelectionN[T]) events.Event[TOut], outputStream pubsub.Stream) engine.OperatorControl {
+func createOperatorOverSingleStreamSelectionN[T any, TOut any](inputStream pubsub.StreamID, selection selection.Policy[T], op func(engine.SingleStreamSelectionN[T]) events.Event[TOut], outputStream pubsub.StreamID) engine.OperatorControl {
 	inStream := engine.NewSingleStreamInputN(inputStream, selection)
-	f := engine.NewOperator[engine.SingleStreamSelectionN[T], TOut](op, inStream, outputStream.ID())
+	f := engine.NewOperator[engine.SingleStreamSelectionN[T], TOut](op, inStream, outputStream)
 	return f
 }
 
@@ -65,21 +77,27 @@ func TemplateQueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](
 	op func(engine.SingleStreamSelection1[T]) []events.Event[TOut],
 	out string) (*ContinuousQuery, error) {
 
-	inputStream := pubsub.NewStream[T](in, false, true)
-	outputStream := pubsub.NewStream[TOut](out, false, true)
+	inputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[T](pubsub.MakeStreamDescription[T](in, pubsub.WithSingleFanIn(true)))
+	if err != nil {
+		return nil, err
+	}
+	outputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[TOut](pubsub.MakeStreamDescription[TOut](out, pubsub.WithSingleFanIn(true)))
+	if err != nil {
+		return nil, err
+	}
 
-	f := createMultipleEventsOverSingleStreamSelection1(inputStream.ID(), op, outputStream)
+	f := createMultipleEventsOverSingleStreamSelection1(inputStreamID, op, outputStreamID)
 
-	queryControl := newQueryControl(outputStream.ID())
-	queryControl.addStreams(inputStream, outputStream)
+	queryControl := newQueryControl(outputStreamID)
+	queryControl.addStreams(inputStreamID, outputStreamID)
 	queryControl.addOperations(f)
 
 	return queryControl, nil
 }
 
-func createMultipleEventsOverSingleStreamSelection1[T any, TOut any](inputStream pubsub.StreamID, op func(engine.SingleStreamSelection1[T]) []events.Event[TOut], outputStream pubsub.Stream) engine.OperatorControl {
+func createMultipleEventsOverSingleStreamSelection1[T any, TOut any](inputStream pubsub.StreamID, op func(engine.SingleStreamSelection1[T]) []events.Event[TOut], outputStream pubsub.StreamID) engine.OperatorControl {
 	inStream := engine.NewSingleStreamInput1[T](inputStream)
-	f := engine.NewOperatorN[engine.SingleStreamSelection1[T], TOut](op, inStream, outputStream.ID())
+	f := engine.NewOperatorN[engine.SingleStreamSelection1[T], TOut](op, inStream, outputStream)
 	return f
 }
 
@@ -92,16 +110,24 @@ func TemplateQueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](
 	op func(n engine.DoubleInputSelectionN[TIN1, TIN2]) events.Event[TOUT],
 	out string) (*ContinuousQuery, error) {
 
-	inputStream1 := pubsub.NewStream[TIN1](in1, false, true)
-	inputStream2 := pubsub.NewStream[TIN2](in2, false, true)
+	inputStream1ID, err := pubsub.AddOrReplaceStreamFromDescription[TIN1](pubsub.MakeStreamDescription[TIN1](in1, pubsub.WithSingleFanIn(true)))
+	if err != nil {
+		return nil, err
+	}
+	inputStream2ID, err := pubsub.AddOrReplaceStreamFromDescription[TIN2](pubsub.MakeStreamDescription[TIN2](in2, pubsub.WithSingleFanIn(true)))
+	if err != nil {
+		return nil, err
+	}
+	outputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[TOUT](pubsub.MakeStreamDescription[TOUT](out, pubsub.WithSingleFanIn(true)))
+	if err != nil {
+		return nil, err
+	}
 
-	outputStream := pubsub.NewStream[TOUT](out, false, true)
+	inStream := engine.NewDoubleStreamInputN[TIN1, TIN2](inputStream1ID, selection1, inputStream2ID, selection2)
+	f := engine.NewOperator[engine.DoubleInputSelectionN[TIN1, TIN2], TOUT](op, inStream, outputStreamID)
 
-	inStream := engine.NewDoubleStreamInputN[TIN1, TIN2](inputStream1.ID(), selection1, inputStream2.ID(), selection2)
-	f := engine.NewOperator[engine.DoubleInputSelectionN[TIN1, TIN2], TOUT](op, inStream, outputStream.ID())
-
-	queryControl := newQueryControl(outputStream.ID())
-	queryControl.addStreams(inputStream1, inputStream2, outputStream)
+	queryControl := newQueryControl(outputStreamID)
+	queryControl.addStreams(inputStream1ID, inputStream2ID, outputStreamID)
 	queryControl.addOperations(f)
 
 	return queryControl, nil
@@ -114,16 +140,24 @@ func TemplateQueryOverDoubleStreamSelection1[TIN1, TIN2, TOUT any](
 	op func(n engine.DoubleInputSelection1[TIN1, TIN2]) events.Event[TOUT],
 	out string) (*ContinuousQuery, error) {
 
-	inputStream1 := pubsub.NewStream[TIN1](in1, false, true)
-	inputStream2 := pubsub.NewStream[TIN2](in2, false, true)
+	inputStream1ID, err := pubsub.AddOrReplaceStreamFromDescription[TIN1](pubsub.MakeStreamDescription[TIN1](in1, pubsub.WithSingleFanIn(true)))
+	if err != nil {
+		return nil, err
+	}
+	inputStream2ID, err := pubsub.AddOrReplaceStreamFromDescription[TIN2](pubsub.MakeStreamDescription[TIN2](in2, pubsub.WithSingleFanIn(true)))
+	if err != nil {
+		return nil, err
+	}
+	outputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[TOUT](pubsub.MakeStreamDescription[TOUT](out, pubsub.WithSingleFanIn(true)))
+	if err != nil {
+		return nil, err
+	}
 
-	outputStream := pubsub.NewStream[TOUT](out, false, true)
+	inStream := engine.NewDoubleStreamInput1[TIN1, TIN2](inputStream1ID, inputStream2ID)
+	f := engine.NewOperator[engine.DoubleInputSelection1[TIN1, TIN2], TOUT](op, inStream, outputStreamID)
 
-	inStream := engine.NewDoubleStreamInput1[TIN1, TIN2](inputStream1.ID(), inputStream2.ID())
-	f := engine.NewOperator[engine.DoubleInputSelection1[TIN1, TIN2], TOUT](op, inStream, outputStream.ID())
-
-	queryControl := newQueryControl(outputStream.ID())
-	queryControl.addStreams(inputStream1, inputStream2, outputStream)
+	queryControl := newQueryControl(outputStreamID)
+	queryControl.addStreams(inputStream1ID, inputStream2ID, outputStreamID)
 	queryControl.addOperations(f)
 
 	return queryControl, nil

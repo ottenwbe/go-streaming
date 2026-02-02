@@ -34,11 +34,11 @@ var _ = Describe("Add Operator1", func() {
 			event := events.NewEvent(8)
 			event2 := events.NewEvent(3)
 
-			streamA, _ := pubsub.GetStreamByTopic[int]("test-add-in1")
-			streamB, _ := pubsub.GetStreamByTopic[int]("test-add-in2")
+			streamAID := pubsub.MakeStreamID[int]("test-add-in1")
+			streamBID := pubsub.MakeStreamID[int]("test-add-in2")
 
-			publisherA, _ := pubsub.RegisterPublisher[int](streamA.ID())
-			publisherB, _ := pubsub.RegisterPublisher[int](streamB.ID())
+			publisherA, _ := pubsub.RegisterPublisher[int](streamAID)
+			publisherB, _ := pubsub.RegisterPublisher[int](streamBID)
 
 			publisherA.Publish(event)
 			publisherB.Publish(event2)
@@ -62,8 +62,8 @@ var _ = Describe("Convert Operator1", func() {
 
 			event := events.NewEvent(8)
 
-			streamIn, _ := pubsub.GetStreamByTopic[int]("convert-test-in")
-			publisher, _ := pubsub.RegisterPublisher[int](streamIn.ID())
+			streamInID := pubsub.MakeStreamID[int]("convert-test-in")
+			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
 
 			publisher.Publish(event)
 			result, _ := qs.Notify()
@@ -89,8 +89,8 @@ var _ = Describe("Sum Operator1", func() {
 			event2 := events.NewEvent(15)
 			event3 := events.NewEvent(15)
 
-			streamIn, _ := pubsub.GetStreamByTopic[int]("int values")
-			publisher, _ := pubsub.RegisterPublisher[int](streamIn.ID())
+			streamInID := pubsub.MakeStreamID[int]("int values")
+			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
 
 			publisher.Publish(event)
 			publisher.Publish(event1)
@@ -122,8 +122,8 @@ var _ = Describe("Count Operator1", func() {
 			event2 := events.NewEvent[float32](1.2)
 			event3 := events.NewEvent[float32](1.3)
 
-			streamIn, _ := pubsub.GetStreamByTopic[float32]("countable floats")
-			publisher, _ := pubsub.RegisterPublisher[float32](streamIn.ID())
+			streamInID := pubsub.MakeStreamID[float32]("countable floats")
+			publisher, _ := pubsub.RegisterPublisher[float32](streamInID)
 			publisher.Publish(event)
 			publisher.Publish(event1)
 			publisher.Publish(event2)
@@ -148,14 +148,14 @@ var _ = Describe("Smaller OperatorControl", func() {
 			qs, _ := query.RunAndSubscribe[int](query.ContinuousSmaller[int]("q-s-1", "res-s-1", 11))
 			defer query.Close(qs)
 
-			streamIn, _ := pubsub.GetStreamByTopic[int]("q-s-1")
+			streamInID := pubsub.MakeStreamID[int]("q-s-1")
 
 			event := events.NewEvent(9)
 			event1 := events.NewEvent(10)
 			event2 := events.NewEvent(15)
 			event3 := events.NewEvent(35)
 
-			publisher, _ := pubsub.RegisterPublisher[int](streamIn.ID())
+			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
 
 			publisher.Publish(event)
 			publisher.Publish(event1)
@@ -186,8 +186,8 @@ var _ = Describe("Greater OperatorControl", func() {
 			event2 := events.NewEvent(15)
 			event3 := events.NewEvent(35)
 
-			streamIn, _ := pubsub.GetStreamByTopic[int]("test-greater-11")
-			publisher, _ := pubsub.RegisterPublisher[int](streamIn.ID())
+			streamInID := pubsub.MakeStreamID[int]("test-greater-11")
+			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
 			publisher.Publish(event)
 			publisher.Publish(event1)
 			publisher.Publish(event2)

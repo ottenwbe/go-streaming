@@ -17,13 +17,35 @@ type StreamDescription struct {
 	SingleFanIn   bool     `yaml:"singleFanIn" json:"singleFanIn"`
 }
 
-// MakeStreamDescription creates a new StreamDescription with the provided parameters.
-func MakeStreamDescription[T any](topic string, async bool, singleFanIn bool) StreamDescription {
-	return StreamDescription{
-		ID:          MakeStreamID[T](topic),
-		AsyncStream: async,
-		SingleFanIn: singleFanIn,
+type StreamOption func(*StreamDescription)
+
+func WithAsyncStream(async bool) StreamOption {
+	return func(s *StreamDescription) {
+		s.AsyncStream = async
 	}
+}
+
+func WithAsyncReceiver(asyncReceiver bool) StreamOption {
+	return func(s *StreamDescription) {
+		s.AsyncReceiver = asyncReceiver
+	}
+}
+
+func WithSingleFanIn(singleFanIn bool) StreamOption {
+	return func(s *StreamDescription) {
+		s.SingleFanIn = singleFanIn
+	}
+}
+
+// MakeStreamDescription creates a new StreamDescription with the provided parameters.
+func MakeStreamDescription[T any](topic string, opts ...StreamOption) StreamDescription {
+	sd := StreamDescription{
+		ID: MakeStreamID[T](topic),
+	}
+	for _, opt := range opts {
+		opt(&sd)
+	}
+	return sd
 }
 
 // MakeStreamDescriptionFromID creates a new StreamDescription using an existing StreamID.

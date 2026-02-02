@@ -11,10 +11,9 @@ func main() {
 	// 1. Define and register a stream
 	topic := "greetings"
 	// Stream of strings, synchronous (false), multiple publishers allowed (false for singleFanIn)
-	desc := pubsub.MakeStreamDescription[string](topic, true, false)
-	s, _ := pubsub.AddOrReplaceStreamFromDescription[string](desc)
-	s.Run()
-	defer pubsub.ForceRemoveStream(desc)
+	desc := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsyncStream(true))
+	sID, _ := pubsub.AddOrReplaceStreamFromDescription[string](desc)
+	defer pubsub.ForceRemoveStream(sID)
 
 	started := make(chan bool)
 	finished := make(chan bool)
