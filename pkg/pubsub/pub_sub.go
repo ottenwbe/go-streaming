@@ -241,6 +241,7 @@ func tryCopyExistingStreamToNewStream(newStream Stream) {
 }
 
 func addStream(newStream Stream) {
+	newStream.Run()
 	streamIdx[newStream.ID()] = newStream
 }
 

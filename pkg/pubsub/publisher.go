@@ -115,7 +115,8 @@ func (s *singlePublisherFanIn[T]) len() int {
 
 func (s *singlePublisherFanIn[T]) newPublisher() (Publisher[T], error) {
 	if s.publisher == nil {
-		return newDefaultPublisher[T](s.streamID(), s), nil
+		s.publisher = newDefaultPublisher[T](s.streamID(), s)
+		return s.publisher, nil
 	}
 	return nil, SinglePublisherFanInMoreThanOneError
 }
@@ -182,8 +183,7 @@ func (p *publisherFanInMutexSync[T]) publishC(content T) error {
 	defer p.mutex.Unlock()
 
 	e := events.NewEvent(content)
-
-	return p.publish(e)
+	return p.stream.publish(e)
 }
 
 func (p *publisherFanInMutexSync[T]) publish(e events.Event[T]) error {
