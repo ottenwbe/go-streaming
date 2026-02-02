@@ -26,8 +26,8 @@ type StreamID struct {
 }
 
 type marshalledStreamID struct {
-	Topic     string `yaml:"topic"` // include topic as a string
-	TopicType string `yaml:"type"`  // include topicType as a string
+	Topic     string `yaml:"topic" json:"topic"` // include topic as a string
+	TopicType string `yaml:"type" json:"type"`   // include topicType as a string
 }
 
 // MarshalJSON implements the json.Marshaler interface for StreamID.

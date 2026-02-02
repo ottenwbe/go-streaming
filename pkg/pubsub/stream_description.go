@@ -17,22 +17,40 @@ type StreamDescription struct {
 	SingleFanIn   bool     `yaml:"singleFanIn" json:"singleFanIn"`
 }
 
-// MakeStreamDescription creates a new StreamDescription with the provided parameters.
-func MakeStreamDescription[T any](topic string, async bool, singleFanIn bool) StreamDescription {
-	return StreamDescription{
-		ID:          MakeStreamID[T](topic),
-		AsyncStream: async,
-		SingleFanIn: singleFanIn,
+type StreamOption func(*StreamDescription)
+
+func WithAsyncStream(async bool) StreamOption {
+	return func(s *StreamDescription) {
+		s.AsyncStream = async
 	}
 }
 
-// MakeStreamDescriptionFromID creates a new StreamDescription using an existing StreamID.
-func MakeStreamDescriptionFromID(id StreamID, async bool, singleFanIn bool) StreamDescription {
-	return StreamDescription{
-		ID:          id,
-		AsyncStream: async,
-		SingleFanIn: singleFanIn,
+func WithAsyncReceiver(asyncReceiver bool) StreamOption {
+	return func(s *StreamDescription) {
+		s.AsyncReceiver = asyncReceiver
 	}
+}
+
+func WithSingleFanIn(singleFanIn bool) StreamOption {
+	return func(s *StreamDescription) {
+		s.SingleFanIn = singleFanIn
+	}
+}
+
+// MakeStreamDescription creates a new StreamDescription with the provided parameters.
+func MakeStreamDescription[T any](topic string, options ...StreamOption) StreamDescription {
+	return MakeStreamDescriptionFromID(MakeStreamID[T](topic), options...)
+}
+
+// MakeStreamDescriptionFromID creates a new StreamDescription using an existing StreamID.
+func MakeStreamDescriptionFromID(id StreamID, options ...StreamOption) StreamDescription {
+	d := StreamDescription{
+		ID: id,
+	}
+	for _, option := range options {
+		option(&d)
+	}
+	return d
 }
 
 // EqualTo checks if two StreamDescriptions are equal based on their ID.

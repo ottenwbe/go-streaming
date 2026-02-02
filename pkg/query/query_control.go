@@ -23,7 +23,7 @@ type ContinuousQuery struct {
 	id ID
 
 	operators []engine.OperatorControl
-	streams   []pubsub.Stream
+	streams   []pubsub.StreamID
 	output    pubsub.StreamID
 }
 
@@ -122,8 +122,6 @@ func (c *ContinuousQuery) close() {
 
 func (c *ContinuousQuery) run() error {
 
-	c.streams = pubsub.GetOrAddStreams(c.streams...)
-
 	c.startEverything()
 
 	err := QueryRepository().put(c)
@@ -134,12 +132,12 @@ func newQueryControl(outStream pubsub.StreamID) *ContinuousQuery {
 	return &ContinuousQuery{
 		id:        ID(uuid.New()),
 		operators: make([]engine.OperatorControl, 0),
-		streams:   []pubsub.Stream{},
+		streams:   []pubsub.StreamID{},
 		output:    outStream,
 	}
 }
 
-func (c *ContinuousQuery) addStreams(streams ...pubsub.Stream) {
+func (c *ContinuousQuery) addStreams(streams ...pubsub.StreamID) {
 	c.streams = append(c.streams, streams...)
 }
 
@@ -148,9 +146,6 @@ func (c *ContinuousQuery) addOperations(operators ...engine.OperatorControl) {
 }
 
 func (c *ContinuousQuery) startEverything() {
-	for _, stream := range c.streams {
-		stream.Run()
-	}
 	for _, operator := range c.operators {
 		operator.Start()
 	}
@@ -160,14 +155,11 @@ func (c *ContinuousQuery) stopEverything() {
 	for _, operator := range c.operators {
 		operator.Stop()
 	}
-	for _, stream := range c.streams {
-		stream.TryClose()
-	}
 }
 
-func in(streams []pubsub.Stream, id pubsub.StreamID) bool {
+func in(streams []pubsub.StreamID, id pubsub.StreamID) bool {
 	for _, stream := range streams {
-		if stream.ID() == id {
+		if stream == id {
 			return true
 		}
 	}
@@ -180,7 +172,7 @@ func NewBuilder() *Builder {
 		q: &ContinuousQuery{
 			id:        ID(uuid.New()),
 			operators: make([]engine.OperatorControl, 0),
-			streams:   make([]pubsub.Stream, 0),
+			streams:   make([]pubsub.StreamID, 0),
 			output:    pubsub.NilStreamID(),
 		},
 		error: make([]error, 0),
@@ -188,8 +180,8 @@ func NewBuilder() *Builder {
 }
 
 // S creates or retrieves a stream with the given configuration.
-func S[T any](topic string, async bool, singleFanIn bool) (pubsub.Stream, error) {
-	d := pubsub.MakeStreamDescription[T](topic, async, singleFanIn)
+func S[T any](topic string, async bool, singleFanIn bool) (pubsub.StreamID, error) {
+	d := pubsub.MakeStreamDescription[T](topic, pubsub.WithAsyncStream(async), pubsub.WithSingleFanIn(singleFanIn))
 	return pubsub.AddOrReplaceStreamFromDescription[T](d)
 }
 
@@ -209,7 +201,7 @@ func (b *Builder) Query(q *ContinuousQuery, pErr error) *Builder {
 }
 
 // Stream adds a stream to the query being built.
-func (b *Builder) Stream(s pubsub.Stream, err error) *Builder {
+func (b *Builder) Stream(s pubsub.StreamID, err error) *Builder {
 	b.q.addStreams(s)
 	if err != nil {
 		b.error = append(b.error, err)

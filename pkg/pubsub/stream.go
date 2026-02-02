@@ -65,7 +65,7 @@ type localAsyncStream[T any] struct {
 // NewStream creates and returns a new stream
 // TODO unexport function or remove
 func NewStream[T any](topic string, async bool, singleFanIn bool) typedStream[T] {
-	return NewStreamFromDescription[T](MakeStreamDescription[T](topic, async, singleFanIn))
+	return NewStreamFromDescription[T](MakeStreamDescription[T](topic, WithAsyncStream(async), WithSingleFanIn(singleFanIn)))
 }
 
 // NewStreamFromDescription creates and returns a typedStream of a given stream type T
