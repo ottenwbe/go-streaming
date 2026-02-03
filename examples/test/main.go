@@ -8,6 +8,28 @@ import (
 )
 
 func main() {
+	c := make(chan string)
+
+	go func(s chan string) {
+		for i := range 100 {
+			s <- fmt.Sprintf("a%v", i)
+		}
+	}(c)
+
+	go func(s chan string) {
+		for i := range 100 {
+			s <- fmt.Sprintf("%v", i)
+		}
+	}(c)
+
+	go func(s chan string) {
+		a := <-s
+		fmt.Println(a)
+	}(c)
+
+}
+
+func test1() {
 	// 1. Define and register a stream
 	topic := "greetings"
 	// Stream of strings, synchronous (false), multiple publishers allowed (false for singleFanIn)

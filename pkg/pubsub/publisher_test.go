@@ -1,8 +1,6 @@
 package pubsub
 
 import (
-	"fmt"
-
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -13,12 +11,13 @@ import (
 // Mock Stream implementation for testing publishers
 type mockStream[T any] struct {
 	id              StreamID
+	channel         events.EventChannel[T]
 	publishedEvents []events.Event[T]
 }
 
 func (m *mockStream[T]) Run()                             {}
 func (m *mockStream[T]) TryClose() bool                   { return true }
-func (m *mockStream[T]) forceClose()                      {}
+func (m *mockStream[T]) forceClose()                      { close(m.channel) }
 func (m *mockStream[T]) HasPublishersOrSubscribers() bool { return false }
 func (m *mockStream[T]) ID() StreamID                     { return m.id }
 func (m *mockStream[T]) Description() StreamDescription   { return StreamDescription{} }
@@ -36,6 +35,26 @@ func (m *mockStream[T]) removePublisher(id PublisherID)        {}
 func (m *mockStream[T]) subscribers() *notificationMap[T]      { return nil }
 func (m *mockStream[T]) publishers() publisherFanIn[T]         { return nil }
 func (m *mockStream[T]) events() buffer.Buffer[T]              { return nil }
+
+func createMockStream[T any](id StreamID) *mockStream[T] {
+
+	s := &mockStream[T]{id: id, channel: make(events.EventChannel[T])}
+
+	go func() {
+		run := true
+
+		for run {
+			e, more := <-s.channel
+			if more {
+				_ = s.publish(e)
+			} else {
+				run = false
+			}
+		}
+	}()
+
+	return s
+}
 
 var _ = Describe("Publisher", func() {
 
@@ -57,9 +76,13 @@ var _ = Describe("Publisher", func() {
 
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-stream")
-			mockS = &mockStream[string]{id: streamID}
-			fanIn = newPublisherSync[string](mockS, false)
+			mockS = createMockStream[string](streamID)
+			fanIn = newPublisherSync[string](mockS.Description(), mockS.channel)
 			pub = newDefaultPublisher(streamID, fanIn)
+		})
+
+		AfterEach(func() {
+			mockS.forceClose()
 		})
 
 		It("should return a publisher ID", func() {
@@ -78,10 +101,8 @@ var _ = Describe("Publisher", func() {
 		})
 
 		It("should publish content", func() {
-			fmt.Println("hier")
 			err := pub.PublishC("world")
 			Expect(err).To(BeNil())
-			fmt.Println("hier")
 			Expect(mockS.publishedEvents).To(HaveLen(1))
 			Expect(mockS.publishedEvents[0].GetContent()).To(Equal("world"))
 		})
@@ -111,52 +132,6 @@ var _ = Describe("Publisher", func() {
 		})
 	})
 
-	Describe("singlePublisherFanIn", func() {
-		var (
-			mockS *mockStream[string]
-			fanIn publisherFanIn[string]
-		)
-
-		BeforeEach(func() {
-			mockS = &mockStream[string]{id: MakeStreamID[string]("single")}
-			fanIn = newPublisherSync[string](mockS, true)
-		})
-
-		It("should allow creating one publisher", func() {
-			p, err := fanIn.newPublisher()
-			Expect(err).To(BeNil())
-			Expect(p).NotTo(BeNil())
-			Expect(fanIn.len()).To(Equal(1))
-		})
-
-		It("should fail creating second publisher", func() {
-			_, _ = fanIn.newPublisher()
-			p2, err := fanIn.newPublisher()
-			Expect(p2).To(BeNil())
-			Expect(err).To(Equal(SinglePublisherFanInMoreThanOneError))
-		})
-
-		It("should remove publisher", func() {
-			p, _ := fanIn.newPublisher()
-			fanIn.remove(p.ID())
-			Expect(fanIn.len()).To(Equal(0))
-		})
-
-		It("should clear publisher and allow to assign a new publisher", func() {
-			p, _ := fanIn.newPublisher()
-			fanIn.clear()
-			Expect(fanIn.len()).To(Equal(0))
-
-			p2, err := fanIn.newPublisher()
-			Expect(err).To(BeNil())
-			Expect(p2).NotTo(BeNil())
-
-			err = p.PublishC("test")
-			Expect(err).To(BeNil())
-			Expect(mockS.publishedEvents).To(BeEmpty())
-		})
-	})
-
 	Describe("publisherFanInMutexSync", func() {
 		var (
 			mockS *mockStream[string]
@@ -164,8 +139,12 @@ var _ = Describe("Publisher", func() {
 		)
 
 		BeforeEach(func() {
-			mockS = &mockStream[string]{id: MakeStreamID[string]("multi")}
-			fanIn = newPublisherSync[string](mockS, false)
+			mockS = createMockStream[string](MakeStreamID[string]("multi"))
+			fanIn = newPublisherSync[string](mockS.Description(), mockS.channel)
+		})
+
+		AfterEach(func() {
+			mockS.forceClose()
 		})
 
 		It("should allow multiple publishers", func() {
@@ -190,7 +169,7 @@ var _ = Describe("Publisher", func() {
 
 		It("should clear publishers", func() {
 			p1, _ := fanIn.newPublisher()
-			fanIn.clear()
+			fanIn.Close()
 			Expect(fanIn.len()).To(Equal(0))
 
 			err := p1.PublishC("test")
