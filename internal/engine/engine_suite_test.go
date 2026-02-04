@@ -23,10 +23,11 @@ var _ = Describe("OperatorRepository", func() {
 	)
 
 	BeforeEach(func() {
-		streamIn := pubsub.NewStreamFromDescription[int](pubsub.MakeStreamDescription[int]("int values"))
-		streamOut := pubsub.NewStreamFromDescription[int](pubsub.MakeStreamDescription[int]("summed up values"))
+		streamInID, _ := pubsub.GetOrAddStream[int](pubsub.MakeStreamDescription[int]("int values"))
+		streamOutID, _ := pubsub.GetOrAddStream[int](pubsub.MakeStreamDescription[int]("summed up values"))
+		defer pubsub.ForceRemoveStream(streamOutID, streamOutID)
 
-		inStream := engine.NewSingleStreamInput1[int](streamIn.ID())
+		inStream := engine.NewSingleStreamInput1[int](streamInID)
 
 		smaller := func(input engine.SingleStreamSelection1[int]) []events.Event[int] {
 			if input.GetContent() < 11 {
@@ -37,7 +38,7 @@ var _ = Describe("OperatorRepository", func() {
 
 		}
 
-		op = engine.NewOperatorN[engine.SingleStreamSelection1[int], int](smaller, inStream, streamOut.ID())
+		op = engine.NewOperatorN[engine.SingleStreamSelection1[int], int](smaller, inStream, streamOutID)
 	})
 
 	Context("Get and put", func() {

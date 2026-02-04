@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"errors"
+	"io"
 	"slices"
 	"sync"
 
@@ -43,22 +44,19 @@ type (
 )
 type (
 	publisherFanIn[T any] interface {
+		io.Closer
 		publish(event events.Event[T]) error
 		publishC(content T) error
 		streamID() StreamID
 		len() int
 		newPublisher() (Publisher[T], error)
 		remove(id PublisherID)
-		clear()
 	}
 	publisherFanInMutexSync[T any] struct {
-		publishers []*defaultPublisher[T]
-		stream     typedStream[T]
-		mutex      sync.Mutex
-	}
-	singlePublisherFanIn[T any] struct {
-		publisher *defaultPublisher[T]
-		stream    typedStream[T]
+		publishers  []*defaultPublisher[T]
+		description StreamDescription
+		channel     events.EventChannel[T]
+		mutex       sync.Mutex
 	}
 	emptyPublisherFanIn[T any] struct {
 	}
@@ -88,51 +86,7 @@ func (e emptyPublisherFanIn[T]) newPublisher() (Publisher[T], error) {
 func (e emptyPublisherFanIn[T]) remove(PublisherID) {
 }
 
-func (e emptyPublisherFanIn[T]) clear() {
-}
-
-func (s *singlePublisherFanIn[T]) publish(event events.Event[T]) error {
-	return s.stream.publish(event)
-}
-
-func (s *singlePublisherFanIn[T]) publishC(content T) error {
-
-	event := events.NewEvent(content)
-
-	return s.stream.publish(event)
-}
-
-func (s *singlePublisherFanIn[T]) streamID() StreamID {
-	return s.stream.ID()
-}
-
-func (s *singlePublisherFanIn[T]) len() int {
-	if s.publisher == nil {
-		return 0
-	}
-	return 1
-}
-
-func (s *singlePublisherFanIn[T]) newPublisher() (Publisher[T], error) {
-	if s.publisher == nil {
-		s.publisher = newDefaultPublisher[T](s.streamID(), s)
-		return s.publisher, nil
-	}
-	return nil, SinglePublisherFanInMoreThanOneError
-}
-
-func (s *singlePublisherFanIn[T]) remove(id PublisherID) {
-	if s.publisher != nil && s.publisher.id == id {
-		s.publisher = nil
-	}
-}
-
-func (s *singlePublisherFanIn[T]) clear() {
-	if s.publisher != nil {
-		s.publisher.fanIn = emptyPublisherFanIn[T]{}
-	}
-	s.publisher = nil
-}
+func (e emptyPublisherFanIn[T]) Close() error { return nil }
 
 func newDefaultPublisher[T any](streamID StreamID, fanIn publisherFanIn[T]) *defaultPublisher[T] {
 	return &defaultPublisher[T]{
@@ -142,21 +96,18 @@ func newDefaultPublisher[T any](streamID StreamID, fanIn publisherFanIn[T]) *def
 	}
 }
 
-func newPublisherSync[T any](stream typedStream[T], singleFanIn bool) publisherFanIn[T] {
-	if singleFanIn {
-		return &singlePublisherFanIn[T]{
-			publisher: nil,
-			stream:    stream,
-		}
-	} else {
-		return &publisherFanInMutexSync[T]{
-			publishers: make([]*defaultPublisher[T], 0),
-			stream:     stream,
-		}
+func newPublisherSync[T any](sDescription StreamDescription, eChannel events.EventChannel[T]) publisherFanIn[T] {
+
+	return &publisherFanInMutexSync[T]{
+		publishers:  make([]*defaultPublisher[T], 0),
+		description: sDescription,
+		channel:     eChannel,
 	}
+
 }
 
-func (p *publisherFanInMutexSync[T]) clear() {
+func (p *publisherFanInMutexSync[T]) Close() error {
+
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
@@ -168,6 +119,8 @@ func (p *publisherFanInMutexSync[T]) clear() {
 	}
 
 	p.publishers = make([]*defaultPublisher[T], 0)
+
+	return nil
 }
 
 func (p *publisherFanInMutexSync[T]) len() int {
@@ -175,22 +128,21 @@ func (p *publisherFanInMutexSync[T]) len() int {
 }
 
 func (p *publisherFanInMutexSync[T]) streamID() StreamID {
-	return p.stream.ID()
+	return p.description.ID
 }
 
 func (p *publisherFanInMutexSync[T]) publishC(content T) error {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
 	e := events.NewEvent(content)
-	return p.stream.publish(e)
+	return p.publish(e)
 }
 
 func (p *publisherFanInMutexSync[T]) publish(e events.Event[T]) error {
+	// discussible if needed due to chan, however, synchronizes with clear()
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	return p.stream.publish(e)
+	p.channel <- e
+	return nil
 }
 
 func (p *publisherFanInMutexSync[T]) newPublisher() (Publisher[T], error) {

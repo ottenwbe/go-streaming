@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/ottenwbe/go-streaming/internal/buffer"
 	"github.com/ottenwbe/go-streaming/pkg/events"
@@ -104,13 +105,21 @@ func (r *bufferedStreamReceiver[T]) Consume() (events.Event[T], error) {
 }
 
 type notificationMap[T any] struct {
+	channel  events.EventChannel[T]
 	receiver map[StreamReceiverID]StreamReceiver[T]
+	active   bool
 }
 
-func newNotificationMap[T any]() *notificationMap[T] {
-	return &notificationMap[T]{
+func newNotificationMap[T any](eChannel events.EventChannel[T]) *notificationMap[T] {
+	m := &notificationMap[T]{
+		channel:  eChannel,
 		receiver: make(map[StreamReceiverID]StreamReceiver[T]),
+		active:   true,
 	}
+
+	go m.doNotify()
+
+	return m
 }
 
 func (m notificationMap[T]) newStreamReceiver(streamID StreamID, withBuffer bool) StreamReceiver[T] {
@@ -126,7 +135,10 @@ func (m notificationMap[T]) newStreamReceiver(streamID StreamID, withBuffer bool
 		}
 		go func(receiver *bufferedStreamReceiver[T]) {
 			for receiver.active {
-				receiver.notify <- receiver.buffer.GetAndRemoveNextEvent()
+				e := receiver.buffer.GetAndRemoveNextEvent()
+				if e != nil {
+					receiver.notify <- e
+				}
 			}
 			close(receiver.notify)
 		}(rec.(*bufferedStreamReceiver[T]))
@@ -143,10 +155,12 @@ func (m notificationMap[T]) newStreamReceiver(streamID StreamID, withBuffer bool
 	return rec
 }
 
-func (m notificationMap[T]) clear() {
+func (m notificationMap[T]) Close() error {
 	for id := range m.receiver {
 		m.remove(id)
 	}
+	m.active = false
+	return nil
 }
 
 func (m notificationMap[T]) remove(id StreamReceiverID) {
@@ -155,27 +169,29 @@ func (m notificationMap[T]) remove(id StreamReceiverID) {
 		c.close()
 	}
 }
-func (m notificationMap[T]) notifyAll(events []events.Event[T]) {
-	for _, e := range events {
-		m.doNotify(e)
+
+func (m notificationMap[T]) doNotify() {
+	for m.active {
+		e := <-m.channel
+		wg := sync.WaitGroup{}
+		for _, notifier := range m.receiver {
+			/*
+				The code should never panic here, because notifiers are unsubscribed before the stream closes.
+				However, if the concept changes, consider to handle the panic here:
+
+				defer func() {
+					if r := recover(); r != nil {
+						zap.S().Debugf("recovered subscriberMap panic for stream %v", id)
+					}
+				}()*/
+			wg.Go(func() {
+				notifier.doNotify(e)
+			})
+		}
+		wg.Wait()
 	}
 }
 
-func (m notificationMap[T]) doNotify(e events.Event[T]) {
-	for _, notifier := range m.receiver {
-		/*
-			The code should never panic here, because notifiers are unsubscribed before the stream closes.
-			However, if the concept changes, consider to handle the panic here:
-
-			defer func() {
-				if r := recover(); r != nil {
-					zap.S().Debugf("recovered subscriberMap panic for stream %v", id)
-				}
-			}()*/
-		notifier.doNotify(e)
-	}
-}
-
-func (m notificationMap[T]) Len() int {
+func (m notificationMap[T]) len() int {
 	return len(m.receiver)
 }

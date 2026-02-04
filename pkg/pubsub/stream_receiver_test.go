@@ -66,11 +66,13 @@ var _ = Describe("StreamReceiver", func() {
 			rec      StreamReceiver[string]
 			streamID StreamID
 			nMap     *notificationMap[string]
+			ch       events.EventChannel[string]
 		)
 
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-topic-buffered")
-			nMap = newNotificationMap[string]()
+			ch = make(events.EventChannel[string])
+			nMap = newNotificationMap[string](ch)
 			rec = nMap.newStreamReceiver(streamID, true)
 		})
 
@@ -78,6 +80,7 @@ var _ = Describe("StreamReceiver", func() {
 			if rec != nil {
 				rec.close()
 			}
+			_ = nMap.Close()
 		})
 
 		It("should return the correct StreamID", func() {
@@ -115,21 +118,23 @@ var _ = Describe("StreamReceiver", func() {
 		var (
 			nMap *notificationMap[string]
 			sID  StreamID
+			ch   events.EventChannel[string]
 		)
 
 		BeforeEach(func() {
-			nMap = newNotificationMap[string]()
+			ch = make(events.EventChannel[string])
+			nMap = newNotificationMap[string](ch)
 			sID = MakeStreamID[string]("topic")
 		})
 
 		AfterEach(func() {
-			nMap.clear()
+			_ = nMap.Close()
 		})
 
 		It("should create new receivers", func() {
 			rec := nMap.newStreamReceiver(sID, false)
 			Expect(rec).NotTo(BeNil())
-			Expect(nMap.Len()).To(Equal(1))
+			Expect(nMap.len()).To(Equal(1))
 		})
 
 		It("should notify all receivers", func() {
@@ -137,7 +142,7 @@ var _ = Describe("StreamReceiver", func() {
 			rec2 := nMap.newStreamReceiver(sID, true)
 
 			event := events.NewEvent("broadcast")
-			nMap.notifyAll([]events.Event[string]{event})
+			go func() { ch <- event }()
 
 			e1, err1 := rec1.Consume()
 			e2, err2 := rec2.Consume()
@@ -150,17 +155,17 @@ var _ = Describe("StreamReceiver", func() {
 
 		It("should remove receivers", func() {
 			rec := nMap.newStreamReceiver(sID, false)
-			Expect(nMap.Len()).To(Equal(1))
+			Expect(nMap.len()).To(Equal(1))
 			nMap.remove(rec.ID())
-			Expect(nMap.Len()).To(Equal(0))
+			Expect(nMap.len()).To(Equal(0))
 		})
 
 		It("should clear all receivers", func() {
 			nMap.newStreamReceiver(sID, false)
 			nMap.newStreamReceiver(sID, false)
-			Expect(nMap.Len()).To(Equal(2))
-			nMap.clear()
-			Expect(nMap.Len()).To(Equal(0))
+			Expect(nMap.len()).To(Equal(2))
+			_ = nMap.Close()
+			Expect(nMap.len()).To(Equal(0))
 		})
 	})
 })
