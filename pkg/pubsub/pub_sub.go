@@ -224,10 +224,10 @@ func validateStream(newStream Stream) error {
 func getAndConvertStreamByID[T any](id StreamID) (typedStream[T], error) {
 
 	if stream, ok := streamIdx[id]; ok {
-		switch stream.(type) {
+		switch stream := stream.(type) {
 		case typedStream[T]:
 
-			return stream.(typedStream[T]), nil
+			return stream, nil
 		default:
 			return nil, StreamTypeMismatchError
 		}

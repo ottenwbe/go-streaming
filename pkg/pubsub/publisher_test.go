@@ -40,18 +40,18 @@ func createMockStream[T any](id StreamID) *mockStream[T] {
 
 	s := &mockStream[T]{id: id, channel: make(events.EventChannel[T])}
 
-	go func() {
+	go func(newS *mockStream[T]) {
 		run := true
 
 		for run {
-			e, more := <-s.channel
+			e, more := <-newS.channel
 			if more {
-				_ = s.publish(e)
+				_ = newS.publish(e)
 			} else {
 				run = false
 			}
 		}
-	}()
+	}(s)
 
 	return s
 }
@@ -83,6 +83,8 @@ var _ = Describe("Publisher", func() {
 
 		AfterEach(func() {
 			mockS.forceClose()
+			mockS = nil
+			pub = nil
 		})
 
 		It("should return a publisher ID", func() {
@@ -96,15 +98,28 @@ var _ = Describe("Publisher", func() {
 		It("should publish events", func() {
 			e := events.NewEvent("hello")
 			err := pub.Publish(e)
+
 			Expect(err).To(BeNil())
-			Expect(mockS.publishedEvents).To(ContainElement(e))
+			Eventually(func() events.Event[string] {
+				evs := mockS.publishedEvents
+				if len(evs) > 0 {
+					return evs[0]
+				}
+				return events.NewEvent[string]("a")
+			}).Should(Equal(e))
 		})
 
 		It("should publish content", func() {
 			err := pub.PublishC("world")
 			Expect(err).To(BeNil())
-			Expect(mockS.publishedEvents).To(HaveLen(1))
-			Expect(mockS.publishedEvents[0].GetContent()).To(Equal("world"))
+			Eventually(func() []events.Event[string] {
+				evs := mockS.publishedEvents
+				if len(evs) > 0 {
+					return evs
+				}
+				return []events.Event[string]{}
+			}).Should(HaveLen(1))
+			Eventually(mockS.publishedEvents[0].GetContent()).Should(Equal("world"))
 		})
 	})
 
