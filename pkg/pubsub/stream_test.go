@@ -47,7 +47,7 @@ var _ = Describe("localSyncStream", func() {
 			pubsub.TryRemoveStreams(streamID)
 
 			_, err = pubsub.GetDescription(streamID)
-			Expect(err).To(BeNil()) // Stream should still exist
+			Expect(err).To(BeNil()) // stream should still exist
 		})
 	})
 
@@ -112,11 +112,11 @@ var _ = Describe("localAsyncStream", func() {
 			pubsub.TryRemoveStreams(streamID)
 
 			_, err = pubsub.GetDescription(streamID)
-			Expect(err).To(BeNil()) // Stream should still exist
+			Expect(err).To(BeNil()) // stream should still exist
 		})
 
 		It("should no longer be subscribable after closing the stream", func() {
-			// Close stream (it has no subscribers/publishers yet)
+			// close stream (it has no subscribers/publishers yet)
 			pubsub.TryRemoveStreams(streamID)
 
 			result, err := pubsub.SubscribeByTopicID[string](streamID)

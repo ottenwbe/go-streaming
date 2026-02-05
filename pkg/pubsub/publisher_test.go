@@ -8,20 +8,20 @@ import (
 	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
-// Mock Stream implementation for testing publishers
+// Mock stream implementation for testing publishers
 type mockStream[T any] struct {
 	id              StreamID
 	channel         events.EventChannel[T]
 	publishedEvents []events.Event[T]
 }
 
-func (m *mockStream[T]) Run()                             {}
-func (m *mockStream[T]) TryClose() bool                   { return true }
+func (m *mockStream[T]) run()                             {}
+func (m *mockStream[T]) tryClose() bool                   { return true }
 func (m *mockStream[T]) forceClose()                      { close(m.channel) }
-func (m *mockStream[T]) HasPublishersOrSubscribers() bool { return false }
+func (m *mockStream[T]) hasPublishersOrSubscribers() bool { return false }
 func (m *mockStream[T]) ID() StreamID                     { return m.id }
 func (m *mockStream[T]) Description() StreamDescription   { return StreamDescription{} }
-func (m *mockStream[T]) copyFrom(Stream)                  {}
+func (m *mockStream[T]) copyFrom(stream)                  {}
 
 func (m *mockStream[T]) publish(e events.Event[T]) error {
 	m.publishedEvents = append(m.publishedEvents, e)
@@ -97,9 +97,8 @@ var _ = Describe("Publisher", func() {
 
 		It("should publish events", func() {
 			e := events.NewEvent("hello")
-			err := pub.Publish(e)
+			pub.Publish(e)
 
-			Expect(err).To(BeNil())
 			Eventually(func() events.Event[string] {
 				evs := mockS.publishedEvents
 				if len(evs) > 0 {
@@ -110,8 +109,7 @@ var _ = Describe("Publisher", func() {
 		})
 
 		It("should publish content", func() {
-			err := pub.PublishC("world")
-			Expect(err).To(BeNil())
+			pub.PublishC("world")
 			Eventually(func() []events.Event[string] {
 				evs := mockS.publishedEvents
 				if len(evs) > 0 {
@@ -137,17 +135,17 @@ var _ = Describe("Publisher", func() {
 		})
 
 		It("should do nothing on publish", func() {
-			err := empty.publish(events.NewEvent("test"))
-			Expect(err).To(BeNil())
+			empty.publish(events.NewEvent("test"))
+
 		})
 
 		It("should do nothing on publishC", func() {
-			err := empty.publishC("test")
-			Expect(err).To(BeNil())
+			empty.publishC("test")
+
 		})
 	})
 
-	Describe("publisherFanInMutexSync", func() {
+	Describe("defaultPublisherFanIn", func() {
 		var (
 			mockS *mockStream[string]
 			fanIn publisherFanIn[string]
@@ -184,11 +182,10 @@ var _ = Describe("Publisher", func() {
 
 		It("should clear publishers", func() {
 			p1, _ := fanIn.newPublisher()
-			fanIn.Close()
+			fanIn.close()
 			Expect(fanIn.len()).To(Equal(0))
 
-			err := p1.PublishC("test")
-			Expect(err).To(BeNil())
+			p1.PublishC("test")
 			Expect(mockS.publishedEvents).To(BeEmpty())
 		})
 	})

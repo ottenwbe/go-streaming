@@ -72,15 +72,12 @@ var _ = Describe("StreamReceiver", func() {
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-topic-buffered")
 			ch = make(events.EventChannel[string])
-			nMap = newNotificationMap[string](ch)
-			rec = nMap.newStreamReceiver(streamID, true)
+			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic", WithAsyncReceiver(true)), ch)
+			rec = nMap.newStreamReceiver(streamID)
 		})
 
 		AfterEach(func() {
-			if rec != nil {
-				rec.close()
-			}
-			_ = nMap.Close()
+			_ = nMap.close()
 		})
 
 		It("should return the correct StreamID", func() {
@@ -123,23 +120,24 @@ var _ = Describe("StreamReceiver", func() {
 
 		BeforeEach(func() {
 			ch = make(events.EventChannel[string])
-			nMap = newNotificationMap[string](ch)
+			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic"), ch)
 			sID = MakeStreamID[string]("topic")
+			nMap.start()
 		})
 
 		AfterEach(func() {
-			_ = nMap.Close()
+			_ = nMap.close()
 		})
 
 		It("should create new receivers", func() {
-			rec := nMap.newStreamReceiver(sID, false)
+			rec := nMap.newStreamReceiver(sID)
 			Expect(rec).NotTo(BeNil())
 			Expect(nMap.len()).To(Equal(1))
 		})
 
 		It("should notify all receivers", func() {
-			rec1 := nMap.newStreamReceiver(sID, true)
-			rec2 := nMap.newStreamReceiver(sID, true)
+			rec1 := nMap.newStreamReceiver(sID)
+			rec2 := nMap.newStreamReceiver(sID)
 
 			event := events.NewEvent("broadcast")
 			go func() { ch <- event }()
@@ -154,17 +152,17 @@ var _ = Describe("StreamReceiver", func() {
 		})
 
 		It("should remove receivers", func() {
-			rec := nMap.newStreamReceiver(sID, false)
+			rec := nMap.newStreamReceiver(sID)
 			Expect(nMap.len()).To(Equal(1))
 			nMap.remove(rec.ID())
 			Expect(nMap.len()).To(Equal(0))
 		})
 
 		It("should clear all receivers", func() {
-			nMap.newStreamReceiver(sID, false)
-			nMap.newStreamReceiver(sID, false)
+			nMap.newStreamReceiver(sID)
+			nMap.newStreamReceiver(sID)
 			Expect(nMap.len()).To(Equal(2))
-			_ = nMap.Close()
+			_ = nMap.close()
 			Expect(nMap.len()).To(Equal(0))
 		})
 	})

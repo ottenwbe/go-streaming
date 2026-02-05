@@ -16,7 +16,7 @@ func main() {
 		err       error
 	)
 
-	streamConfig := pubsub.MakeStreamDescription[int]("int stream", pubsub.WithSingleFanIn(true))
+	streamConfig := pubsub.MakeStreamDescription[int]("int stream")
 	if intStream, err = pubsub.AddOrReplaceStreamFromDescription[int](streamConfig); err != nil {
 		zap.S().Errorf("intStream could not be created: %v", err)
 	}

@@ -37,12 +37,41 @@ type streamReceiver[T any] struct {
 	notify   events.EventChannel[T]
 }
 
+func newDefaultStreamReceiver[T any](streamID StreamID) StreamReceiver[T] {
+	rec := &streamReceiver[T]{
+		streamID: streamID,
+		iD:       StreamReceiverID(uuid.New()),
+		notify:   make(chan events.Event[T]),
+	}
+	return rec
+}
+
 type bufferedStreamReceiver[T any] struct {
 	streamID StreamID
 	iD       StreamReceiverID
 	notify   events.EventChannel[T]
 	buffer   buffer.Buffer[T]
 	active   bool
+}
+
+func newBufferedStreamReceiver[T any](streamID StreamID) StreamReceiver[T] {
+	rec := &bufferedStreamReceiver[T]{
+		streamID: streamID,
+		iD:       StreamReceiverID(uuid.New()),
+		notify:   make(chan events.Event[T]),
+		buffer:   buffer.NewSimpleAsyncBuffer[T](),
+		active:   true,
+	}
+	go func(receiver *bufferedStreamReceiver[T]) {
+		for receiver.active {
+			e := receiver.buffer.GetAndRemoveNextEvent()
+			if e != nil {
+				receiver.notify <- e
+			}
+		}
+		close(receiver.notify)
+	}(rec)
+	return rec
 }
 
 func (r *streamReceiver[T]) close() {
@@ -80,8 +109,8 @@ func (r *bufferedStreamReceiver[T]) doNotify(event events.Event[T]) {
 }
 
 func (r *bufferedStreamReceiver[T]) close() {
-	r.buffer.StopBlocking()
 	r.active = false
+	r.buffer.StopBlocking()
 }
 
 func (r *bufferedStreamReceiver[T]) StreamID() StreamID {
@@ -105,49 +134,29 @@ func (r *bufferedStreamReceiver[T]) Consume() (events.Event[T], error) {
 }
 
 type notificationMap[T any] struct {
-	channel  events.EventChannel[T]
-	receiver map[StreamReceiverID]StreamReceiver[T]
-	active   bool
+	description StreamDescription
+	channel     events.EventChannel[T]
+	receiver    map[StreamReceiverID]StreamReceiver[T]
+	active      bool
 }
 
-func newNotificationMap[T any](eChannel events.EventChannel[T]) *notificationMap[T] {
+func newNotificationMap[T any](description StreamDescription, c events.EventChannel[T]) *notificationMap[T] {
 	m := &notificationMap[T]{
-		channel:  eChannel,
-		receiver: make(map[StreamReceiverID]StreamReceiver[T]),
-		active:   true,
+		description: description,
+		channel:     c,
+		receiver:    make(map[StreamReceiverID]StreamReceiver[T]),
+		active:      false,
 	}
-
-	go m.doNotify()
-
 	return m
 }
 
-func (m notificationMap[T]) newStreamReceiver(streamID StreamID, withBuffer bool) StreamReceiver[T] {
+func (m notificationMap[T]) newStreamReceiver(streamID StreamID) StreamReceiver[T] {
 
 	var rec StreamReceiver[T]
-	if withBuffer {
-		rec = &bufferedStreamReceiver[T]{
-			streamID: streamID,
-			iD:       StreamReceiverID(uuid.New()),
-			notify:   make(chan events.Event[T]),
-			buffer:   buffer.NewSimpleAsyncBuffer[T](),
-			active:   true,
-		}
-		go func(receiver *bufferedStreamReceiver[T]) {
-			for receiver.active {
-				e := receiver.buffer.GetAndRemoveNextEvent()
-				if e != nil {
-					receiver.notify <- e
-				}
-			}
-			close(receiver.notify)
-		}(rec.(*bufferedStreamReceiver[T]))
+	if m.description.AsyncReceiver {
+		rec = newBufferedStreamReceiver[T](streamID)
 	} else {
-		rec = &streamReceiver[T]{
-			streamID: streamID,
-			iD:       StreamReceiverID(uuid.New()),
-			notify:   make(chan events.Event[T]),
-		}
+		rec = newDefaultStreamReceiver[T](streamID)
 	}
 
 	m.receiver[rec.ID()] = rec
@@ -155,11 +164,11 @@ func (m notificationMap[T]) newStreamReceiver(streamID StreamID, withBuffer bool
 	return rec
 }
 
-func (m notificationMap[T]) Close() error {
+func (m notificationMap[T]) close() error {
+	m.active = false
 	for id := range m.receiver {
 		m.remove(id)
 	}
-	m.active = false
 	return nil
 }
 
@@ -173,6 +182,9 @@ func (m notificationMap[T]) remove(id StreamReceiverID) {
 func (m notificationMap[T]) doNotify() {
 	for m.active {
 		e := <-m.channel
+		if e == nil {
+			return
+		}
 		wg := sync.WaitGroup{}
 		for _, notifier := range m.receiver {
 			/*
@@ -194,4 +206,15 @@ func (m notificationMap[T]) doNotify() {
 
 func (m notificationMap[T]) len() int {
 	return len(m.receiver)
+}
+
+func (m notificationMap[T]) copyFrom(old *notificationMap[T]) {
+	m.receiver = old.receiver
+}
+
+func (m notificationMap[T]) start() {
+	if !m.active {
+		m.active = true
+		go m.doNotify()
+	}
 }

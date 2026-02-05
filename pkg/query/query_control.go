@@ -179,9 +179,10 @@ func NewBuilder() *Builder {
 	}
 }
 
-// S creates or retrieves a stream with the given configuration.
-func S[T any](topic string, async bool, singleFanIn bool) (pubsub.StreamID, error) {
-	d := pubsub.MakeStreamDescription[T](topic, pubsub.WithAsyncStream(async), pubsub.WithSingleFanIn(singleFanIn))
+// S creates or retrieves a stream
+// with the given configuration.
+func S[T any](topic string, options ...pubsub.StreamOption) (pubsub.StreamID, error) {
+	d := pubsub.MakeStreamDescription[T](topic, options...)
 	return pubsub.AddOrReplaceStreamFromDescription[T](d)
 }
 

@@ -14,18 +14,15 @@ var _ = Describe("Descriptions", func() {
 			Expect(d.ID.Topic).To(Equal("topic"))
 			Expect(d.AsyncStream).To(BeFalse())
 			Expect(d.AsyncReceiver).To(BeFalse())
-			Expect(d.SingleFanIn).To(BeFalse())
 		})
 
 		It("applies options correctly", func() {
 			d := pubsub.MakeStreamDescription[int]("topic",
 				pubsub.WithAsyncStream(true),
 				pubsub.WithAsyncReceiver(true),
-				pubsub.WithSingleFanIn(true),
 			)
 			Expect(d.AsyncStream).To(BeTrue())
 			Expect(d.AsyncReceiver).To(BeTrue())
-			Expect(d.SingleFanIn).To(BeTrue())
 		})
 	})
 
@@ -38,7 +35,7 @@ var _ = Describe("Descriptions", func() {
 		})
 	})
 
-	Describe("Stream Description", func() {
+	Describe("stream Description", func() {
 		Context("Parsing YAML", func() {
 			It("can be parsed correctly with all fields", func() {
 
@@ -56,7 +53,6 @@ singleFanIn: true
 				Expect(v.ID).To(Equal(pubsub.MakeStreamID[string]("3c191d62-6574-4951-a8e6-4ec83c947250")))
 				Expect(v.AsyncStream).To(BeTrue())
 				Expect(v.AsyncReceiver).To(BeTrue())
-				Expect(v.SingleFanIn).To(BeTrue())
 			})
 
 			It("parses correctly with default values", func() {
@@ -69,7 +65,6 @@ id:
 				Expect(err).To(BeNil())
 				Expect(v.AsyncStream).To(BeFalse())
 				Expect(v.AsyncReceiver).To(BeFalse())
-				Expect(v.SingleFanIn).To(BeFalse())
 			})
 		})
 
@@ -90,7 +85,6 @@ id:
 				Expect(err).To(BeNil())
 				Expect(v.AsyncStream).To(BeTrue())
 				Expect(v.AsyncReceiver).To(BeFalse())
-				Expect(v.SingleFanIn).To(BeTrue())
 			})
 		})
 

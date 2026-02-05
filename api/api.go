@@ -78,12 +78,7 @@ func CreateRestAPI(router *gin.Engine) {
 
 		publisher, _ := pubsub.RegisterPublisher[map[string]interface{}](pubsub.MakeStreamID[map[string]interface{}](name))
 		defer pubsub.UnRegisterPublisher(publisher)
-		err = publisher.Publish(e)
-
-		if err != nil {
-			zap.S().Error("cannot publish event", zap.String("module", "api"), zap.Error(err))
-			c.String(http.StatusBadRequest, "stream not found or inactive: cannot publish request")
-		}
+		publisher.Publish(e)
 
 		c.Status(http.StatusCreated)
 	})

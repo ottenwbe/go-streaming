@@ -14,7 +14,6 @@ type StreamDescription struct {
 	ID            StreamID `yaml:"id" json:"id"`
 	AsyncStream   bool     `yaml:"asyncStream" json:"asyncStream"`
 	AsyncReceiver bool     `yaml:"asyncReceiver" json:"asyncReceiver"`
-	SingleFanIn   bool     `yaml:"singleFanIn" json:"singleFanIn"`
 }
 
 type StreamOption func(*StreamDescription)
@@ -28,12 +27,6 @@ func WithAsyncStream(async bool) StreamOption {
 func WithAsyncReceiver(asyncReceiver bool) StreamOption {
 	return func(s *StreamDescription) {
 		s.AsyncReceiver = asyncReceiver
-	}
-}
-
-func WithSingleFanIn(singleFanIn bool) StreamOption {
-	return func(s *StreamDescription) {
-		s.SingleFanIn = singleFanIn
 	}
 }
 

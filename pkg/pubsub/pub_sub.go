@@ -9,7 +9,7 @@ import (
 
 var (
 	// streamIdx is the major dictionary to manage all streams locally
-	streamIdx map[StreamID]Stream
+	streamIdx map[StreamID]stream
 	// streamIdxAccessMutex controls the access to streamIdx
 	streamIdxAccessMutex sync.RWMutex
 )
@@ -48,6 +48,8 @@ func AddOrReplaceStreamFromDescription[T any](description StreamDescription) (St
 
 // ForceRemoveStream forces removal of streams by their id, ensuring all resources are closed.
 // The streams will be removed from the central pub sub system.
+// BE CAREFUL USING THIS: when active subscribers publishers exist, the code might panic.
+// In most cases TryRemoveStream is the safer and better choice.
 func ForceRemoveStream(streamIDs ...StreamID) {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
@@ -67,8 +69,8 @@ func TryRemoveStreams(streamIDs ...StreamID) {
 	defer streamIdxAccessMutex.Unlock()
 
 	for _, id := range streamIDs {
-		if s, ok := streamIdx[id]; ok && !s.HasPublishersOrSubscribers() {
-			if s.TryClose() {
+		if s, ok := streamIdx[id]; ok && !s.hasPublishersOrSubscribers() {
+			if s.tryClose() {
 				delete(streamIdx, id)
 			}
 
@@ -122,10 +124,7 @@ func InstantPublishByTopic[T any](topic string, event events.Event[T]) (err erro
 	}(publisher)
 
 	if err == nil {
-		err = publisher.Publish(event)
-		if err != nil {
-			return err
-		}
+		publisher.Publish(event)
 	}
 
 	return err
@@ -169,14 +168,15 @@ func UnRegisterPublisher[T any](publisher Publisher[T]) error {
 func GetDescription(id StreamID) (StreamDescription, error) {
 	streamIdxAccessMutex.RLock()
 	defer streamIdxAccessMutex.RUnlock()
+
 	if s, ok := streamIdx[id]; ok {
 		return s.Description(), nil
-	} else {
-		return StreamDescription{}, StreamNotFoundError
 	}
+
+	return StreamDescription{}, StreamNotFoundError
 }
 
-func doGetOrAddStream(stream Stream) (StreamID, error) {
+func doGetOrAddStream(stream stream) (StreamID, error) {
 	err := validateStream(stream)
 	if err != nil {
 		return NilStreamID(), err
@@ -190,7 +190,7 @@ func doGetOrAddStream(stream Stream) (StreamID, error) {
 	}
 }
 
-func doAddOrReplaceStream(newStream Stream) error {
+func doAddOrReplaceStream(newStream stream) error {
 
 	err := validateStream(newStream)
 	if err != nil {
@@ -203,18 +203,18 @@ func doAddOrReplaceStream(newStream Stream) error {
 	return nil
 }
 
-func tryCopyExistingStreamToNewStream(newStream Stream) {
+func tryCopyExistingStreamToNewStream(newStream stream) {
 	if s, ok := streamIdx[newStream.ID()]; ok {
 		newStream.copyFrom(s)
 	}
 }
 
-func addStream(newStream Stream) {
-	newStream.Run()
+func addStream(newStream stream) {
+	newStream.run()
 	streamIdx[newStream.ID()] = newStream
 }
 
-func validateStream(newStream Stream) error {
+func validateStream(newStream stream) error {
 	if newStream.ID().IsNil() {
 		return StreamIDNilError
 	}
@@ -237,5 +237,5 @@ func getAndConvertStreamByID[T any](id StreamID) (typedStream[T], error) {
 }
 
 func init() {
-	streamIdx = make(map[StreamID]Stream)
+	streamIdx = make(map[StreamID]stream)
 }
