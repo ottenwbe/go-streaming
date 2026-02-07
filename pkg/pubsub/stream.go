@@ -3,6 +3,8 @@ package pubsub
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/ottenwbe/go-streaming/internal/buffer"
 	"github.com/ottenwbe/go-streaming/pkg/events"
@@ -48,23 +50,23 @@ type StreamMetrics struct {
 }
 
 func (m *StreamMetrics) incNumEventsIn() {
-	m.numEventsIn++
+	atomic.AddUint64(&m.numEventsIn, 1)
 }
 
 func (m *StreamMetrics) incNumEventsOut() {
-	m.numEventsOut++
+	atomic.AddUint64(&m.numEventsOut, 1)
 }
 
 func (m *StreamMetrics) NumEventsIn() uint64 {
-	return m.numEventsIn
+	return atomic.LoadUint64(&m.numEventsIn)
 }
 
 func (m *StreamMetrics) NumEventsOut() uint64 {
-	return m.numEventsOut
+	return atomic.LoadUint64(&m.numEventsOut)
 }
 
 func (m *StreamMetrics) NumInEventsEqualsNumOutEvents() bool {
-	return m.numEventsIn == m.numEventsOut
+	return atomic.LoadUint64(&m.numEventsIn) == atomic.LoadUint64(&m.numEventsOut)
 }
 
 func newStreamMetrics() *StreamMetrics {
@@ -372,6 +374,7 @@ func (s *localSyncStream[T]) copyFrom(stream stream) {
 
 		// active waiting until the stream is drained
 		for !oldStream.streamMetrics().NumInEventsEqualsNumOutEvents() {
+			time.Sleep(10 * time.Millisecond)
 		}
 
 		s.subscriberMap.copyFrom(oldStream.subscribers())
@@ -387,6 +390,7 @@ func (l *localAsyncStream[T]) copyFrom(stream stream) {
 
 		// active waiting until the stream is drained
 		for !oldStream.streamMetrics().NumInEventsEqualsNumOutEvents() {
+			time.Sleep(10 * time.Millisecond)
 		}
 
 		l.subscriberMap.copyFrom(oldStream.subscribers())
