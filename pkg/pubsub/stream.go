@@ -4,7 +4,6 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/ottenwbe/go-streaming/internal/buffer"
 	"github.com/ottenwbe/go-streaming/pkg/events"
@@ -45,32 +44,54 @@ type typedStream[T any] interface {
 }
 
 type StreamMetrics struct {
-	numEventsIn  uint64
-	numEventsOut uint64
+	numEventsIn  atomic.Uint64
+	numEventsOut atomic.Uint64
+	waiting      atomic.Bool
+	mutex        sync.Mutex
+	cond         *sync.Cond
 }
 
 func (m *StreamMetrics) incNumEventsIn() {
-	atomic.AddUint64(&m.numEventsIn, 1)
+	m.numEventsIn.Add(1)
 }
 
 func (m *StreamMetrics) incNumEventsOut() {
-	atomic.AddUint64(&m.numEventsOut, 1)
+	m.numEventsOut.Add(1)
+	if m.waiting.Load() {
+		m.mutex.Lock()
+		defer m.mutex.Unlock()
+		m.cond.Broadcast()
+	}
 }
 
 func (m *StreamMetrics) NumEventsIn() uint64 {
-	return atomic.LoadUint64(&m.numEventsIn)
+	return m.numEventsIn.Load()
 }
 
 func (m *StreamMetrics) NumEventsOut() uint64 {
-	return atomic.LoadUint64(&m.numEventsOut)
+	return m.numEventsOut.Load()
 }
 
 func (m *StreamMetrics) NumInEventsEqualsNumOutEvents() bool {
-	return atomic.LoadUint64(&m.numEventsIn) == atomic.LoadUint64(&m.numEventsOut)
+	return m.NumEventsIn() == m.NumEventsOut()
+}
+
+func (m *StreamMetrics) WaitUntilDrained() {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	m.waiting.Store(true)
+	defer m.waiting.Store(false)
+
+	for !m.NumInEventsEqualsNumOutEvents() {
+		m.cond.Wait()
+	}
 }
 
 func newStreamMetrics() *StreamMetrics {
-	return &StreamMetrics{}
+	m := &StreamMetrics{}
+	m.cond = sync.NewCond(&m.mutex)
+	return m
 }
 
 type baseStream[T any] struct {
@@ -373,9 +394,7 @@ func (s *localSyncStream[T]) copyFrom(stream stream) {
 		s.publisherMap.copyFrom(oldStream.publishers())
 
 		// active waiting until the stream is drained
-		for !oldStream.streamMetrics().NumInEventsEqualsNumOutEvents() {
-			time.Sleep(10 * time.Millisecond)
-		}
+		oldStream.streamMetrics().WaitUntilDrained()
 
 		s.subscriberMap.copyFrom(oldStream.subscribers())
 	}
@@ -389,9 +408,7 @@ func (l *localAsyncStream[T]) copyFrom(stream stream) {
 		l.publisherMap = oldStream.publishers()
 
 		// active waiting until the stream is drained
-		for !oldStream.streamMetrics().NumInEventsEqualsNumOutEvents() {
-			time.Sleep(10 * time.Millisecond)
-		}
+		oldStream.streamMetrics().WaitUntilDrained()
 
 		l.subscriberMap.copyFrom(oldStream.subscribers())
 	}
