@@ -138,19 +138,21 @@ type notificationMap[T any] struct {
 	channel     events.EventChannel[T]
 	receiver    map[StreamReceiverID]StreamReceiver[T]
 	active      bool
+	metrics     *streamMetrics
 }
 
-func newNotificationMap[T any](description StreamDescription, c events.EventChannel[T]) *notificationMap[T] {
+func newNotificationMap[T any](description StreamDescription, c events.EventChannel[T], metrics *streamMetrics) *notificationMap[T] {
 	m := &notificationMap[T]{
 		description: description,
 		channel:     c,
 		receiver:    make(map[StreamReceiverID]StreamReceiver[T]),
 		active:      false,
+		metrics:     metrics,
 	}
 	return m
 }
 
-func (m notificationMap[T]) newStreamReceiver(streamID StreamID) StreamReceiver[T] {
+func (m *notificationMap[T]) newStreamReceiver(streamID StreamID) StreamReceiver[T] {
 
 	var rec StreamReceiver[T]
 	if m.description.AsyncReceiver {
@@ -164,7 +166,7 @@ func (m notificationMap[T]) newStreamReceiver(streamID StreamID) StreamReceiver[
 	return rec
 }
 
-func (m notificationMap[T]) close() error {
+func (m *notificationMap[T]) close() error {
 	m.active = false
 	for id := range m.receiver {
 		m.remove(id)
@@ -172,20 +174,21 @@ func (m notificationMap[T]) close() error {
 	return nil
 }
 
-func (m notificationMap[T]) remove(id StreamReceiverID) {
+func (m *notificationMap[T]) remove(id StreamReceiverID) {
 	if c, ok := m.receiver[id]; ok {
 		delete(m.receiver, id)
 		c.close()
 	}
 }
 
-func (m notificationMap[T]) doNotify() {
+func (m *notificationMap[T]) doNotify() {
 	for m.active {
 		e := <-m.channel
 		if e == nil {
 			return
 		}
 		wg := sync.WaitGroup{}
+
 		for _, notifier := range m.receiver {
 			/*
 				The code should never panic here, because notifiers are unsubscribed before the stream closes.
@@ -201,18 +204,19 @@ func (m notificationMap[T]) doNotify() {
 			})
 		}
 		wg.Wait()
+		m.metrics.incNumEventsOut()
 	}
 }
 
-func (m notificationMap[T]) len() int {
+func (m *notificationMap[T]) len() int {
 	return len(m.receiver)
 }
 
-func (m notificationMap[T]) copyFrom(old *notificationMap[T]) {
+func (m *notificationMap[T]) copyFrom(old *notificationMap[T]) {
 	m.receiver = old.receiver
 }
 
-func (m notificationMap[T]) start() {
+func (m *notificationMap[T]) start() {
 	if !m.active {
 		m.active = true
 		go m.doNotify()

@@ -2,6 +2,7 @@ package pubsub_test
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
@@ -125,8 +126,45 @@ var _ = Describe("localAsyncStream", func() {
 		})
 	})
 
+	Context("copy one stream to another", func() {
+		It("should not lose events", func() {
+
+			numE := 300
+
+			wg := sync.WaitGroup{}
+			p, err := pubsub.RegisterPublisher[string](streamID)
+			Expect(err).To(BeNil())
+			defer pubsub.UnRegisterPublisher(p)
+
+			s, err := pubsub.SubscribeByTopicID[string](streamID)
+			Expect(err).To(BeNil())
+			defer pubsub.Unsubscribe[string](s)
+
+			wg.Go(func() {
+				for i := range numE {
+					e := events.NewEvent[string](fmt.Sprintf("a%v", i))
+					p.Publish(e)
+				}
+			})
+
+			wg.Go(func() {
+				for range numE {
+					_ = <-s.Notify()
+				}
+			})
+
+			desc2 := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsyncStream(false))
+			streamID2, err := pubsub.AddOrReplaceStreamFromDescription[string](desc2)
+			Expect(err).To(BeNil())
+			defer pubsub.TryRemoveStreams(streamID2)
+
+			wg.Wait()
+		})
+	})
+
 	Context("publishing and receiving events", func() {
 		It("should not block", func() {
+
 			eventResult := make([]events.Event[string], 3)
 			event1 := events.NewEvent("test-3-1")
 			event2 := events.NewEvent("test-3-2")
@@ -134,19 +172,19 @@ var _ = Describe("localAsyncStream", func() {
 			done := make(chan bool)
 
 			receiver, _ := pubsub.SubscribeByTopicID[string](streamID)
+			defer pubsub.Unsubscribe[string](receiver)
 
 			publisher, _ := pubsub.RegisterPublisher[string](streamID)
+			defer pubsub.UnRegisterPublisher[string](publisher)
 
 			publisher.Publish(event1)
 			publisher.Publish(event2)
 			publisher.Publish(event3)
 
 			go func() {
-				fmt.Print("test consumed event")
 				eventResult[0] = <-receiver.Notify()
 				eventResult[1] = <-receiver.Notify()
 				eventResult[2] = <-receiver.Notify()
-				fmt.Print("test consumed event finished")
 				done <- true
 			}()
 
@@ -159,9 +197,6 @@ var _ = Describe("localAsyncStream", func() {
 
 			e1 := event1.GetContent()
 			e2 := event2.GetContent()
-
-			fmt.Print(er1)
-			fmt.Print(er2)
 
 			Expect(e1).To(Equal(er1))
 			Expect(e2).To(Equal(er2))

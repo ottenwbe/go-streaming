@@ -35,10 +35,7 @@ var _ = Describe("Operator Description", func() {
 			var t reflect.Type = reflect.TypeOf(1)
 
 			_ = reflect.New(t)
-
-			//s := pubsub.StreamReceiver[reflect.]{}
-			//			fmt.Println(i.Recv())
-
+			
 		})
 	})
 })

@@ -72,7 +72,7 @@ var _ = Describe("StreamReceiver", func() {
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-topic-buffered")
 			ch = make(events.EventChannel[string])
-			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic", WithAsyncReceiver(true)), ch)
+			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic", WithAsyncReceiver(true)), ch, newStreamMetrics())
 			rec = nMap.newStreamReceiver(streamID)
 		})
 
@@ -120,7 +120,7 @@ var _ = Describe("StreamReceiver", func() {
 
 		BeforeEach(func() {
 			ch = make(events.EventChannel[string])
-			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic"), ch)
+			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic"), ch, newStreamMetrics())
 			sID = MakeStreamID[string]("topic")
 			nMap.start()
 		})

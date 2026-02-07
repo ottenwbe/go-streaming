@@ -3,6 +3,7 @@ package pubsub
 import (
 	"errors"
 	"slices"
+	"sync"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
 
@@ -55,6 +56,8 @@ type (
 		publishersArr []*defaultPublisher[T]
 		description   StreamDescription
 		channel       events.EventChannel[T]
+		metrics       *streamMetrics
+		mutex         sync.RWMutex
 	}
 	emptyPublisherFanIn[T any] struct {
 	}
@@ -99,15 +102,18 @@ func newDefaultPublisher[T any](streamID StreamID, fanIn publisherFanIn[T]) *def
 	}
 }
 
-func newPublisherSync[T any](sDescription StreamDescription, eChannel events.EventChannel[T]) publisherFanIn[T] {
+func newPublisherSync[T any](sDescription StreamDescription, eChannel events.EventChannel[T], metrics *streamMetrics) publisherFanIn[T] {
 	return &defaultPublisherFanIn[T]{
 		publishersArr: make([]*defaultPublisher[T], 0),
 		description:   sDescription,
 		channel:       eChannel,
+		metrics:       metrics,
 	}
 }
 
 func (p *defaultPublisherFanIn[T]) close() error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 
 	// ensure no publisher is dangling
 	for _, publisher := range p.publishersArr {
@@ -122,6 +128,9 @@ func (p *defaultPublisherFanIn[T]) close() error {
 }
 
 func (p *defaultPublisherFanIn[T]) len() int {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+
 	return len(p.publishersArr)
 }
 
@@ -134,10 +143,17 @@ func (p *defaultPublisherFanIn[T]) publishC(content T) {
 }
 
 func (p *defaultPublisherFanIn[T]) publish(event events.Event[T]) {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+
+	p.metrics.incNumEventsIn()
+
 	p.channel <- event
 }
 
 func (p *defaultPublisherFanIn[T]) newPublisher() (Publisher[T], error) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 
 	publisher := newDefaultPublisher[T](p.streamID(), p)
 	p.publishersArr = append(p.publishersArr, publisher)
@@ -146,17 +162,27 @@ func (p *defaultPublisherFanIn[T]) newPublisher() (Publisher[T], error) {
 }
 
 func (p *defaultPublisherFanIn[T]) remove(publisherID PublisherID) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
 	if idx := slices.IndexFunc(p.publishersArr, func(publisher *defaultPublisher[T]) bool { return publisherID == publisher.ID() }); idx != -1 {
 		p.publishersArr = append(p.publishersArr[:idx], p.publishersArr[idx+1:]...)
 	}
 }
 
 func (p *defaultPublisherFanIn[T]) publishers() []*defaultPublisher[T] {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+
 	return p.publishersArr
+
 }
 
-func (p *defaultPublisherFanIn[T]) copyFrom(publishers publisherFanIn[T]) {
-	for _, pub := range publishers.publishers() {
+func (p *defaultPublisherFanIn[T]) copyFrom(oldPublishers publisherFanIn[T]) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	for _, pub := range oldPublishers.publishers() {
 		pub.fanIn = p
 		p.publishersArr = append(p.publishersArr, pub)
 	}

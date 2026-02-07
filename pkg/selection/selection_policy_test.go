@@ -1,7 +1,6 @@
 package selection_test
 
 import (
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -24,8 +23,6 @@ var _ = Describe("Policy", func() {
 
 				b.AddEvents(events.Arr(e1, e2, e3))
 
-				fmt.Printf("Added events in test %v\n", b.Len())
-
 				es := b.GetAndConsumeNextEvents()
 
 				Expect(es).To(Equal([]events.Event[string]{e1, e2}))
@@ -38,8 +35,6 @@ var _ = Describe("Policy", func() {
 				e4 := events.NewEvent("e4")
 
 				b.AddEvents(events.Arr(e1, e2, e3, e4))
-
-				fmt.Printf("Added events in test %v\n", b.Len())
 
 				es1 := b.GetAndConsumeNextEvents()
 				es2 := b.GetAndConsumeNextEvents()

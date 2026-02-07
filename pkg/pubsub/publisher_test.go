@@ -15,6 +15,10 @@ type mockStream[T any] struct {
 	publishedEvents []events.Event[T]
 }
 
+func (m *mockStream[T]) streamMetrics() *streamMetrics {
+	return newStreamMetrics()
+}
+
 func (m *mockStream[T]) run()                             {}
 func (m *mockStream[T]) tryClose() bool                   { return true }
 func (m *mockStream[T]) forceClose()                      { close(m.channel) }
@@ -77,7 +81,7 @@ var _ = Describe("Publisher", func() {
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-stream")
 			mockS = createMockStream[string](streamID)
-			fanIn = newPublisherSync[string](mockS.Description(), mockS.channel)
+			fanIn = newPublisherSync[string](mockS.Description(), mockS.channel, newStreamMetrics())
 			pub = newDefaultPublisher(streamID, fanIn)
 		})
 
@@ -153,7 +157,7 @@ var _ = Describe("Publisher", func() {
 
 		BeforeEach(func() {
 			mockS = createMockStream[string](MakeStreamID[string]("multi"))
-			fanIn = newPublisherSync[string](mockS.Description(), mockS.channel)
+			fanIn = newPublisherSync[string](mockS.Description(), mockS.channel, newStreamMetrics())
 		})
 
 		AfterEach(func() {
