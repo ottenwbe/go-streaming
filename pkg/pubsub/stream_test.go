@@ -255,7 +255,7 @@ var _ = Describe("Stream", func() {
 			metrics, err := pubsub.Metrics(streamID)
 			Expect(err).To(BeNil())
 			Eventually(metrics.NumEventsIn()).Should(Equal(maxRange))
-			Eventually(metrics.NumEventsOut()).Should(Equal(maxRange))
+			Eventually(func() uint64 { return metrics.NumEventsOut() }).Should(Equal(maxRange))
 			Eventually(metrics.NumInEventsEqualsNumOutEvents()).Should(BeTrue())
 
 		})

@@ -44,11 +44,13 @@ type typedStream[T any] interface {
 }
 
 type StreamMetrics struct {
+	// metrics
 	numEventsIn  atomic.Uint64
 	numEventsOut atomic.Uint64
-	waiting      atomic.Bool
-	mutex        sync.Mutex
-	cond         *sync.Cond
+	// sync
+	waiting atomic.Bool
+	mutex   sync.Mutex
+	cond    *sync.Cond
 }
 
 func (m *StreamMetrics) incNumEventsIn() {
@@ -224,7 +226,6 @@ func (l *localAsyncStream[T]) doTryClose(force bool) bool {
 	if (l.subscriberMap.len() == 0 || force) && l.active {
 		l.active = false
 		close(l.inChannel)
-		close(l.outChannel)
 		l.buffer.StopBlocking()
 
 		l.closed.Wait()
@@ -258,6 +259,7 @@ func (l *localAsyncStream[T]) run() {
 
 		// read buffer and publish via subscriberMap
 		go func() {
+			defer close(l.outChannel)
 			for l.active {
 				e := l.buffer.GetAndRemoveNextEvent()
 				if e != nil {

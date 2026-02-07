@@ -141,6 +141,7 @@ type notificationMap[T any] struct {
 	receiver    map[SubscriberID]Subscriber[T]
 	active      bool
 	metrics     *StreamMetrics
+	mutex       sync.RWMutex
 }
 
 func newNotificationMap[T any](description StreamDescription, c events.EventChannel[T], metrics *StreamMetrics) *notificationMap[T] {
@@ -155,6 +156,8 @@ func newNotificationMap[T any](description StreamDescription, c events.EventChan
 }
 
 func (m *notificationMap[T]) newStreamReceiver(streamID StreamID) Subscriber[T] {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
 	var rec Subscriber[T]
 	if m.description.AsyncReceiver {
@@ -169,14 +172,20 @@ func (m *notificationMap[T]) newStreamReceiver(streamID StreamID) Subscriber[T] 
 }
 
 func (m *notificationMap[T]) close() error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
 	m.active = false
-	for id := range m.receiver {
-		m.remove(id)
+	for id, c := range m.receiver {
+		delete(m.receiver, id)
+		c.close()
 	}
 	return nil
 }
 
 func (m *notificationMap[T]) remove(id SubscriberID) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	if c, ok := m.receiver[id]; ok {
 		delete(m.receiver, id)
 		c.close()
@@ -190,6 +199,8 @@ func (m *notificationMap[T]) doNotify() {
 			return
 		}
 		wg := sync.WaitGroup{}
+
+		m.mutex.RLock()
 
 		for _, notifier := range m.receiver {
 			/*
@@ -205,16 +216,25 @@ func (m *notificationMap[T]) doNotify() {
 				notifier.doNotify(e)
 			})
 		}
+		m.mutex.RUnlock()
 		wg.Wait()
 		m.metrics.incNumEventsOut()
 	}
 }
 
 func (m *notificationMap[T]) len() int {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
 	return len(m.receiver)
 }
 
 func (m *notificationMap[T]) copyFrom(old *notificationMap[T]) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	old.mutex.Lock()
+	defer old.mutex.Unlock()
+
 	m.receiver = old.receiver
 	old.receiver = make(map[SubscriberID]Subscriber[T])
 }
