@@ -2,7 +2,6 @@ package pubsub_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"reflect"
 
 	"github.com/google/uuid"
@@ -170,8 +169,6 @@ var _ = Describe("StreamID", func() {
 			id := pubsub.MakeStreamID[int]("json-1")
 
 			b, err := yaml.Marshal(id)
-
-			fmt.Println(string(b))
 
 			Expect(string(b)).To(ContainSubstring("int"))
 			Expect(err).To(BeNil())

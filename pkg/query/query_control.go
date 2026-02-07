@@ -30,7 +30,7 @@ type ContinuousQuery struct {
 // TypedContinuousQuery is a typed wrapper around ContinuousQuery that provides a typed output receiver.
 type TypedContinuousQuery[T any] struct {
 	*ContinuousQuery
-	OutputReceiver pubsub.StreamReceiver[T]
+	OutputReceiver pubsub.Subscriber[T]
 }
 
 // Close stops the query and unsubscribes the output receiver.
@@ -179,9 +179,10 @@ func NewBuilder() *Builder {
 	}
 }
 
-// S creates or retrieves a stream with the given configuration.
-func S[T any](topic string, async bool, singleFanIn bool) (pubsub.StreamID, error) {
-	d := pubsub.MakeStreamDescription[T](topic, pubsub.WithAsyncStream(async), pubsub.WithSingleFanIn(singleFanIn))
+// S creates or retrieves a stream
+// with the given configuration.
+func S[T any](topic string, options ...pubsub.StreamOption) (pubsub.StreamID, error) {
+	d := pubsub.MakeStreamDescription[T](topic, options...)
 	return pubsub.AddOrReplaceStreamFromDescription[T](d)
 }
 

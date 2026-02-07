@@ -20,7 +20,7 @@ type (
 		Close()
 	}
 	OperatorStreamSubscription[TSub any] struct {
-		streamReceiver pubsub.StreamReceiver[TSub]
+		streamReceiver pubsub.Subscriber[TSub]
 		streamID       pubsub.StreamID
 		inputBuffer    buffer.Buffer[TSub]
 		active         bool
@@ -266,7 +266,6 @@ func (op *Operator1[TIn, Tout]) Start() {
 
 			var (
 				inputEvents TIn
-				publishErr  error
 			)
 
 			for op.active {
@@ -274,12 +273,7 @@ func (op *Operator1[TIn, Tout]) Start() {
 
 				resultEvent := op.f(inputEvents)
 
-				if publishErr = op.Output.Publish(resultEvent); publishErr != nil {
-					zap.S().Error("could not publish event in operator",
-						zap.Error(publishErr),
-						zap.String("operator", op.id.String()),
-					)
-				}
+				op.Output.Publish(resultEvent)
 			}
 		}()
 	}
@@ -310,7 +304,6 @@ func (op *OperatorN[TIN, TOUT]) Start() {
 
 			var (
 				inputEvents TIN
-				publishErr  error
 			)
 
 			for op.active {
@@ -318,12 +311,7 @@ func (op *OperatorN[TIN, TOUT]) Start() {
 				resultEvents := op.f(inputEvents)
 
 				for _, resultEvent := range resultEvents {
-					if publishErr = op.Output.Publish(resultEvent); publishErr != nil {
-						zap.S().Error("could not publish event in operator",
-							zap.Error(publishErr),
-							zap.String("operator", op.id.String()),
-						)
-					}
+					op.Output.Publish(resultEvent)
 				}
 			}
 			zap.S().Debug("operator stopped", zap.String("operator", op.id.String()))

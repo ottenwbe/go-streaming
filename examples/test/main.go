@@ -32,7 +32,7 @@ func main() {
 func test1() {
 	// 1. Define and register a stream
 	topic := "greetings"
-	// Stream of strings, synchronous (false), multiple publishers allowed (false for singleFanIn)
+	// stream of strings, synchronous (false), multiple publishers allowed (false for singleFanIn)
 	desc := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsyncStream(true))
 	sID, _ := pubsub.AddOrReplaceStreamFromDescription[string](desc)
 	defer pubsub.ForceRemoveStream(sID)

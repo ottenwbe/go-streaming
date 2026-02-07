@@ -9,7 +9,7 @@ import (
 
 var (
 	// streamIdx is the major dictionary to manage all streams locally
-	streamIdx map[StreamID]Stream
+	streamIdx map[StreamID]stream
 	// streamIdxAccessMutex controls the access to streamIdx
 	streamIdxAccessMutex sync.RWMutex
 )
@@ -32,22 +32,18 @@ func GetOrAddStream[T any](streamDescription StreamDescription) (StreamID, error
 
 // AddOrReplaceStreamFromDescription uses a description of a stream to add it or replace it to the pub sub system
 func AddOrReplaceStreamFromDescription[T any](description StreamDescription) (StreamID, error) {
-	var (
-		stream typedStream[T]
-		err    error
-	)
-
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
 
-	stream = newStreamFromDescription[T](description)
+	stream := newStreamFromDescription[T](description)
 
-	err = doAddOrReplaceStream(stream)
-	return stream.ID(), err
+	return doAddOrReplaceStream(stream)
 }
 
 // ForceRemoveStream forces removal of streams by their id, ensuring all resources are closed.
 // The streams will be removed from the central pub sub system.
+// BE CAREFUL USING THIS: when active subscribers publishers exist, the code might panic.
+// In most cases TryRemoveStream is the safer and better choice.
 func ForceRemoveStream(streamIDs ...StreamID) {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
@@ -66,23 +62,16 @@ func TryRemoveStreams(streamIDs ...StreamID) {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
 
-	for _, id := range streamIDs {
-		if s, ok := streamIdx[id]; ok && !s.HasPublishersOrSubscribers() {
-			if s.TryClose() {
-				delete(streamIdx, id)
-			}
-
-		}
-	}
+	doTryRemoveStreams(streamIDs...)
 }
 
 // SubscribeByTopic to get a stream for this topic with type T
-func SubscribeByTopic[T any](topic string) (StreamReceiver[T], error) {
+func SubscribeByTopic[T any](topic string) (Subscriber[T], error) {
 	return SubscribeByTopicID[T](MakeStreamID[T](topic))
 }
 
 // SubscribeByTopicID to a stream by the stream's id
-func SubscribeByTopicID[T any](id StreamID) (StreamReceiver[T], error) {
+func SubscribeByTopicID[T any](id StreamID) (Subscriber[T], error) {
 	streamIdxAccessMutex.RLock()
 	defer streamIdxAccessMutex.RUnlock()
 
@@ -94,7 +83,7 @@ func SubscribeByTopicID[T any](id StreamID) (StreamReceiver[T], error) {
 }
 
 // Unsubscribe removes a subscriber from a stream.
-func Unsubscribe[T any](rec StreamReceiver[T]) error {
+func Unsubscribe[T any](rec Subscriber[T]) error {
 	streamIdxAccessMutex.RLock()
 	defer streamIdxAccessMutex.RUnlock()
 
@@ -122,10 +111,7 @@ func InstantPublishByTopic[T any](topic string, event events.Event[T]) (err erro
 	}(publisher)
 
 	if err == nil {
-		err = publisher.Publish(event)
-		if err != nil {
-			return err
-		}
+		publisher.Publish(event)
 	}
 
 	return err
@@ -169,14 +155,27 @@ func UnRegisterPublisher[T any](publisher Publisher[T]) error {
 func GetDescription(id StreamID) (StreamDescription, error) {
 	streamIdxAccessMutex.RLock()
 	defer streamIdxAccessMutex.RUnlock()
+
 	if s, ok := streamIdx[id]; ok {
 		return s.Description(), nil
-	} else {
-		return StreamDescription{}, StreamNotFoundError
 	}
+
+	return StreamDescription{}, StreamNotFoundError
 }
 
-func doGetOrAddStream(stream Stream) (StreamID, error) {
+// Metrics retrieves the metrics of a stream identified by the given ID.
+func Metrics(id StreamID) (*StreamMetrics, error) {
+	streamIdxAccessMutex.RLock()
+	defer streamIdxAccessMutex.RUnlock()
+
+	if s, ok := streamIdx[id]; ok {
+		return s.streamMetrics(), nil
+	}
+
+	return newStreamMetrics(), StreamNotFoundError
+}
+
+func doGetOrAddStream(stream stream) (StreamID, error) {
 	err := validateStream(stream)
 	if err != nil {
 		return NilStreamID(), err
@@ -184,37 +183,45 @@ func doGetOrAddStream(stream Stream) (StreamID, error) {
 
 	if existingStream, ok := streamIdx[stream.ID()]; ok {
 		return existingStream.ID(), nil
-	} else {
-		addStream(stream)
-		return stream.ID(), nil
 	}
+
+	addAndStartStream(stream)
+	return stream.ID(), nil
 }
 
-func doAddOrReplaceStream(newStream Stream) error {
+func doAddOrReplaceStream(newStream stream) (StreamID, error) {
 
 	err := validateStream(newStream)
 	if err != nil {
-		return err
+		return NilStreamID(), err
 	}
 
-	tryCopyExistingStreamToNewStream(newStream)
-	addStream(newStream)
+	if existingStream, ok := streamIdx[newStream.ID()]; ok {
+		newStream.copyFrom(existingStream)
+		doTryRemoveStreams(existingStream.ID())
+	}
 
-	return nil
+	addAndStartStream(newStream)
+
+	return newStream.ID(), nil
 }
 
-func tryCopyExistingStreamToNewStream(newStream Stream) {
-	if s, ok := streamIdx[newStream.ID()]; ok {
-		newStream.copyFrom(s)
+func doTryRemoveStreams(streamIDs ...StreamID) {
+	for _, id := range streamIDs {
+		if s, ok := streamIdx[id]; ok && !s.hasPublishersOrSubscribers() {
+			if s.tryClose() {
+				delete(streamIdx, id)
+			}
+		}
 	}
 }
 
-func addStream(newStream Stream) {
-	newStream.Run()
+func addAndStartStream(newStream stream) {
+	newStream.run()
 	streamIdx[newStream.ID()] = newStream
 }
 
-func validateStream(newStream Stream) error {
+func validateStream(newStream stream) error {
 	if newStream.ID().IsNil() {
 		return StreamIDNilError
 	}
@@ -237,5 +244,5 @@ func getAndConvertStreamByID[T any](id StreamID) (typedStream[T], error) {
 }
 
 func init() {
-	streamIdx = make(map[StreamID]Stream)
+	streamIdx = make(map[StreamID]stream)
 }

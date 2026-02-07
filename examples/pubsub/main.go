@@ -16,7 +16,7 @@ func main() {
 		err       error
 	)
 
-	streamConfig := pubsub.MakeStreamDescription[int]("int stream", pubsub.WithSingleFanIn(true))
+	streamConfig := pubsub.MakeStreamDescription[int]("int stream")
 	if intStream, err = pubsub.AddOrReplaceStreamFromDescription[int](streamConfig); err != nil {
 		zap.S().Errorf("intStream could not be created: %v", err)
 	}
@@ -36,7 +36,7 @@ func publisher(intStream pubsub.StreamID) {
 
 	for i := 0; i < 1000; i++ {
 		zap.S().Infof("Now sending: %v", i)
-		_ = publisher.Publish(events.NewEvent(i))
+		publisher.Publish(events.NewEvent(i))
 	}
 }
 
