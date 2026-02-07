@@ -31,8 +31,8 @@ type typedStream[T any] interface {
 
 	//publish(events.Event[T]) error
 
-	subscribe() (StreamReceiver[T], error)
-	unsubscribe(id StreamReceiverID)
+	subscribe() (Subscriber[T], error)
+	unsubscribe(id SubscriberID)
 	newPublisher() (Publisher[T], error)
 	removePublisher(id PublisherID)
 
@@ -269,7 +269,7 @@ func (l *localAsyncStream[T]) newPublisher() (Publisher[T], error) {
 	return l.publisherMap.newPublisher()
 }
 
-func (l *localAsyncStream[T]) subscribe() (StreamReceiver[T], error) {
+func (l *localAsyncStream[T]) subscribe() (Subscriber[T], error) {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
@@ -285,14 +285,14 @@ func (s *localSyncStream[T]) ID() StreamID {
 	return s.description.StreamID()
 }
 
-func (l *localAsyncStream[T]) unsubscribe(id StreamReceiverID) {
+func (l *localAsyncStream[T]) unsubscribe(id SubscriberID) {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
 	l.subscriberMap.remove(id)
 }
 
-func (s *localSyncStream[T]) unsubscribe(id StreamReceiverID) {
+func (s *localSyncStream[T]) unsubscribe(id SubscriberID) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
 
@@ -313,7 +313,7 @@ func (s *localSyncStream[T]) removePublisher(id PublisherID) {
 	s.publisherMap.remove(id)
 }
 
-func (s *localSyncStream[T]) subscribe() (StreamReceiver[T], error) {
+func (s *localSyncStream[T]) subscribe() (Subscriber[T], error) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
 

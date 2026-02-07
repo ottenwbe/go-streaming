@@ -30,7 +30,7 @@ type ContinuousQuery struct {
 // TypedContinuousQuery is a typed wrapper around ContinuousQuery that provides a typed output receiver.
 type TypedContinuousQuery[T any] struct {
 	*ContinuousQuery
-	OutputReceiver pubsub.StreamReceiver[T]
+	OutputReceiver pubsub.Subscriber[T]
 }
 
 // Close stops the query and unsubscribes the output receiver.

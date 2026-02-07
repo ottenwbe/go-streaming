@@ -2,7 +2,6 @@ package pubsub
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
@@ -67,12 +66,12 @@ func TryRemoveStreams(streamIDs ...StreamID) {
 }
 
 // SubscribeByTopic to get a stream for this topic with type T
-func SubscribeByTopic[T any](topic string) (StreamReceiver[T], error) {
+func SubscribeByTopic[T any](topic string) (Subscriber[T], error) {
 	return SubscribeByTopicID[T](MakeStreamID[T](topic))
 }
 
 // SubscribeByTopicID to a stream by the stream's id
-func SubscribeByTopicID[T any](id StreamID) (StreamReceiver[T], error) {
+func SubscribeByTopicID[T any](id StreamID) (Subscriber[T], error) {
 	streamIdxAccessMutex.RLock()
 	defer streamIdxAccessMutex.RUnlock()
 
@@ -84,7 +83,7 @@ func SubscribeByTopicID[T any](id StreamID) (StreamReceiver[T], error) {
 }
 
 // Unsubscribe removes a subscriber from a stream.
-func Unsubscribe[T any](rec StreamReceiver[T]) error {
+func Unsubscribe[T any](rec Subscriber[T]) error {
 	streamIdxAccessMutex.RLock()
 	defer streamIdxAccessMutex.RUnlock()
 
@@ -170,7 +169,6 @@ func Metrics(id StreamID) (*StreamMetrics, error) {
 	defer streamIdxAccessMutex.RUnlock()
 
 	if s, ok := streamIdx[id]; ok {
-		fmt.Println(s)
 		return s.streamMetrics(), nil
 	}
 
@@ -185,10 +183,10 @@ func doGetOrAddStream(stream stream) (StreamID, error) {
 
 	if existingStream, ok := streamIdx[stream.ID()]; ok {
 		return existingStream.ID(), nil
-	} else {
-		addStream(stream)
-		return stream.ID(), nil
 	}
+
+	addAndStartStream(stream)
+	return stream.ID(), nil
 }
 
 func doAddOrReplaceStream(newStream stream) (StreamID, error) {
@@ -203,7 +201,7 @@ func doAddOrReplaceStream(newStream stream) (StreamID, error) {
 		doTryRemoveStreams(existingStream.ID())
 	}
 
-	addStream(newStream)
+	addAndStartStream(newStream)
 
 	return newStream.ID(), nil
 }
@@ -218,7 +216,7 @@ func doTryRemoveStreams(streamIDs ...StreamID) {
 	}
 }
 
-func addStream(newStream stream) {
+func addAndStartStream(newStream stream) {
 	newStream.run()
 	streamIdx[newStream.ID()] = newStream
 }

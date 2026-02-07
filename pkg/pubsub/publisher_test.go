@@ -32,13 +32,13 @@ func (m *mockStream[T]) publish(e events.Event[T]) error {
 	return nil
 }
 
-func (m *mockStream[T]) subscribe() (StreamReceiver[T], error) { return nil, nil }
-func (m *mockStream[T]) unsubscribe(id StreamReceiverID)       {}
-func (m *mockStream[T]) newPublisher() (Publisher[T], error)   { return nil, nil }
-func (m *mockStream[T]) removePublisher(id PublisherID)        {}
-func (m *mockStream[T]) subscribers() *notificationMap[T]      { return nil }
-func (m *mockStream[T]) publishers() publisherFanIn[T]         { return nil }
-func (m *mockStream[T]) events() buffer.Buffer[T]              { return nil }
+func (m *mockStream[T]) subscribe() (Subscriber[T], error)   { return nil, nil }
+func (m *mockStream[T]) unsubscribe(id SubscriberID)         {}
+func (m *mockStream[T]) newPublisher() (Publisher[T], error) { return nil, nil }
+func (m *mockStream[T]) removePublisher(id PublisherID)      {}
+func (m *mockStream[T]) subscribers() *notificationMap[T]    { return nil }
+func (m *mockStream[T]) publishers() publisherFanIn[T]       { return nil }
+func (m *mockStream[T]) events() buffer.Buffer[T]            { return nil }
 
 func createMockStream[T any](id StreamID) *mockStream[T] {
 

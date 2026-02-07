@@ -20,7 +20,7 @@ type (
 		Close()
 	}
 	OperatorStreamSubscription[TSub any] struct {
-		streamReceiver pubsub.StreamReceiver[TSub]
+		streamReceiver pubsub.Subscriber[TSub]
 		streamID       pubsub.StreamID
 		inputBuffer    buffer.Buffer[TSub]
 		active         bool

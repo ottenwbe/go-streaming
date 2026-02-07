@@ -7,27 +7,27 @@ import (
 	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
-var _ = Describe("StreamReceiver", func() {
+var _ = Describe("Subscriber", func() {
 
-	Describe("StreamReceiverID", func() {
+	Describe("SubscriberID", func() {
 		It("should return its string representation", func() {
 			uid := uuid.New()
-			id := StreamReceiverID(uid)
+			id := SubscriberID(uid)
 			Expect(id.String()).To(Equal(uid.String()))
 		})
 	})
 
-	Describe("streamReceiver (Unbuffered)", func() {
+	Describe("defaultSubscriber (Unbuffered)", func() {
 		var (
-			rec      *streamReceiver[string]
+			rec      *defaultSubscriber[string]
 			streamID StreamID
 		)
 
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-topic")
-			rec = &streamReceiver[string]{
+			rec = &defaultSubscriber[string]{
 				streamID: streamID,
-				iD:       StreamReceiverID(uuid.New()),
+				iD:       SubscriberID(uuid.New()),
 				notify:   make(chan events.Event[string]),
 			}
 		})
@@ -61,9 +61,9 @@ var _ = Describe("StreamReceiver", func() {
 		})
 	})
 
-	Describe("bufferedStreamReceiver", func() {
+	Describe("bufferedSubscriber", func() {
 		var (
-			rec      StreamReceiver[string]
+			rec      Subscriber[string]
 			streamID StreamID
 			nMap     *notificationMap[string]
 			ch       events.EventChannel[string]

@@ -10,18 +10,18 @@ import (
 	"github.com/google/uuid"
 )
 
-// StreamReceiverID uniquely identifies a stream receiver.
-type StreamReceiverID uuid.UUID
+// SubscriberID uniquely identifies a stream receiver.
+type SubscriberID uuid.UUID
 
-// String returns the string representation of the StreamReceiverID.
-func (i StreamReceiverID) String() string {
+// String returns the string representation of the SubscriberID.
+func (i SubscriberID) String() string {
 	return uuid.UUID(i).String()
 }
 
-// StreamReceiver allows subscribers to get notified about events published in the streams
-type StreamReceiver[T any] interface {
+// Subscriber allows subscribers to get notified about events published in the streams
+type Subscriber[T any] interface {
 	StreamID() StreamID
-	ID() StreamReceiverID
+	ID() SubscriberID
 	// Notify can be called to directly get notified by the underlying event channel
 	Notify() events.EventChannel[T]
 	doNotify(e events.Event[T])
@@ -31,72 +31,74 @@ type StreamReceiver[T any] interface {
 	close()
 }
 
-type streamReceiver[T any] struct {
+type defaultSubscriber[T any] struct {
 	streamID StreamID
-	iD       StreamReceiverID
+	iD       SubscriberID
 	notify   events.EventChannel[T]
 }
 
-func newDefaultStreamReceiver[T any](streamID StreamID) StreamReceiver[T] {
-	rec := &streamReceiver[T]{
+func newDefaultSubscriber[T any](streamID StreamID) Subscriber[T] {
+	rec := &defaultSubscriber[T]{
 		streamID: streamID,
-		iD:       StreamReceiverID(uuid.New()),
+		iD:       SubscriberID(uuid.New()),
 		notify:   make(chan events.Event[T]),
 	}
 	return rec
 }
 
-type bufferedStreamReceiver[T any] struct {
+type bufferedSubscriber[T any] struct {
 	streamID StreamID
-	iD       StreamReceiverID
+	iD       SubscriberID
 	notify   events.EventChannel[T]
 	buffer   buffer.Buffer[T]
 	active   bool
 }
 
-func newBufferedStreamReceiver[T any](streamID StreamID) StreamReceiver[T] {
-	rec := &bufferedStreamReceiver[T]{
+func newBufferedSubscriber[T any](streamID StreamID) Subscriber[T] {
+	rec := &bufferedSubscriber[T]{
 		streamID: streamID,
-		iD:       StreamReceiverID(uuid.New()),
+		iD:       SubscriberID(uuid.New()),
 		notify:   make(chan events.Event[T]),
 		buffer:   buffer.NewSimpleAsyncBuffer[T](),
 		active:   true,
 	}
-	go func(receiver *bufferedStreamReceiver[T]) {
+
+	go func(receiver *bufferedSubscriber[T]) {
+		defer close(receiver.notify)
+
 		for receiver.active {
 			e := receiver.buffer.GetAndRemoveNextEvent()
 			if e != nil {
 				receiver.notify <- e
 			}
 		}
-		close(receiver.notify)
 	}(rec)
 	return rec
 }
 
-func (r *streamReceiver[T]) close() {
+func (r *defaultSubscriber[T]) close() {
 	if r.notify != nil {
 		close(r.notify)
 	}
 }
 
-func (r *streamReceiver[T]) doNotify(event events.Event[T]) {
+func (r *defaultSubscriber[T]) doNotify(event events.Event[T]) {
 	r.notify <- event
 }
 
-func (r *streamReceiver[T]) StreamID() StreamID {
+func (r *defaultSubscriber[T]) StreamID() StreamID {
 	return r.streamID
 }
 
-func (r *streamReceiver[T]) ID() StreamReceiverID {
+func (r *defaultSubscriber[T]) ID() SubscriberID {
 	return r.iD
 }
 
-func (r *streamReceiver[T]) Notify() events.EventChannel[T] {
+func (r *defaultSubscriber[T]) Notify() events.EventChannel[T] {
 	return r.notify
 }
 
-func (r *streamReceiver[T]) Consume() (events.Event[T], error) {
+func (r *defaultSubscriber[T]) Consume() (events.Event[T], error) {
 	if e, more := <-r.notify; !more {
 		return e, errors.New("channel closed, no more events")
 	} else {
@@ -104,28 +106,28 @@ func (r *streamReceiver[T]) Consume() (events.Event[T], error) {
 	}
 }
 
-func (r *bufferedStreamReceiver[T]) doNotify(event events.Event[T]) {
+func (r *bufferedSubscriber[T]) doNotify(event events.Event[T]) {
 	r.buffer.AddEvent(event)
 }
 
-func (r *bufferedStreamReceiver[T]) close() {
+func (r *bufferedSubscriber[T]) close() {
 	r.active = false
 	r.buffer.StopBlocking()
 }
 
-func (r *bufferedStreamReceiver[T]) StreamID() StreamID {
+func (r *bufferedSubscriber[T]) StreamID() StreamID {
 	return r.streamID
 }
 
-func (r *bufferedStreamReceiver[T]) ID() StreamReceiverID {
+func (r *bufferedSubscriber[T]) ID() SubscriberID {
 	return r.iD
 }
 
-func (r *bufferedStreamReceiver[T]) Notify() events.EventChannel[T] {
+func (r *bufferedSubscriber[T]) Notify() events.EventChannel[T] {
 	return r.notify
 }
 
-func (r *bufferedStreamReceiver[T]) Consume() (events.Event[T], error) {
+func (r *bufferedSubscriber[T]) Consume() (events.Event[T], error) {
 	if e, more := <-r.notify; !more {
 		return e, errors.New("channel closed, no more events")
 	} else {
@@ -136,7 +138,7 @@ func (r *bufferedStreamReceiver[T]) Consume() (events.Event[T], error) {
 type notificationMap[T any] struct {
 	description StreamDescription
 	channel     events.EventChannel[T]
-	receiver    map[StreamReceiverID]StreamReceiver[T]
+	receiver    map[SubscriberID]Subscriber[T]
 	active      bool
 	metrics     *StreamMetrics
 }
@@ -145,20 +147,20 @@ func newNotificationMap[T any](description StreamDescription, c events.EventChan
 	m := &notificationMap[T]{
 		description: description,
 		channel:     c,
-		receiver:    make(map[StreamReceiverID]StreamReceiver[T]),
+		receiver:    make(map[SubscriberID]Subscriber[T]),
 		active:      false,
 		metrics:     metrics,
 	}
 	return m
 }
 
-func (m *notificationMap[T]) newStreamReceiver(streamID StreamID) StreamReceiver[T] {
+func (m *notificationMap[T]) newStreamReceiver(streamID StreamID) Subscriber[T] {
 
-	var rec StreamReceiver[T]
+	var rec Subscriber[T]
 	if m.description.AsyncReceiver {
-		rec = newBufferedStreamReceiver[T](streamID)
+		rec = newBufferedSubscriber[T](streamID)
 	} else {
-		rec = newDefaultStreamReceiver[T](streamID)
+		rec = newDefaultSubscriber[T](streamID)
 	}
 
 	m.receiver[rec.ID()] = rec
@@ -174,7 +176,7 @@ func (m *notificationMap[T]) close() error {
 	return nil
 }
 
-func (m *notificationMap[T]) remove(id StreamReceiverID) {
+func (m *notificationMap[T]) remove(id SubscriberID) {
 	if c, ok := m.receiver[id]; ok {
 		delete(m.receiver, id)
 		c.close()
@@ -214,7 +216,7 @@ func (m *notificationMap[T]) len() int {
 
 func (m *notificationMap[T]) copyFrom(old *notificationMap[T]) {
 	m.receiver = old.receiver
-	old.receiver = make(map[StreamReceiverID]StreamReceiver[T])
+	old.receiver = make(map[SubscriberID]Subscriber[T])
 }
 
 func (m *notificationMap[T]) start() {
