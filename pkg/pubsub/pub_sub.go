@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
@@ -32,18 +33,12 @@ func GetOrAddStream[T any](streamDescription StreamDescription) (StreamID, error
 
 // AddOrReplaceStreamFromDescription uses a description of a stream to add it or replace it to the pub sub system
 func AddOrReplaceStreamFromDescription[T any](description StreamDescription) (StreamID, error) {
-	var (
-		stream typedStream[T]
-		err    error
-	)
-
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
 
-	stream = newStreamFromDescription[T](description)
+	stream := newStreamFromDescription[T](description)
 
-	err = doAddOrReplaceStream(stream)
-	return stream.ID(), err
+	return doAddOrReplaceStream(stream)
 }
 
 // ForceRemoveStream forces removal of streams by their id, ensuring all resources are closed.
@@ -68,14 +63,7 @@ func TryRemoveStreams(streamIDs ...StreamID) {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
 
-	for _, id := range streamIDs {
-		if s, ok := streamIdx[id]; ok && !s.hasPublishersOrSubscribers() {
-			if s.tryClose() {
-				delete(streamIdx, id)
-			}
-
-		}
-	}
+	doTryRemoveStreams(streamIDs...)
 }
 
 // SubscribeByTopic to get a stream for this topic with type T
@@ -176,6 +164,19 @@ func GetDescription(id StreamID) (StreamDescription, error) {
 	return StreamDescription{}, StreamNotFoundError
 }
 
+// Metrics retrieves the metrics of a stream identified by the given ID.
+func Metrics(id StreamID) (*StreamMetrics, error) {
+	streamIdxAccessMutex.RLock()
+	defer streamIdxAccessMutex.RUnlock()
+
+	if s, ok := streamIdx[id]; ok {
+		fmt.Println(s)
+		return s.streamMetrics(), nil
+	}
+
+	return newStreamMetrics(), StreamNotFoundError
+}
+
 func doGetOrAddStream(stream stream) (StreamID, error) {
 	err := validateStream(stream)
 	if err != nil {
@@ -190,22 +191,30 @@ func doGetOrAddStream(stream stream) (StreamID, error) {
 	}
 }
 
-func doAddOrReplaceStream(newStream stream) error {
+func doAddOrReplaceStream(newStream stream) (StreamID, error) {
 
 	err := validateStream(newStream)
 	if err != nil {
-		return err
+		return NilStreamID(), err
 	}
 
-	tryCopyExistingStreamToNewStream(newStream)
+	if existingStream, ok := streamIdx[newStream.ID()]; ok {
+		newStream.copyFrom(existingStream)
+		doTryRemoveStreams(existingStream.ID())
+	}
+
 	addStream(newStream)
 
-	return nil
+	return newStream.ID(), nil
 }
 
-func tryCopyExistingStreamToNewStream(newStream stream) {
-	if s, ok := streamIdx[newStream.ID()]; ok {
-		newStream.copyFrom(s)
+func doTryRemoveStreams(streamIDs ...StreamID) {
+	for _, id := range streamIDs {
+		if s, ok := streamIdx[id]; ok && !s.hasPublishersOrSubscribers() {
+			if s.tryClose() {
+				delete(streamIdx, id)
+			}
+		}
 	}
 }
 

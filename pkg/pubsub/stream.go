@@ -3,7 +3,6 @@ package pubsub
 import (
 	"errors"
 	"sync"
-	"sync/atomic"
 
 	"github.com/ottenwbe/go-streaming/internal/buffer"
 	"github.com/ottenwbe/go-streaming/pkg/events"
@@ -24,7 +23,7 @@ type stream interface {
 	Description() StreamDescription
 
 	copyFrom(stream)
-	streamMetrics() *streamMetrics
+	streamMetrics() *StreamMetrics
 }
 
 type typedStream[T any] interface {
@@ -43,25 +42,33 @@ type typedStream[T any] interface {
 	inputChannel() events.EventChannel[T]
 }
 
-type streamMetrics struct {
-	numEventsIn  atomic.Uint64
-	numEventsOut atomic.Uint64
+type StreamMetrics struct {
+	numEventsIn  uint64
+	numEventsOut uint64
 }
 
-func (m *streamMetrics) incNumEventsIn() {
-	m.numEventsIn.Add(1)
+func (m *StreamMetrics) incNumEventsIn() {
+	m.numEventsIn++
 }
 
-func (m *streamMetrics) incNumEventsOut() {
-	m.numEventsOut.Add(1)
+func (m *StreamMetrics) incNumEventsOut() {
+	m.numEventsOut++
 }
 
-func (m *streamMetrics) numInEventsEqualsNumOutEvents() bool {
-	return m.numEventsIn.Load() == m.numEventsOut.Load()
+func (m *StreamMetrics) NumEventsIn() uint64 {
+	return m.numEventsIn
 }
 
-func newStreamMetrics() *streamMetrics {
-	return &streamMetrics{}
+func (m *StreamMetrics) NumEventsOut() uint64 {
+	return m.numEventsOut
+}
+
+func (m *StreamMetrics) NumInEventsEqualsNumOutEvents() bool {
+	return m.numEventsIn == m.numEventsOut
+}
+
+func newStreamMetrics() *StreamMetrics {
+	return &StreamMetrics{}
 }
 
 type baseStream[T any] struct {
@@ -70,7 +77,7 @@ type baseStream[T any] struct {
 	publisherMap  publisherFanIn[T]
 	subscriberMap *notificationMap[T]
 
-	metrics *streamMetrics
+	metrics *StreamMetrics
 
 	notifyMutex sync.Mutex
 }
@@ -80,7 +87,7 @@ type localSyncStream[T any] struct {
 	channel events.EventChannel[T]
 }
 
-func (s *localSyncStream[T]) streamMetrics() *streamMetrics {
+func (s *localSyncStream[T]) streamMetrics() *StreamMetrics {
 	return s.metrics
 }
 
@@ -95,7 +102,7 @@ type localAsyncStream[T any] struct {
 	closed sync.WaitGroup
 }
 
-func (l *localAsyncStream[T]) streamMetrics() *streamMetrics {
+func (l *localAsyncStream[T]) streamMetrics() *StreamMetrics {
 	return l.metrics
 }
 
@@ -364,7 +371,7 @@ func (s *localSyncStream[T]) copyFrom(stream stream) {
 		s.publisherMap.copyFrom(oldStream.publishers())
 
 		// active waiting until the stream is drained
-		for !oldStream.streamMetrics().numInEventsEqualsNumOutEvents() {
+		for !oldStream.streamMetrics().NumInEventsEqualsNumOutEvents() {
 		}
 
 		s.subscriberMap.copyFrom(oldStream.subscribers())
@@ -379,7 +386,7 @@ func (l *localAsyncStream[T]) copyFrom(stream stream) {
 		l.publisherMap = oldStream.publishers()
 
 		// active waiting until the stream is drained
-		for !oldStream.streamMetrics().numInEventsEqualsNumOutEvents() {
+		for !oldStream.streamMetrics().NumInEventsEqualsNumOutEvents() {
 		}
 
 		l.subscriberMap.copyFrom(oldStream.subscribers())

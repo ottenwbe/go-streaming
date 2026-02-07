@@ -15,7 +15,7 @@ type mockStream[T any] struct {
 	publishedEvents []events.Event[T]
 }
 
-func (m *mockStream[T]) streamMetrics() *streamMetrics {
+func (m *mockStream[T]) streamMetrics() *StreamMetrics {
 	return newStreamMetrics()
 }
 

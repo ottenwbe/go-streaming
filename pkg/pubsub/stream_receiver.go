@@ -138,10 +138,10 @@ type notificationMap[T any] struct {
 	channel     events.EventChannel[T]
 	receiver    map[StreamReceiverID]StreamReceiver[T]
 	active      bool
-	metrics     *streamMetrics
+	metrics     *StreamMetrics
 }
 
-func newNotificationMap[T any](description StreamDescription, c events.EventChannel[T], metrics *streamMetrics) *notificationMap[T] {
+func newNotificationMap[T any](description StreamDescription, c events.EventChannel[T], metrics *StreamMetrics) *notificationMap[T] {
 	m := &notificationMap[T]{
 		description: description,
 		channel:     c,
@@ -214,6 +214,7 @@ func (m *notificationMap[T]) len() int {
 
 func (m *notificationMap[T]) copyFrom(old *notificationMap[T]) {
 	m.receiver = old.receiver
+	old.receiver = make(map[StreamReceiverID]StreamReceiver[T])
 }
 
 func (m *notificationMap[T]) start() {

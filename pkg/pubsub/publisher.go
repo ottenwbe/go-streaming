@@ -51,12 +51,13 @@ type (
 		remove(id PublisherID)
 		copyFrom(publishers publisherFanIn[T])
 		publishers() []*defaultPublisher[T]
+		setPublishers(publishers []*defaultPublisher[T])
 	}
 	defaultPublisherFanIn[T any] struct {
 		publishersArr []*defaultPublisher[T]
 		description   StreamDescription
 		channel       events.EventChannel[T]
-		metrics       *streamMetrics
+		metrics       *StreamMetrics
 		mutex         sync.RWMutex
 	}
 	emptyPublisherFanIn[T any] struct {
@@ -66,6 +67,8 @@ type (
 func (e emptyPublisherFanIn[T]) publishers() []*defaultPublisher[T] {
 	return make([]*defaultPublisher[T], 0)
 }
+
+func (e emptyPublisherFanIn[T]) setPublishers(publishers []*defaultPublisher[T]) {}
 
 func (e emptyPublisherFanIn[T]) copyFrom(publishers publisherFanIn[T]) {}
 
@@ -102,13 +105,17 @@ func newDefaultPublisher[T any](streamID StreamID, fanIn publisherFanIn[T]) *def
 	}
 }
 
-func newPublisherSync[T any](sDescription StreamDescription, eChannel events.EventChannel[T], metrics *streamMetrics) publisherFanIn[T] {
+func newPublisherSync[T any](sDescription StreamDescription, eChannel events.EventChannel[T], metrics *StreamMetrics) publisherFanIn[T] {
 	return &defaultPublisherFanIn[T]{
 		publishersArr: make([]*defaultPublisher[T], 0),
 		description:   sDescription,
 		channel:       eChannel,
 		metrics:       metrics,
 	}
+}
+
+func (p *defaultPublisherFanIn[T]) setPublishers(publishers []*defaultPublisher[T]) {
+	p.publishersArr = publishers
 }
 
 func (p *defaultPublisherFanIn[T]) close() error {
@@ -186,6 +193,8 @@ func (p *defaultPublisherFanIn[T]) copyFrom(oldPublishers publisherFanIn[T]) {
 		pub.fanIn = p
 		p.publishersArr = append(p.publishersArr, pub)
 	}
+
+	oldPublishers.setPublishers(make([]*defaultPublisher[T], 0))
 }
 
 func (p *defaultPublisher[T]) StreamID() StreamID {
