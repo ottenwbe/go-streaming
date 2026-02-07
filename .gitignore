@@ -1,3 +1,5 @@
 coverprofile.out
 .idea/
 go-stream-processing
+go.work
+go.work.sum
