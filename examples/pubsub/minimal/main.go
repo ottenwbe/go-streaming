@@ -16,8 +16,8 @@ func main() {
 	pub.Publish(events.NewEvent(42))
 
 	// 3. Consume the event
-	event, _ := sub.Consume()
-	fmt.Printf("Received: %v\n", event.GetContent())
+	event, _ := sub.Next()
+	fmt.Printf("Received: %v\n", event[0].GetContent())
 
 	// 4. Cleanup
 	pubsub.UnRegisterPublisher(pub)
