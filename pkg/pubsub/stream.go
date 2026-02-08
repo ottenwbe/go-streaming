@@ -39,7 +39,6 @@ type typedStream[T any] interface {
 
 	subscribers() *notificationMap[T]
 	publishers() publisherFanIn[T]
-	events() buffer.Buffer[T]
 	inputChannel() events.EventChannel[T]
 }
 
@@ -202,14 +201,6 @@ func (l *localAsyncStream[T]) hasPublishersOrSubscribers() bool {
 	defer l.notifyMutex.Unlock()
 
 	return l.subscriberMap.len() > 0 || l.publisherMap.len() > 0
-}
-
-func (s *localSyncStream[T]) events() buffer.Buffer[T] {
-	return buffer.NewSimpleAsyncBuffer[T]()
-}
-
-func (l *localAsyncStream[T]) events() buffer.Buffer[T] {
-	return l.buffer
 }
 
 func (l *localAsyncStream[T]) forceClose() {

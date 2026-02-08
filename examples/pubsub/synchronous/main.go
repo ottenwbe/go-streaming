@@ -20,15 +20,15 @@ func main() {
 	// 1. Configure the publish/subscribe system for the topic 'Some Integers'
 	// Note: this is a synchronous stream, which means that the subscribers need to consume events before a publisher cans send the next event
 	streamConfig := pubsub.MakeStreamDescription[int]("Some Integers")
-	intStreamID, err := pubsub.GetOrAddStream[int](streamConfig)
+	intStreamID, err := pubsub.AddOrReplaceStreamFromDescription[int](streamConfig)
 	if err != nil {
 		zap.S().Fatalf("Failed to create stream: %v", err)
 	}
 	defer pubsub.TryRemoveStreams(intStreamID)
 
 	// 2. Subscribe to the topic 'Some Integers'
-	startSubscriber("Subscriber 1", intStreamID, &wg, 1)
-	startSubscriber("Subscriber 2", intStreamID, &wg, 2)
+	startSubscriber("Subscriber 1", intStreamID, &wg, 2*time.Microsecond)
+	startSubscriber("Subscriber 2", intStreamID, &wg, time.Microsecond)
 
 	// 3. Publish events to the topic 'Some Integers'
 	startPublisher(intStreamID, &wg)
@@ -73,7 +73,7 @@ func startSubscriber(name string, streamID pubsub.StreamID, wg *sync.WaitGroup, 
 			}
 			zap.S().Infof("Event received by %s: %v", name, e)
 
-			time.Sleep(delay * time.Microsecond)
+			time.Sleep(delay)
 		}
 	})
 }
