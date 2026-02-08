@@ -108,20 +108,15 @@ func Unsubscribe[T any](rec Subscriber[T]) error {
 
 // InstantPublishByTopic routes the event to the given topic, iff the stream exists.
 // Note, this is only a helper function and for consistent streaming register a publisher; see RegisterPublisher.
-func InstantPublishByTopic[T any](topic string, event events.Event[T]) (err error) {
+func InstantPublishByTopic[T any](topic string, event events.Event[T]) error {
 
-	publisher, err := RegisterPublisher[T](MakeStreamID[T](topic))
-	defer func(publisher Publisher[T]) {
-		if publisher != nil {
-			err = UnRegisterPublisher[T](publisher)
-		}
-	}(publisher)
-
-	if err == nil {
-		publisher.Publish(event)
+	publisher, err := RegisterPublisherByTopic[T](topic)
+	if err != nil {
+		return err
 	}
 
-	return err
+	publisher.Publish(event)
+	return UnRegisterPublisher(publisher)
 }
 
 // RegisterPublisherByTopic creates and registers a new publisher for the stream identified by the given topic.

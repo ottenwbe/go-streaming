@@ -170,7 +170,6 @@ func newLocalAsyncStream[T any](description StreamDescription) *localAsyncStream
 	metrics := newStreamMetrics()
 
 	var buf buffer.Buffer[T]
-	// TODO: check if we can use the channel's buffer capacity instead
 	if description.BufferCapacity > 0 {
 		buf = buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
 	} else {

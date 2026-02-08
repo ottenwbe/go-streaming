@@ -203,11 +203,10 @@ func (m *notificationMap[T]) doNotify() {
 	for e := range m.channel {
 
 		// avoid concurrency issues with unsubscriptions/subscriptions by working on a snapshot
-		targets := m.snapshot() //TODO: double check if really needed
+		targets := m.snapshot()
 		for _, notifier := range targets {
 			// Wrap in a function to recover from panics if a subscriber is closed concurrently.
 			func() {
-				//TODO: double check if really needed
 				defer func() { _ = recover() }()
 				notifier.doNotify(e)
 			}()
