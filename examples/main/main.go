@@ -44,7 +44,7 @@ func startSubscriber2(intStream pubsub.StreamID) {
 	go func() {
 		s, _ := pubsub.SubscribeByTopicID[int](intStream)
 		for {
-			e, _ := s.Consume()
+			e, _ := s.Next()
 			zap.S().Infof("event received by sub1: %v", e)
 		}
 	}()
@@ -54,7 +54,7 @@ func startSubscriber1(intStream pubsub.StreamID) {
 	go func() {
 		s, _ := pubsub.SubscribeByTopicID[int](intStream)
 		for {
-			e, _ := s.Consume()
+			e, _ := s.Next()
 			zap.S().Infof("event received by sub2: %v", e)
 		}
 	}()

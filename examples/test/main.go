@@ -48,7 +48,7 @@ func test1() {
 		receiver, _ := pubsub.SubscribeByTopicID[string](streamID)
 		started <- true
 		// 4. Consume the event
-		event := <-receiver.Notify()
+		event, _ := receiver.Next()
 		fmt.Printf("Received: %s\n", event.GetContent())
 		finished <- true
 	}(finished)

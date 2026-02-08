@@ -72,13 +72,9 @@ func (e emptyPublisherFanIn[T]) setPublishers(publishers []*defaultPublisher[T])
 
 func (e emptyPublisherFanIn[T]) copyFrom(publishers publisherFanIn[T]) {}
 
-func (e emptyPublisherFanIn[T]) publish(events.Event[T]) {
-	return
-}
+func (e emptyPublisherFanIn[T]) publish(events.Event[T]) {}
 
-func (e emptyPublisherFanIn[T]) publishC(T) {
-	return
-}
+func (e emptyPublisherFanIn[T]) publishC(T) {}
 
 func (e emptyPublisherFanIn[T]) streamID() StreamID {
 	return NilStreamID()

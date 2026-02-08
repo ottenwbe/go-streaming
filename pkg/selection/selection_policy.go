@@ -1,14 +1,17 @@
 package selection
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"gopkg.in/yaml.v3"
 
 	"github.com/google/uuid"
 )
 
-// Reader allows read-only access to an underlying event buffer that implements
+// Reader allows read-only access to an underlying event buffer that implements Reader
 type Reader[T any] interface {
 	Get(i int) events.Event[T]
 	Len() int
@@ -28,6 +31,24 @@ func (e EventSelection) IsValid() bool {
 // PolicyID of each individual Policy
 type PolicyID uuid.UUID
 
+const (
+	CountingWindow = "counting"
+	TemporalWindow = "temporal"
+	SelectNext     = "selectNext"
+)
+
+// PolicyDescription is a serializable representation of a selection policy.
+type PolicyDescription struct {
+	Type string `json:"type" yaml:"type"`
+	// For CountingWindowPolicy
+	Size  int `json:"size,omitempty" yaml:"size,omitempty"`
+	Slide int `json:"slide,omitempty" yaml:"slide,omitempty"`
+	// For TemporalWindowPolicy
+	WindowStart  time.Time     `json:"windowStart,omitempty" yaml:"windowStart,omitempty"`
+	WindowLength time.Duration `json:"windowLength,omitempty" yaml:"windowLength,omitempty"`
+	WindowShift  time.Duration `json:"windowShift,omitempty" yaml:"windowShift,omitempty"`
+}
+
 type (
 	// Policy defines how events are selected from a buffer
 	Policy[T any] interface {
@@ -38,15 +59,9 @@ type (
 		Offset(offset int)
 		ID() PolicyID
 		SetBuffer(reader Reader[T])
+		Description() PolicyDescription
 	}
 
-	// SelectNextPolicy selects events one by one as they arrive.
-	SelectNextPolicy[T any] struct {
-		PolicyID
-		buffer         Reader[T]
-		selectionReady bool
-		next           int
-	}
 	// CountingWindowPolicy selects a fixed number of events (n) with a sliding window (shift).
 	CountingWindowPolicy[T any] struct {
 		PolicyID
@@ -67,34 +82,6 @@ type (
 	}
 )
 
-func (s *SelectNextPolicy[T]) NextSelection() EventSelection {
-	return EventSelection{s.next, s.next}
-}
-
-func (s *SelectNextPolicy[T]) UpdateSelection() {
-	potentialNext := s.next + 1
-	if !s.selectionReady && s.buffer.Len() > potentialNext {
-		s.next = potentialNext
-		s.selectionReady = true
-	}
-}
-
-func (s *SelectNextPolicy[T]) SetBuffer(buffer Reader[T]) {
-	s.buffer = buffer
-}
-
-func (s *SelectNextPolicy[T]) Shift() {
-	s.selectionReady = false
-}
-
-func (s *SelectNextPolicy[T]) Offset(offset int) {
-	s.next -= offset
-}
-
-func (s *SelectNextPolicy[T]) NextSelectionReady() bool {
-	return s.selectionReady
-}
-
 func (s *CountingWindowPolicy[T]) SetBuffer(buffer Reader[T]) {
 	s.buffer = buffer
 }
@@ -108,14 +95,11 @@ func (s *CountingWindowPolicy[T]) NextSelectionReady() bool {
 }
 
 func (s *CountingWindowPolicy[T]) UpdateSelection() {
-
-	for i := s.currentRange.End + 1; i < s.buffer.Len(); {
-		if s.currentRange.End-s.currentRange.Start+1 < s.n {
-			s.currentRange.End++
-			i++
-		} else {
-			i = s.buffer.Len()
-		}
+	available := s.buffer.Len() - s.currentRange.Start
+	if available >= s.n {
+		s.currentRange.End = s.currentRange.Start + s.n - 1
+	} else {
+		s.currentRange.End = s.buffer.Len() - 1
 	}
 }
 
@@ -129,8 +113,22 @@ func (s *CountingWindowPolicy[T]) Offset(offset int) {
 	s.currentRange.End -= offset
 }
 
+func (s *CountingWindowPolicy[T]) Description() PolicyDescription {
+	if s.n == 1 && s.shift == 1 {
+		return PolicyDescription{Type: SelectNext}
+	}
+	return PolicyDescription{
+		Type:  CountingWindow,
+		Size:  s.n,
+		Slide: s.shift,
+	}
+}
+
 // NextSelectionReady checks if there are no more events within the window
 func (s *TemporalWindowPolicy[T]) NextSelectionReady() bool {
+	if s.buffer.Len() == 0 {
+		return false
+	}
 	return s.buffer.Get(s.buffer.Len() - 1).GetStamp().StartTime.After(s.windowEnd)
 }
 
@@ -139,19 +137,29 @@ func (s *TemporalWindowPolicy[T]) NextSelection() EventSelection {
 	return s.currentRange
 }
 
+func (s *TemporalWindowPolicy[T]) Description() PolicyDescription {
+	return PolicyDescription{
+		Type:         TemporalWindow,
+		WindowStart:  s.windowStart,
+		WindowLength: s.windowLength,
+		WindowShift:  s.windowShift,
+	}
+}
+
 // UpdateSelection updates the window based on the new event's timestamp
 func (s *TemporalWindowPolicy[T]) UpdateSelection() {
-	for i := s.currentRange.End + 1; i < s.buffer.Len(); {
+	startScan := s.currentRange.End + 1
+	for i := startScan; i < s.buffer.Len(); i++ {
 		ts := s.buffer.Get(i).GetStamp().StartTime
-		if (ts.After(s.windowStart) || ts.Equal(s.windowStart)) && ts.Before(s.windowEnd) {
-			s.currentRange.End = i
-		} else if ts.After(s.windowEnd) || ts.Equal(s.windowEnd) {
-			i = s.buffer.Len()
-		} else if ts.Before(s.windowStart) {
+
+		if ts.Before(s.windowStart) {
 			s.currentRange.Start = i + 1
 			s.currentRange.End = i
+		} else if ts.After(s.windowEnd) || ts.Equal(s.windowEnd) {
+			break
+		} else {
+			s.currentRange.End = i
 		}
-		i++
 	}
 }
 
@@ -191,11 +199,7 @@ func NewCountingWindowPolicy[T any](n int, shift int) Policy[T] {
 
 // NewSelectNextPolicy creates a new SelectNextPolicy
 func NewSelectNextPolicy[T any]() Policy[T] {
-	return &SelectNextPolicy[T]{
-		PolicyID:       PolicyID(uuid.New()),
-		selectionReady: false,
-		next:           -1,
-	}
+	return NewCountingWindowPolicy[T](1, 1)
 }
 
 // NewTemporalWindowPolicy creates a new TemporalWindowPolicy with the specified window and buffer
@@ -209,4 +213,46 @@ func NewTemporalWindowPolicy[T any](startingTime time.Time, windowLength time.Du
 		windowLength: windowLength,
 		windowShift:  windowShift,
 	}
+}
+
+// NewPolicyFromDescription creates a new Policy from a PolicyDescription.
+func NewPolicyFromDescription[T any](desc PolicyDescription) (Policy[T], error) {
+	switch desc.Type {
+	case CountingWindow:
+		return NewCountingWindowPolicy[T](desc.Size, desc.Slide), nil
+	case SelectNext:
+		return NewSelectNextPolicy[T](), nil
+	case TemporalWindow:
+		return NewTemporalWindowPolicy[T](desc.WindowStart, desc.WindowLength, desc.WindowShift), nil
+	default:
+		return nil, fmt.Errorf("unknown policy type: '%s'", desc.Type)
+	}
+}
+
+// PolicyDescriptionFromJSON parses a PolicyDescription from a JSON byte slice.
+func PolicyDescriptionFromJSON(b []byte) (PolicyDescription, error) {
+	var d PolicyDescription
+	if err := json.Unmarshal(b, &d); err != nil {
+		return PolicyDescription{}, err
+	}
+	return d, nil
+}
+
+// ToJSON converts a PolicyDescription to its JSON representation.
+func (d PolicyDescription) ToJSON() ([]byte, error) {
+	return json.Marshal(d)
+}
+
+// PolicyDescriptionFromYML parses a PolicyDescription from a YAML byte slice.
+func PolicyDescriptionFromYML(b []byte) (PolicyDescription, error) {
+	var d PolicyDescription
+	if err := yaml.Unmarshal(b, &d); err != nil {
+		return PolicyDescription{}, err
+	}
+	return d, nil
+}
+
+// ToYML converts a PolicyDescription to its YAML representation.
+func (d PolicyDescription) ToYML() ([]byte, error) {
+	return yaml.Marshal(d)
 }

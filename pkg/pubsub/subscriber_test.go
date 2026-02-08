@@ -1,10 +1,13 @@
 package pubsub
 
 import (
+	"sync"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 var _ = Describe("Subscriber", func() {
@@ -40,18 +43,14 @@ var _ = Describe("Subscriber", func() {
 			Expect(rec.ID()).NotTo(BeNil())
 		})
 
-		It("should return the notify channel", func() {
-			Expect(rec.Notify()).To(Equal(rec.notify))
-		})
-
 		It("should consume events", func() {
 			event := events.NewEvent("test-event")
 			go func() {
 				rec.doNotify(event)
 			}()
 
-			received, err := rec.Consume()
-			Expect(err).To(BeNil())
+			received, more := rec.Next()
+			Expect(more).To(BeTrue())
 			Expect(received).To(Equal(event))
 		})
 
@@ -73,7 +72,9 @@ var _ = Describe("Subscriber", func() {
 			streamID = MakeStreamID[string]("test-topic-buffered")
 			ch = make(events.EventChannel[string])
 			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic", WithAsyncReceiver(true)), ch, newStreamMetrics())
-			rec = nMap.newStreamReceiver(streamID)
+			var err error
+			rec, err = nMap.newSubscriber(streamID)
+			Expect(err).To(BeNil())
 		})
 
 		AfterEach(func() {
@@ -92,22 +93,61 @@ var _ = Describe("Subscriber", func() {
 			event := events.NewEvent("test-buffered")
 			rec.doNotify(event)
 
-			received, err := rec.Consume()
-			Expect(err).To(BeNil())
+			received, more := rec.Next()
+			Expect(more).To(BeTrue())
 			Expect(received).To(Equal(event))
-		})
-
-		It("should return the notify channel", func() {
-			ch := rec.Notify()
-			Expect(ch).NotTo(BeNil())
 		})
 
 		It("should close resources", func() {
 			rec.close()
-			Eventually(func() error {
-				_, err := rec.Consume()
-				return err
-			}).Should(HaveOccurred())
+			Eventually(func() bool {
+				_, more := rec.Next()
+				return more
+			}).Should(BeFalse())
+		})
+	})
+
+	Describe("bufferedSubscriber with limit", func() {
+		var (
+			rec      Subscriber[string]
+			streamID StreamID
+			nMap     *notificationMap[string]
+			ch       events.EventChannel[string]
+		)
+
+		BeforeEach(func() {
+			streamID = MakeStreamID[string]("test-topic-buffered-limit")
+			ch = make(events.EventChannel[string])
+			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic", WithAsyncReceiver(true), WithBufferCapacity(1)), ch, newStreamMetrics())
+			var err error
+			rec, err = nMap.newSubscriber(streamID)
+			Expect(err).To(BeNil())
+		})
+
+		AfterEach(func() {
+			_ = nMap.close()
+		})
+
+		It("should apply backpressure when limit is reached", func() {
+			event1 := events.NewEvent("e1")
+			event3 := events.NewEvent("e3")
+
+			rec.doNotify(event1) // Moves to notify channel (blocked there)
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				rec.doNotify(event3) // Should block
+				close(done)
+			}()
+
+			Consistently(done).ShouldNot(BeClosed())
+
+			v, more := rec.Next()
+			Expect(more).To(BeTrue())
+			Expect(v).To(Equal(event1))
+
+			Eventually(done).Should(BeClosed())
 		})
 	})
 
@@ -130,40 +170,58 @@ var _ = Describe("Subscriber", func() {
 		})
 
 		It("should create new receivers", func() {
-			rec := nMap.newStreamReceiver(sID)
+			rec, err := nMap.newSubscriber(sID)
+			Expect(err).To(BeNil())
 			Expect(rec).NotTo(BeNil())
 			Expect(nMap.len()).To(Equal(1))
 		})
 
 		It("should notify all receivers", func() {
-			rec1 := nMap.newStreamReceiver(sID)
-			rec2 := nMap.newStreamReceiver(sID)
+			rec1, _ := nMap.newSubscriber(sID)
+			rec2, _ := nMap.newSubscriber(sID)
 
 			event := events.NewEvent("broadcast")
 			go func() { ch <- event }()
 
-			e1, err1 := rec1.Consume()
-			e2, err2 := rec2.Consume()
+			var (
+				e1, e2       events.Event[string]
+				more1, more2 bool
+				wg           sync.WaitGroup
+			)
 
-			Expect(err1).To(BeNil())
-			Expect(err2).To(BeNil())
+			wg.Go(func() {
+				e1, more1 = rec1.Next()
+			})
+			wg.Go(func() {
+				e2, more2 = rec2.Next()
+			})
+			wg.Wait()
+
+			Expect(more1).To(BeTrue())
+			Expect(more2).To(BeTrue())
 			Expect(e1).To(Equal(event))
 			Expect(e2).To(Equal(event))
 		})
 
 		It("should remove receivers", func() {
-			rec := nMap.newStreamReceiver(sID)
+			rec, err := nMap.newSubscriber(sID)
+			Expect(err).To(BeNil())
 			Expect(nMap.len()).To(Equal(1))
 			nMap.remove(rec.ID())
 			Expect(nMap.len()).To(Equal(0))
 		})
 
 		It("should clear all receivers", func() {
-			nMap.newStreamReceiver(sID)
-			nMap.newStreamReceiver(sID)
+			nMap.newSubscriber(sID)
+			nMap.newSubscriber(sID)
 			Expect(nMap.len()).To(Equal(2))
 			_ = nMap.close()
 			Expect(nMap.len()).To(Equal(0))
+		})
+
+		It("should return error when policy is set for single subscriber", func() {
+			_, err := nMap.newSubscriber(sID, WithSelectionPolicy(selection.NewSelectNextPolicy[string]()))
+			Expect(err).To(Equal(SubscriberPolicyError))
 		})
 	})
 })

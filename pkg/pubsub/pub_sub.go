@@ -19,6 +19,7 @@ var (
 	StreamNotFoundError     = errors.New("pub sub: no stream found")
 	StreamIDNilError        = errors.New("pub sub: stream id nil")
 	StreamRecNilError       = errors.New("pub sub: stream receiver nil")
+	SubscriberPolicyError   = errors.New("pub sub: single subscriber cannot have a selection policy")
 )
 
 // GetOrAddStream adds one streams to the pub sub system or returns an existing one.
@@ -32,11 +33,7 @@ func GetOrAddStream[T any](streamDescription StreamDescription) (StreamID, error
 
 // AddOrReplaceStreamFromDescription uses a description of a stream to add it or replace it to the pub sub system
 func AddOrReplaceStreamFromDescription[T any](description StreamDescription) (StreamID, error) {
-	streamIdxAccessMutex.Lock()
-	defer streamIdxAccessMutex.Unlock()
-
 	stream := newStreamFromDescription[T](description)
-
 	return doAddOrReplaceStream(stream)
 }
 
@@ -66,55 +63,75 @@ func TryRemoveStreams(streamIDs ...StreamID) {
 }
 
 // SubscribeByTopic to get a stream for this topic with type T
-func SubscribeByTopic[T any](topic string) (Subscriber[T], error) {
-	return SubscribeByTopicID[T](MakeStreamID[T](topic))
+func SubscribeByTopic[T any](topic string, opts ...SubscriptionOption[T]) (Subscriber[T], error) {
+	return SubscribeByTopicID[T](MakeStreamID[T](topic), opts...)
+}
+
+// SubscribeBatchByTopic to get a stream for this topic with type T returning a batch subscriber
+func SubscribeBatchByTopic[T any](topic string, opts ...SubscriptionOption[T]) (BatchSubscriber[T], error) {
+	return SubscribeBatchByTopicID[T](MakeStreamID[T](topic), opts...)
 }
 
 // SubscribeByTopicID to a stream by the stream's id
-func SubscribeByTopicID[T any](id StreamID) (Subscriber[T], error) {
-	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
+func SubscribeByTopicID[T any](id StreamID, opts ...SubscriptionOption[T]) (Subscriber[T], error) {
+	if stream, err := getOrAddStreamByID[T](id); err == nil {
+		return stream.subscribe(opts...)
+	} else {
+		return nil, err
+	}
+}
 
-	if stream, err := getAndConvertStreamByID[T](id); err == nil {
-		return stream.subscribe()
+// SubscribeBatchByTopicID to a stream by the stream's id returning a batch subscriber
+func SubscribeBatchByTopicID[T any](id StreamID, opts ...SubscriptionOption[T]) (BatchSubscriber[T], error) {
+	if stream, err := getOrAddStreamByID[T](id); err == nil {
+		return stream.subscribeBatch(opts...)
 	} else {
 		return nil, err
 	}
 }
 
 // Unsubscribe removes a subscriber from a stream.
-func Unsubscribe[T any](rec Subscriber[T]) error {
+func Unsubscribe[T any](rec AnySubscriber[T]) error {
+	var (
+		autoCleanup = false
+		id          StreamID
+	)
+
 	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
+	defer func() {
+		streamIdxAccessMutex.RUnlock()
+		if autoCleanup {
+			TryRemoveStreams(id)
+		}
+	}()
 
 	if rec == nil {
 		return StreamRecNilError
 	}
 
-	if s, err := getAndConvertStreamByID[T](rec.StreamID()); err == nil {
-		s.unsubscribe(rec.ID())
-		return nil
-	} else {
+	s, err := getAndConvertStreamByID[T](rec.StreamID())
+	if err != nil {
 		return err
 	}
+
+	s.unsubscribe(rec.ID())
+	autoCleanup = s.Description().AutoCleanup
+	id = s.ID()
+
+	return nil
 }
 
 // InstantPublishByTopic routes the event to the given topic, iff the stream exists.
 // Note, this is only a helper function and for consistent streaming register a publisher; see RegisterPublisher.
-func InstantPublishByTopic[T any](topic string, event events.Event[T]) (err error) {
+func InstantPublishByTopic[T any](topic string, event events.Event[T]) error {
 
-	publisher, err := RegisterPublisher[T](MakeStreamID[T](topic))
-	defer func(publisher Publisher[T]) {
-		if publisher != nil {
-			err = UnRegisterPublisher[T](publisher)
-		}
-	}(publisher)
-
-	if err == nil {
-		publisher.Publish(event)
+	publisher, err := RegisterPublisherByTopic[T](topic)
+	if err != nil {
+		return err
 	}
 
-	return err
+	publisher.Publish(event)
+	return UnRegisterPublisher(publisher)
 }
 
 // RegisterPublisherByTopic creates and registers a new publisher for the stream identified by the given topic.
@@ -124,10 +141,7 @@ func RegisterPublisherByTopic[T any](topic string) (Publisher[T], error) {
 
 // RegisterPublisher creates and registers a new publisher for the stream identified by the given ID.
 func RegisterPublisher[T any](id StreamID) (Publisher[T], error) {
-	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
-
-	if s, err := getAndConvertStreamByID[T](id); err == nil {
+	if s, err := getOrAddStreamByID[T](id); err == nil {
 		return s.newPublisher()
 	} else {
 		return nil, err
@@ -136,19 +150,33 @@ func RegisterPublisher[T any](id StreamID) (Publisher[T], error) {
 
 // UnRegisterPublisher removes a publisher from its associated stream.
 func UnRegisterPublisher[T any](publisher Publisher[T]) error {
+	var (
+		autoCleanup = false
+		id          StreamID
+	)
+
 	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
+	defer func() {
+		streamIdxAccessMutex.RUnlock()
+		if autoCleanup {
+			TryRemoveStreams(id)
+		}
+	}()
 
 	if publisher == nil {
 		return nil
 	}
 
-	if s, err := getAndConvertStreamByID[T](publisher.StreamID()); err == nil {
-		s.removePublisher(publisher.ID())
-		return nil
-	} else {
+	s, err := getAndConvertStreamByID[T](publisher.StreamID())
+	if err != nil {
 		return err
 	}
+
+	s.removePublisher(publisher.ID())
+	id = s.ID()
+	autoCleanup = s.Description().AutoCleanup
+
+	return nil
 }
 
 // GetDescription retrieves the description of a stream identified by the given ID.
@@ -196,12 +224,21 @@ func doAddOrReplaceStream(newStream stream) (StreamID, error) {
 		return NilStreamID(), err
 	}
 
-	if existingStream, ok := streamIdx[newStream.ID()]; ok {
+	existingStream := func() stream {
+		streamIdxAccessMutex.Lock()
+		defer streamIdxAccessMutex.Unlock()
+
+		old, _ := streamIdx[newStream.ID()]
+		streamIdx[newStream.ID()] = newStream
+		return old
+	}()
+
+	if existingStream != nil {
 		newStream.copyFrom(existingStream)
-		doTryRemoveStreams(existingStream.ID())
+		existingStream.tryClose()
 	}
 
-	addAndStartStream(newStream)
+	newStream.run()
 
 	return newStream.ID(), nil
 }
@@ -228,12 +265,40 @@ func validateStream(newStream stream) error {
 	return nil
 }
 
+func getOrAddStreamByID[T any](id StreamID) (typedStream[T], error) {
+	s, err := syncGetAndConvertStreamByID[T](id)
+	if err == nil {
+		return s, nil
+	}
+	if !errors.Is(err, StreamNotFoundError) {
+		return nil, err
+	}
+
+	streamIdxAccessMutex.Lock()
+	defer streamIdxAccessMutex.Unlock()
+
+	if s, err := getAndConvertStreamByID[T](id); err == nil {
+		return s, nil
+	}
+
+	desc := MakeStreamDescriptionFromID(id, WithAutoCleanup(true))
+	newS := newStreamFromDescription[T](desc)
+	addAndStartStream(newS)
+
+	return newS, nil
+}
+
+func syncGetAndConvertStreamByID[T any](id StreamID) (typedStream[T], error) {
+	streamIdxAccessMutex.RLock()
+	defer streamIdxAccessMutex.RUnlock()
+	return getAndConvertStreamByID[T](id)
+}
+
 func getAndConvertStreamByID[T any](id StreamID) (typedStream[T], error) {
 
 	if stream, ok := streamIdx[id]; ok {
 		switch stream := stream.(type) {
 		case typedStream[T]:
-
 			return stream, nil
 		default:
 			return nil, StreamTypeMismatchError

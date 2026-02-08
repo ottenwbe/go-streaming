@@ -41,7 +41,7 @@ func receiveProcessedEvents(res *query.TypedContinuousQuery[int]) {
 	go func() {
 		for {
 			// wait until the next event notification arrives
-			e, _ := res.Notify()
+			e, _ := res.Next()
 			zap.S().Infof("event received %v", e)
 		}
 	}()

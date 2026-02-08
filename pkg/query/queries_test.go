@@ -43,9 +43,9 @@ var _ = Describe("Add Operator1", func() {
 			publisherA.Publish(event)
 			publisherB.Publish(event2)
 
-			result, _ := qs.Notify()
+			result, _ := qs.Next()
 
-			r := result.GetContent()
+			r := result[0].GetContent()
 
 			Expect(r).To(Equal(11))
 		})
@@ -66,9 +66,9 @@ var _ = Describe("Convert Operator1", func() {
 			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
 
 			publisher.Publish(event)
-			result, _ := qs.Notify()
+			result, _ := qs.Next()
 
-			r := result.GetContent()
+			r := result[0].GetContent()
 
 			Expect(r).To(Equal(float32(8.0)))
 		})
@@ -97,11 +97,11 @@ var _ = Describe("Sum Operator1", func() {
 			publisher.Publish(event2)
 			publisher.Publish(event3)
 
-			result1, _ := qs.Notify()
-			result2, _ := qs.Notify()
+			result1, _ := qs.Next()
+			result2, _ := qs.Next()
 
-			r1 := result1.GetContent()
-			r2 := result2.GetContent()
+			r1 := result1[0].GetContent()
+			r2 := result2[0].GetContent()
 
 			Expect(r1).To(Equal(20))
 			Expect(r2).To(Equal(30))
@@ -129,11 +129,11 @@ var _ = Describe("Count Operator1", func() {
 			publisher.Publish(event2)
 			publisher.Publish(event3)
 
-			result1, _ := qs.Notify()
-			result2, _ := qs.Notify()
+			result1, _ := qs.Next()
+			result2, _ := qs.Next()
 
-			r1 := result1.GetContent()
-			r2 := result2.GetContent()
+			r1 := result1[0].GetContent()
+			r2 := result2[0].GetContent()
 
 			Expect(r1).To(Equal(2))
 			Expect(r2).To(Equal(2))
@@ -162,11 +162,11 @@ var _ = Describe("Smaller OperatorControl", func() {
 			publisher.Publish(event2)
 			publisher.Publish(event3)
 
-			result1, _ := qs.Notify()
-			result2, _ := qs.Notify()
+			result1, _ := qs.Next()
+			result2, _ := qs.Next()
 
-			r1 := result1.GetContent()
-			r2 := result2.GetContent()
+			r1 := result1[0].GetContent()
+			r2 := result2[0].GetContent()
 
 			Expect(r1).To(Equal(9))
 			Expect(r2).To(Equal(10))
@@ -193,11 +193,11 @@ var _ = Describe("Greater OperatorControl", func() {
 			publisher.Publish(event2)
 			publisher.Publish(event3)
 
-			result1, _ := qs.Notify()
-			result2, _ := qs.Notify()
+			result1, _ := qs.Next()
+			result2, _ := qs.Next()
 
-			r1 := result1.GetContent()
-			r2 := result2.GetContent()
+			r1 := result1[0].GetContent()
+			r2 := result2[0].GetContent()
 
 			Expect(r1).To(Equal(15))
 			Expect(r2).To(Equal(35))

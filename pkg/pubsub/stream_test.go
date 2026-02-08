@@ -62,7 +62,8 @@ var _ = Describe("Stream", func() {
 				receiver, _ := pubsub.SubscribeByTopicID[string](streamID)
 
 				go func() {
-					eventResult = <-receiver.Notify()
+					res, _ := receiver.Next()
+					eventResult = res
 					done <- true
 				}()
 
@@ -117,13 +118,14 @@ var _ = Describe("Stream", func() {
 				Expect(err).To(BeNil()) // stream should still exist
 			})
 
-			It("should no longer be subscribable after closing the stream", func() {
+			It("should be subscribable (auto-create) after closing the stream", func() {
 				// close stream (it has no subscribers/publishers yet)
 				pubsub.TryRemoveStreams(streamID)
 
 				result, err := pubsub.SubscribeByTopicID[string](streamID)
-				Expect(result).To(BeNil())
-				Expect(err).To(Equal(pubsub.StreamNotFoundError))
+				Expect(result).NotTo(BeNil())
+				Expect(err).To(BeNil())
+				pubsub.Unsubscribe(result)
 			})
 		})
 
@@ -150,7 +152,7 @@ var _ = Describe("Stream", func() {
 
 				wg.Go(func() {
 					for range numE {
-						_ = <-s.Notify()
+						_, _ = s.Next()
 					}
 				})
 
@@ -183,9 +185,12 @@ var _ = Describe("Stream", func() {
 				publisher.Publish(event3)
 
 				go func() {
-					eventResult[0] = <-receiver.Notify()
-					eventResult[1] = <-receiver.Notify()
-					eventResult[2] = <-receiver.Notify()
+					r1, _ := receiver.Next()
+					eventResult[0] = r1
+					r2, _ := receiver.Next()
+					eventResult[1] = r2
+					r3, _ := receiver.Next()
+					eventResult[2] = r3
 					done <- true
 				}()
 
@@ -239,7 +244,7 @@ var _ = Describe("Stream", func() {
 			wg.Go(func() {
 				defer GinkgoRecover()
 				for range maxRange {
-					<-sub.Notify()
+					sub.Next()
 				}
 			})
 
@@ -254,9 +259,9 @@ var _ = Describe("Stream", func() {
 
 			metrics, err := pubsub.Metrics(streamID)
 			Expect(err).To(BeNil())
-			Eventually(metrics.NumEventsIn()).Should(Equal(maxRange))
-			Eventually(func() uint64 { return metrics.NumEventsOut() }).Should(Equal(maxRange))
-			Eventually(metrics.NumInEventsEqualsNumOutEvents()).Should(BeTrue())
+			Eventually(metrics.NumEventsIn).Should(Equal(maxRange))
+			Eventually(metrics.NumEventsOut).Should(Equal(maxRange))
+			Eventually(metrics.NumInEventsEqualsNumOutEvents).Should(BeTrue())
 
 		})
 	})

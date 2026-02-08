@@ -196,7 +196,7 @@ func (o *OperatorStreamSubscription[T]) Run() {
 
 	go func() {
 		for {
-			event, more := <-o.streamReceiver.Notify()
+			event, more := o.streamReceiver.Next()
 			if more {
 				o.inputBuffer.AddEvent(event)
 			} else {

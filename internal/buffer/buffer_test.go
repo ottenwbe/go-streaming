@@ -1,6 +1,8 @@
 package buffer_test
 
 import (
+	"sync"
+
 	"github.com/ottenwbe/go-streaming/internal/buffer"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/selection"
@@ -32,13 +34,24 @@ var _ = Describe("Buffer", func() {
 		})
 
 		Context("Buffer with max length 1", func() {
-			It("should throw an error when a second event is added", func() {
+			It("should block when a second event is added", func() {
+				err := buf.AddEvent(e1)
+				Expect(err).To(BeNil())
 
-				err1 := buf.AddEvent(e1)
-				err2 := buf.AddEvent(e2)
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					err := buf.AddEvent(e2)
+					Expect(err).To(BeNil())
+					close(done)
+				}()
 
-				Expect(err1).To(BeNil())
-				Expect(err2).To(Not(BeNil()))
+				Consistently(done).ShouldNot(BeClosed())
+
+				buf.GetAndConsumeNextEvents()
+
+				Eventually(done).Should(BeClosed())
+				Expect(buf.Len()).To(Equal(1))
 			})
 			It("should throw an error when more than two events are added", func() {
 
@@ -161,64 +174,53 @@ var _ = Describe("Buffer", func() {
 		})
 		Context("AsyncStream PeekNext", func() {
 			It("wait for events if not available in buffer", func() {
-
-				bChan := make(chan bool)
-
 				buf.AddEvent(e1)
 				r1 := buf.GetAndConsumeNextEvents()
+				Expect(r1[0]).To(Equal(e1))
 
-				var r2 events.Event[string]
+				done := make(chan events.Event[string])
 				go func() {
 					defer GinkgoRecover()
-					r2 = buf.PeekNextEvent()
-					bChan <- true
+					done <- buf.PeekNextEvent()
 				}()
-				buf.AddEvent(e2)
-				<-bChan
 
-				Expect(r1[0]).To(Equal(e1))
-				Expect(r2).To(Equal(e2))
+				Consistently(done).ShouldNot(Receive())
+				buf.AddEvent(e2)
+				Eventually(done).Should(Receive(Equal(e2)))
 				Expect(buf.Len()).To(Equal(1))
 			})
 		})
-		Context("Flush", func() {
-			It("ensures that PeekNextEvent buffers does not get stuck", func() {
-
-				var testing = true
-
+		Context("StopBlocking with PeekNext", func() {
+			It("ensures that PeekNextEvent unblocks when stopped", func() {
+				done := make(chan events.Event[string])
 				go func() {
 					defer GinkgoRecover()
-					for testing == true {
-						buf.StopBlocking()
-					}
+					done <- buf.PeekNextEvent()
 				}()
 
-				rEvent := buf.PeekNextEvent()
-				testing = false
-
-				Expect(rEvent).To(BeNil())
+				Consistently(done).ShouldNot(Receive())
+				buf.StopBlocking()
+				Eventually(done).Should(Receive(BeNil()))
 			})
 		})
 		Context("GetAndRemove", func() {
 			It("can be executed multiple times in a row in succession", func() {
-
-				bChan := make(chan bool)
-				r := make([]events.Event[string], 0)
-
+				done := make(chan []events.Event[string])
 				go func() {
 					defer GinkgoRecover()
+					var r []events.Event[string]
 					for i := 0; i < 3; i++ {
 						r = append(r, buf.GetAndConsumeNextEvents()...)
 					}
-					bChan <- true
+					done <- r
 				}()
+
+				Consistently(done).ShouldNot(Receive())
 				buf.AddEvent(e1)
 				buf.AddEvent(e2)
 				buf.AddEvent(e3)
-				<-bChan
 
-				Expect(r[0]).To(Equal(e1))
-				Expect(r[1]).To(Equal(e2))
+				Eventually(done).Should(Receive(Equal([]events.Event[string]{e1, e2, e3})))
 				Expect(buf.Len()).To(Equal(0))
 			})
 		})
@@ -228,25 +230,21 @@ var _ = Describe("Buffer", func() {
 				const numRoutines = 10
 				const numEvents = 100
 
+				var wg sync.WaitGroup
 				start := make(chan struct{})
-				done := make(chan struct{})
 
 				for i := 0; i < numRoutines; i++ {
-					go func() {
+					wg.Go(func() {
 						defer GinkgoRecover()
 						<-start
 						for j := 0; j < numEvents; j++ {
 							buf.AddEvent(events.NewEvent("data"))
 						}
-						done <- struct{}{}
-					}()
+					})
 				}
 
 				close(start)
-				for i := 0; i < numRoutines; i++ {
-					<-done
-				}
-
+				wg.Wait()
 				Expect(buf.Len()).To(Equal(numRoutines * numEvents))
 			})
 		})
