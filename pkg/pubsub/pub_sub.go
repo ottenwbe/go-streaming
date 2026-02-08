@@ -251,10 +251,7 @@ func validateStream(newStream stream) error {
 }
 
 func getOrAddStreamByID[T any](id StreamID) (typedStream[T], error) {
-	streamIdxAccessMutex.RLock()
-	s, err := getAndConvertStreamByID[T](id)
-	streamIdxAccessMutex.RUnlock()
-
+	s, err := syncGetAndConvertStreamByID[T](id)
 	if err == nil {
 		return s, nil
 	}
@@ -274,6 +271,12 @@ func getOrAddStreamByID[T any](id StreamID) (typedStream[T], error) {
 	addAndStartStream(newS)
 
 	return newS, nil
+}
+
+func syncGetAndConvertStreamByID[T any](id StreamID) (typedStream[T], error) {
+	streamIdxAccessMutex.RLock()
+	defer streamIdxAccessMutex.RUnlock()
+	return getAndConvertStreamByID[T](id)
 }
 
 func getAndConvertStreamByID[T any](id StreamID) (typedStream[T], error) {
