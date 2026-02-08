@@ -68,7 +68,7 @@ func startSubscriber(name string, streamID pubsub.StreamID, wg *sync.WaitGroup, 
 		for range maxEvents {
 			e, more := subscriber.Next()
 			if !more {
-				zap.S().Errorf("error consuming: %v", name)
+				zap.S().Errorf("error consuming: %s", name)
 				return
 			}
 			zap.S().Infof("Event received by %s: %v", name, e)

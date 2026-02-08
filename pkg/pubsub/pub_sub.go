@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 var (
@@ -20,21 +19,8 @@ var (
 	StreamNotFoundError     = errors.New("pub sub: no stream found")
 	StreamIDNilError        = errors.New("pub sub: stream id nil")
 	StreamRecNilError       = errors.New("pub sub: stream receiver nil")
+	SubscriberPolicyError   = errors.New("pub sub: single subscriber cannot have a selection policy")
 )
-
-// SubscriptionOption allows to configure the subscription
-type SubscriptionOption[T any] func(*subscriptionOptions[T])
-
-type subscriptionOptions[T any] struct {
-	policy selection.Policy[T]
-}
-
-// WithSelectionPolicy allows to provide a selection policy for the subscriber
-func WithSelectionPolicy[T any](p selection.Policy[T]) SubscriptionOption[T] {
-	return func(o *subscriptionOptions[T]) {
-		o.policy = p
-	}
-}
 
 // GetOrAddStream adds one streams to the pub sub system or returns an existing one.
 func GetOrAddStream[T any](streamDescription StreamDescription) (StreamID, error) {
@@ -81,6 +67,11 @@ func SubscribeByTopic[T any](topic string, opts ...SubscriptionOption[T]) (Subsc
 	return SubscribeByTopicID[T](MakeStreamID[T](topic), opts...)
 }
 
+// SubscribeBatchByTopic to get a stream for this topic with type T returning a batch subscriber
+func SubscribeBatchByTopic[T any](topic string, opts ...SubscriptionOption[T]) (BatchSubscriber[T], error) {
+	return SubscribeBatchByTopicID[T](MakeStreamID[T](topic), opts...)
+}
+
 // SubscribeByTopicID to a stream by the stream's id
 func SubscribeByTopicID[T any](id StreamID, opts ...SubscriptionOption[T]) (Subscriber[T], error) {
 	if stream, err := getOrAddStreamByID[T](id); err == nil {
@@ -90,8 +81,17 @@ func SubscribeByTopicID[T any](id StreamID, opts ...SubscriptionOption[T]) (Subs
 	}
 }
 
+// SubscribeBatchByTopicID to a stream by the stream's id returning a batch subscriber
+func SubscribeBatchByTopicID[T any](id StreamID, opts ...SubscriptionOption[T]) (BatchSubscriber[T], error) {
+	if stream, err := getOrAddStreamByID[T](id); err == nil {
+		return stream.subscribeBatch(opts...)
+	} else {
+		return nil, err
+	}
+}
+
 // Unsubscribe removes a subscriber from a stream.
-func Unsubscribe[T any](rec Subscriber[T]) error {
+func Unsubscribe[T any](rec AnySubscriber[T]) error {
 	var (
 		autoCleanup = false
 		id          StreamID

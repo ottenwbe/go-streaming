@@ -5,6 +5,7 @@ import (
 
 	"github.com/ottenwbe/go-streaming/internal/buffer"
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 
 	"github.com/google/uuid"
 )
@@ -17,15 +18,42 @@ func (i SubscriberID) String() string {
 	return uuid.UUID(i).String()
 }
 
-// Subscriber allows subscribers to get notified about events published in the streams
-type Subscriber[T any] interface {
+// SubscriptionOption allows to configure the subscription
+type SubscriptionOption[T any] func(*subscriptionOptions[T])
+
+type subscriptionOptions[T any] struct {
+	policy selection.Policy[T]
+}
+
+// WithSelectionPolicy allows to provide a selection policy for the subscriber
+func WithSelectionPolicy[T any](p selection.Policy[T]) SubscriptionOption[T] {
+	return func(o *subscriptionOptions[T]) {
+		o.policy = p
+	}
+}
+
+// AnySubscriber is the common interface for internal management
+type AnySubscriber[T any] interface {
 	StreamID() StreamID
 	ID() SubscriberID
 	doNotify(e events.Event[T])
+	close()
+}
+
+// Subscriber allows subscribers to get notified about events published in the streams
+type Subscriber[T any] interface {
+	AnySubscriber[T]
+	// Next can be called to wait for and receive the next event.
+	// Errors occur when the underlying event channel is closed and no more events can be received.
+	Next() (events.Event[T], bool)
+}
+
+// BatchSubscriber allows subscribers to get notified about batches of events (e.g. windows)
+type BatchSubscriber[T any] interface {
+	AnySubscriber[T]
 	// Next can be called to wait for and receive the next batch of events.
 	// Errors occur when the underlying event channel is closed and no more events can be received.
 	Next() ([]events.Event[T], bool)
-	close()
 }
 
 type defaultSubscriber[T any] struct {
@@ -34,7 +62,14 @@ type defaultSubscriber[T any] struct {
 	notify   events.EventChannel[T]
 }
 
-type bufferedSubscriber[T any] struct {
+type bufferedSingleSubscriber[T any] struct {
+	streamID StreamID
+	iD       SubscriberID
+	buffer   buffer.Buffer[T]
+	active   bool
+}
+
+type bufferedBatchSubscriber[T any] struct {
 	streamID StreamID
 	iD       SubscriberID
 	buffer   buffer.Buffer[T]
@@ -50,8 +85,18 @@ func newDefaultSubscriber[T any](streamID StreamID) Subscriber[T] {
 	return rec
 }
 
-func newBufferedSubscriber[T any](streamID StreamID, buf buffer.Buffer[T]) Subscriber[T] {
-	rec := &bufferedSubscriber[T]{
+func newBufferedSingleSubscriber[T any](streamID StreamID, buf buffer.Buffer[T]) Subscriber[T] {
+	rec := &bufferedSingleSubscriber[T]{
+		streamID: streamID,
+		iD:       SubscriberID(uuid.New()),
+		buffer:   buf,
+		active:   true,
+	}
+	return rec
+}
+
+func newBufferedBatchSubscriber[T any](streamID StreamID, buf buffer.Buffer[T]) BatchSubscriber[T] {
+	rec := &bufferedBatchSubscriber[T]{
 		streamID: streamID,
 		iD:       SubscriberID(uuid.New()),
 		buffer:   buf,
@@ -78,40 +123,61 @@ func (r *defaultSubscriber[T]) ID() SubscriberID {
 	return r.iD
 }
 
-func (r *defaultSubscriber[T]) Next() ([]events.Event[T], bool) {
+func (r *defaultSubscriber[T]) Next() (events.Event[T], bool) {
 	var (
 		e    events.Event[T]
 		more bool
 	)
 	e, more = <-r.notify
-	return []events.Event[T]{e}, more
+	return e, more
 }
 
-func (r *bufferedSubscriber[T]) doNotify(event events.Event[T]) {
+func (r *bufferedSingleSubscriber[T]) doNotify(event events.Event[T]) {
 	r.buffer.AddEvent(event)
 }
 
-func (r *bufferedSubscriber[T]) close() {
+func (r *bufferedSingleSubscriber[T]) close() {
 	r.active = false
 	r.buffer.StopBlocking()
 }
 
-func (r *bufferedSubscriber[T]) StreamID() StreamID {
+func (r *bufferedSingleSubscriber[T]) StreamID() StreamID {
 	return r.streamID
 }
 
-func (r *bufferedSubscriber[T]) ID() SubscriberID {
+func (r *bufferedSingleSubscriber[T]) ID() SubscriberID {
 	return r.iD
 }
 
-func (r *bufferedSubscriber[T]) Next() ([]events.Event[T], bool) {
+func (r *bufferedSingleSubscriber[T]) Next() (events.Event[T], bool) {
+	return r.buffer.GetAndRemoveNextEvent(), r.active
+}
+
+func (r *bufferedBatchSubscriber[T]) doNotify(event events.Event[T]) {
+	r.buffer.AddEvent(event)
+}
+
+func (r *bufferedBatchSubscriber[T]) close() {
+	r.active = false
+	r.buffer.StopBlocking()
+}
+
+func (r *bufferedBatchSubscriber[T]) StreamID() StreamID {
+	return r.streamID
+}
+
+func (r *bufferedBatchSubscriber[T]) ID() SubscriberID {
+	return r.iD
+}
+
+func (r *bufferedBatchSubscriber[T]) Next() ([]events.Event[T], bool) {
 	return r.buffer.GetAndConsumeNextEvents(), r.active
 }
 
 type notificationMap[T any] struct {
 	description StreamDescription
 	channel     events.EventChannel[T]
-	receiver    map[SubscriberID]Subscriber[T]
+	receiver    map[SubscriberID]AnySubscriber[T]
 	active      bool
 	metrics     *StreamMetrics
 	mutex       sync.RWMutex
@@ -121,14 +187,14 @@ func newNotificationMap[T any](description StreamDescription, inChannel events.E
 	m := &notificationMap[T]{
 		description: description,
 		channel:     inChannel,
-		receiver:    make(map[SubscriberID]Subscriber[T]),
+		receiver:    make(map[SubscriberID]AnySubscriber[T]),
 		active:      false,
 		metrics:     metrics,
 	}
 	return m
 }
 
-func (m *notificationMap[T]) newSubscriber(streamID StreamID, opts ...SubscriptionOption[T]) Subscriber[T] {
+func (m *notificationMap[T]) newSubscriber(streamID StreamID, opts ...SubscriptionOption[T]) (Subscriber[T], error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -137,25 +203,55 @@ func (m *notificationMap[T]) newSubscriber(streamID StreamID, opts ...Subscripti
 		opt(options)
 	}
 
-	var rec Subscriber[T]
 	if options.policy != nil {
-		buf := buffer.NewConsumableAsyncBuffer[T](options.policy)
-		rec = newBufferedSubscriber[T](streamID, buf)
-	} else if m.description.AsyncReceiver {
+		return nil, SubscriberPolicyError
+	}
+
+	var rec Subscriber[T]
+	if m.description.AsyncReceiver {
 		var buf buffer.Buffer[T]
 		if m.description.BufferCapacity > 0 {
 			buf = buffer.NewLimitedSimpleAsyncBuffer[T](m.description.BufferCapacity)
 		} else {
 			buf = buffer.NewSimpleAsyncBuffer[T]()
 		}
-		rec = newBufferedSubscriber[T](streamID, buf)
+		rec = newBufferedSingleSubscriber[T](streamID, buf)
 	} else {
 		rec = newDefaultSubscriber[T](streamID)
 	}
 
 	m.receiver[rec.ID()] = rec
 
-	return rec
+	return rec, nil
+}
+
+func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, opts ...SubscriptionOption[T]) (BatchSubscriber[T], error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	options := &subscriptionOptions[T]{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	var rec BatchSubscriber[T]
+	if options.policy != nil {
+		buf := buffer.NewConsumableAsyncBuffer[T](options.policy)
+		rec = newBufferedBatchSubscriber[T](streamID, buf)
+	} else {
+		// Default batch subscriber (no policy, just buffering)
+		var buf buffer.Buffer[T]
+		if m.description.BufferCapacity > 0 {
+			buf = buffer.NewLimitedSimpleAsyncBuffer[T](m.description.BufferCapacity)
+		} else {
+			buf = buffer.NewSimpleAsyncBuffer[T]()
+		}
+		rec = newBufferedBatchSubscriber[T](streamID, buf)
+	}
+
+	m.receiver[rec.ID()] = rec
+
+	return rec, nil
 }
 
 func (m *notificationMap[T]) close() error {
@@ -195,10 +291,10 @@ func (m *notificationMap[T]) doNotify() {
 	}
 }
 
-func (m *notificationMap[T]) snapshot() []Subscriber[T] {
+func (m *notificationMap[T]) snapshot() []AnySubscriber[T] {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	copyOfSubscribers := make([]Subscriber[T], 0, len(m.receiver))
+	copyOfSubscribers := make([]AnySubscriber[T], 0, len(m.receiver))
 	for _, notifier := range m.receiver {
 		copyOfSubscribers = append(copyOfSubscribers, notifier)
 	}
@@ -221,7 +317,7 @@ func (m *notificationMap[T]) copyFrom(old *notificationMap[T]) {
 	for id, sub := range old.receiver {
 		m.receiver[id] = sub
 	}
-	old.receiver = make(map[SubscriberID]Subscriber[T])
+	old.receiver = make(map[SubscriberID]AnySubscriber[T])
 }
 
 func (m *notificationMap[T]) start() {

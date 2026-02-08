@@ -198,7 +198,7 @@ func (o *OperatorStreamSubscription[T]) Run() {
 		for {
 			event, more := o.streamReceiver.Next()
 			if more {
-				o.inputBuffer.AddEvents(event)
+				o.inputBuffer.AddEvent(event)
 			} else {
 				return
 			}

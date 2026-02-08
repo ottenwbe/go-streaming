@@ -239,7 +239,7 @@ asyncStream: true
 			}()
 			eResult, _ := rec.Next()
 
-			Expect(e1).To(Equal(eResult[0]))
+			Expect(e1).To(Equal(eResult))
 		})
 	})
 

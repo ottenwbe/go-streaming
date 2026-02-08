@@ -33,6 +33,7 @@ type typedStream[T any] interface {
 	//publish(events.Event[T]) error
 
 	subscribe(opts ...SubscriptionOption[T]) (Subscriber[T], error)
+	subscribeBatch(opts ...SubscriptionOption[T]) (BatchSubscriber[T], error)
 	unsubscribe(id SubscriberID)
 	newPublisher() (Publisher[T], error)
 	removePublisher(id PublisherID)
@@ -306,10 +307,19 @@ func (l *localAsyncStream[T]) subscribe(opts ...SubscriptionOption[T]) (Subscrib
 	defer l.notifyMutex.Unlock()
 
 	if l.active || !l.started {
-		rec := l.subscriberMap.newSubscriber(l.ID(), opts...)
-		return rec, nil
+		return l.subscriberMap.newSubscriber(l.ID(), opts...)
 	}
 
+	return nil, StreamInactiveError
+}
+
+func (l *localAsyncStream[T]) subscribeBatch(opts ...SubscriptionOption[T]) (BatchSubscriber[T], error) {
+	l.notifyMutex.Lock()
+	defer l.notifyMutex.Unlock()
+
+	if l.active || !l.started {
+		return l.subscriberMap.newBatchSubscriber(l.ID(), opts...)
+	}
 	return nil, StreamInactiveError
 }
 
@@ -350,10 +360,19 @@ func (s *localSyncStream[T]) subscribe(opts ...SubscriptionOption[T]) (Subscribe
 	defer s.notifyMutex.Unlock()
 
 	if s.active || !s.started {
-		rec := s.subscriberMap.newSubscriber(s.ID(), opts...)
-		return rec, nil
+		return s.subscriberMap.newSubscriber(s.ID(), opts...)
 	}
 
+	return nil, StreamInactiveError
+}
+
+func (s *localSyncStream[T]) subscribeBatch(opts ...SubscriptionOption[T]) (BatchSubscriber[T], error) {
+	s.notifyMutex.Lock()
+	defer s.notifyMutex.Unlock()
+
+	if s.active || !s.started {
+		return s.subscriberMap.newBatchSubscriber(s.ID(), opts...)
+	}
 	return nil, StreamInactiveError
 }
 

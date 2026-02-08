@@ -49,7 +49,7 @@ func test1() {
 		started <- true
 		// 4. Consume the event
 		event, _ := receiver.Next()
-		fmt.Printf("Received: %s\n", event[0].GetContent())
+		fmt.Printf("Received: %s\n", event.GetContent())
 		finished <- true
 	}(finished)
 

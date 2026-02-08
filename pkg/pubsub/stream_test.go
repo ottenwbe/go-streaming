@@ -63,7 +63,7 @@ var _ = Describe("Stream", func() {
 
 				go func() {
 					res, _ := receiver.Next()
-					eventResult = res[0]
+					eventResult = res
 					done <- true
 				}()
 
@@ -186,11 +186,11 @@ var _ = Describe("Stream", func() {
 
 				go func() {
 					r1, _ := receiver.Next()
-					eventResult[0] = r1[0]
+					eventResult[0] = r1
 					r2, _ := receiver.Next()
-					eventResult[1] = r2[0]
+					eventResult[1] = r2
 					r3, _ := receiver.Next()
-					eventResult[2] = r3[0]
+					eventResult[2] = r3
 					done <- true
 				}()
 
