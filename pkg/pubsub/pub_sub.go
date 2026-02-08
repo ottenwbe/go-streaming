@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 var (
@@ -20,6 +21,20 @@ var (
 	StreamIDNilError        = errors.New("pub sub: stream id nil")
 	StreamRecNilError       = errors.New("pub sub: stream receiver nil")
 )
+
+// SubscriptionOption allows to configure the subscription
+type SubscriptionOption[T any] func(*subscriptionOptions[T])
+
+type subscriptionOptions[T any] struct {
+	policy selection.Policy[T]
+}
+
+// WithSelectionPolicy allows to provide a selection policy for the subscriber
+func WithSelectionPolicy[T any](p selection.Policy[T]) SubscriptionOption[T] {
+	return func(o *subscriptionOptions[T]) {
+		o.policy = p
+	}
+}
 
 // GetOrAddStream adds one streams to the pub sub system or returns an existing one.
 func GetOrAddStream[T any](streamDescription StreamDescription) (StreamID, error) {
@@ -62,14 +77,14 @@ func TryRemoveStreams(streamIDs ...StreamID) {
 }
 
 // SubscribeByTopic to get a stream for this topic with type T
-func SubscribeByTopic[T any](topic string) (Subscriber[T], error) {
-	return SubscribeByTopicID[T](MakeStreamID[T](topic))
+func SubscribeByTopic[T any](topic string, opts ...SubscriptionOption[T]) (Subscriber[T], error) {
+	return SubscribeByTopicID[T](MakeStreamID[T](topic), opts...)
 }
 
 // SubscribeByTopicID to a stream by the stream's id
-func SubscribeByTopicID[T any](id StreamID) (Subscriber[T], error) {
+func SubscribeByTopicID[T any](id StreamID, opts ...SubscriptionOption[T]) (Subscriber[T], error) {
 	if stream, err := getOrAddStreamByID[T](id); err == nil {
-		return stream.subscribe()
+		return stream.subscribe(opts...)
 	} else {
 		return nil, err
 	}

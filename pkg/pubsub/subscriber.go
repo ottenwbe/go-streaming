@@ -1,7 +1,6 @@
 package pubsub
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/ottenwbe/go-streaming/internal/buffer"
@@ -22,12 +21,10 @@ func (i SubscriberID) String() string {
 type Subscriber[T any] interface {
 	StreamID() StreamID
 	ID() SubscriberID
-	// Notify can be called to directly get notified by the underlying event channel
-	Notify() events.EventChannel[T]
 	doNotify(e events.Event[T])
-	// Consume can be called to wait for and receive (asynchronously) an individual event.
+	// Next can be called to wait for and receive the next batch of events.
 	// Errors occur when the underlying event channel is closed and no more events can be received.
-	Consume() (events.Event[T], error)
+	Next() ([]events.Event[T], bool)
 	close()
 }
 
@@ -35,6 +32,13 @@ type defaultSubscriber[T any] struct {
 	streamID StreamID
 	iD       SubscriberID
 	notify   events.EventChannel[T]
+}
+
+type bufferedSubscriber[T any] struct {
+	streamID StreamID
+	iD       SubscriberID
+	buffer   buffer.Buffer[T]
+	active   bool
 }
 
 func newDefaultSubscriber[T any](streamID StreamID) Subscriber[T] {
@@ -46,40 +50,13 @@ func newDefaultSubscriber[T any](streamID StreamID) Subscriber[T] {
 	return rec
 }
 
-type bufferedSubscriber[T any] struct {
-	streamID StreamID
-	iD       SubscriberID
-	notify   events.EventChannel[T]
-	buffer   buffer.Buffer[T]
-	active   bool
-}
-
-func newBufferedSubscriber[T any](streamID StreamID, limit int) Subscriber[T] {
-	var buf buffer.Buffer[T]
-	if limit > 0 {
-		buf = buffer.NewLimitedSimpleAsyncBuffer[T](limit)
-	} else {
-		buf = buffer.NewSimpleAsyncBuffer[T]()
-	}
-
+func newBufferedSubscriber[T any](streamID StreamID, buf buffer.Buffer[T]) Subscriber[T] {
 	rec := &bufferedSubscriber[T]{
 		streamID: streamID,
 		iD:       SubscriberID(uuid.New()),
-		notify:   make(chan events.Event[T]),
 		buffer:   buf,
 		active:   true,
 	}
-
-	go func(receiver *bufferedSubscriber[T]) {
-		defer close(receiver.notify)
-
-		for receiver.active {
-			e := receiver.buffer.GetAndRemoveNextEvent()
-			if e != nil {
-				receiver.notify <- e
-			}
-		}
-	}(rec)
 	return rec
 }
 
@@ -101,16 +78,13 @@ func (r *defaultSubscriber[T]) ID() SubscriberID {
 	return r.iD
 }
 
-func (r *defaultSubscriber[T]) Notify() events.EventChannel[T] {
-	return r.notify
-}
-
-func (r *defaultSubscriber[T]) Consume() (events.Event[T], error) {
-	if e, more := <-r.notify; !more {
-		return e, errors.New("channel closed, no more events")
-	} else {
-		return e, nil
-	}
+func (r *defaultSubscriber[T]) Next() ([]events.Event[T], bool) {
+	var (
+		e    events.Event[T]
+		more bool
+	)
+	e, more = <-r.notify
+	return []events.Event[T]{e}, more
 }
 
 func (r *bufferedSubscriber[T]) doNotify(event events.Event[T]) {
@@ -130,16 +104,8 @@ func (r *bufferedSubscriber[T]) ID() SubscriberID {
 	return r.iD
 }
 
-func (r *bufferedSubscriber[T]) Notify() events.EventChannel[T] {
-	return r.notify
-}
-
-func (r *bufferedSubscriber[T]) Consume() (events.Event[T], error) {
-	if e, more := <-r.notify; !more {
-		return e, errors.New("channel closed, no more events")
-	} else {
-		return e, nil
-	}
+func (r *bufferedSubscriber[T]) Next() ([]events.Event[T], bool) {
+	return r.buffer.GetAndConsumeNextEvents(), r.active
 }
 
 type notificationMap[T any] struct {
@@ -162,13 +128,27 @@ func newNotificationMap[T any](description StreamDescription, inChannel events.E
 	return m
 }
 
-func (m *notificationMap[T]) newSubscriber(streamID StreamID) Subscriber[T] {
+func (m *notificationMap[T]) newSubscriber(streamID StreamID, opts ...SubscriptionOption[T]) Subscriber[T] {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	options := &subscriptionOptions[T]{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	var rec Subscriber[T]
-	if m.description.AsyncReceiver {
-		rec = newBufferedSubscriber[T](streamID, m.description.BufferCapacity)
+	if options.policy != nil {
+		buf := buffer.NewConsumableAsyncBuffer[T](options.policy)
+		rec = newBufferedSubscriber[T](streamID, buf)
+	} else if m.description.AsyncReceiver {
+		var buf buffer.Buffer[T]
+		if m.description.BufferCapacity > 0 {
+			buf = buffer.NewLimitedSimpleAsyncBuffer[T](m.description.BufferCapacity)
+		} else {
+			buf = buffer.NewSimpleAsyncBuffer[T]()
+		}
+		rec = newBufferedSubscriber[T](streamID, buf)
 	} else {
 		rec = newDefaultSubscriber[T](streamID)
 	}

@@ -83,10 +83,9 @@ func anyErrorExists(err []error, c *ContinuousQuery) ([]error, bool) {
 	return err, len(err) > 0
 }
 
-// Notify waits for the next event from the query's output stream.
-func (qs *TypedContinuousQuery[T]) Notify() (events.Event[T], bool) {
-	e, ok := <-qs.OutputReceiver.Notify()
-	return e, ok
+// Next waits for the next events from the query's output stream.
+func (qs *TypedContinuousQuery[T]) Next() ([]events.Event[T], bool) {
+	return qs.OutputReceiver.Next()
 }
 
 // ComposeWith merges another query into the current one, chaining their operations.

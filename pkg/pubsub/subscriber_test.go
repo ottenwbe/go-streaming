@@ -42,19 +42,15 @@ var _ = Describe("Subscriber", func() {
 			Expect(rec.ID()).NotTo(BeNil())
 		})
 
-		It("should return the notify channel", func() {
-			Expect(rec.Notify()).To(Equal(rec.notify))
-		})
-
 		It("should consume events", func() {
 			event := events.NewEvent("test-event")
 			go func() {
 				rec.doNotify(event)
 			}()
 
-			received, err := rec.Consume()
-			Expect(err).To(BeNil())
-			Expect(received).To(Equal(event))
+			received, more := rec.Next()
+			Expect(more).To(BeTrue())
+			Expect(received).To(Equal([]events.Event[string]{event}))
 		})
 
 		It("should close the channel", func() {
@@ -94,22 +90,17 @@ var _ = Describe("Subscriber", func() {
 			event := events.NewEvent("test-buffered")
 			rec.doNotify(event)
 
-			received, err := rec.Consume()
-			Expect(err).To(BeNil())
-			Expect(received).To(Equal(event))
-		})
-
-		It("should return the notify channel", func() {
-			ch := rec.Notify()
-			Expect(ch).NotTo(BeNil())
+			received, more := rec.Next()
+			Expect(more).To(BeTrue())
+			Expect(received).To(Equal([]events.Event[string]{event}))
 		})
 
 		It("should close resources", func() {
 			rec.close()
-			Eventually(func() error {
-				_, err := rec.Consume()
-				return err
-			}).Should(HaveOccurred())
+			Eventually(func() bool {
+				_, more := rec.Next()
+				return more
+			}).Should(BeFalse())
 		})
 	})
 
@@ -134,11 +125,9 @@ var _ = Describe("Subscriber", func() {
 
 		It("should apply backpressure when limit is reached", func() {
 			event1 := events.NewEvent("e1")
-			event2 := events.NewEvent("e2")
 			event3 := events.NewEvent("e3")
 
 			rec.doNotify(event1) // Moves to notify channel (blocked there)
-			rec.doNotify(event2) // Sits in buffer (limit reached)
 
 			done := make(chan struct{})
 			go func() {
@@ -149,9 +138,9 @@ var _ = Describe("Subscriber", func() {
 
 			Consistently(done).ShouldNot(BeClosed())
 
-			v, err := rec.Consume()
-			Expect(err).To(BeNil())
-			Expect(v).To(Equal(event1))
+			v, more := rec.Next()
+			Expect(more).To(BeTrue())
+			Expect(v).To(Equal([]events.Event[string]{event1}))
 
 			Eventually(done).Should(BeClosed())
 		})
@@ -189,23 +178,23 @@ var _ = Describe("Subscriber", func() {
 			go func() { ch <- event }()
 
 			var (
-				e1, e2     events.Event[string]
-				err1, err2 error
-				wg         sync.WaitGroup
+				e1, e2       []events.Event[string]
+				more1, more2 bool
+				wg           sync.WaitGroup
 			)
 
 			wg.Go(func() {
-				e1, err1 = rec1.Consume()
+				e1, more1 = rec1.Next()
 			})
 			wg.Go(func() {
-				e2, err2 = rec2.Consume()
+				e2, more2 = rec2.Next()
 			})
 			wg.Wait()
 
-			Expect(err1).To(BeNil())
-			Expect(err2).To(BeNil())
-			Expect(e1).To(Equal(event))
-			Expect(e2).To(Equal(event))
+			Expect(more1).To(BeTrue())
+			Expect(more2).To(BeTrue())
+			Expect(e1[0]).To(Equal(event))
+			Expect(e2[0]).To(Equal(event))
 		})
 
 		It("should remove receivers", func() {

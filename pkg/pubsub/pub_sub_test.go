@@ -237,9 +237,9 @@ asyncStream: true
 				publisher, _ := pubsub.RegisterPublisher[string](s.ID)
 				publisher.Publish(e1)
 			}()
-			eResult := <-rec.Notify()
+			eResult, _ := rec.Next()
 
-			Expect(e1).To(Equal(eResult))
+			Expect(e1).To(Equal(eResult[0]))
 		})
 	})
 

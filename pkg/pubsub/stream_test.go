@@ -62,7 +62,8 @@ var _ = Describe("Stream", func() {
 				receiver, _ := pubsub.SubscribeByTopicID[string](streamID)
 
 				go func() {
-					eventResult = <-receiver.Notify()
+					res, _ := receiver.Next()
+					eventResult = res[0]
 					done <- true
 				}()
 
@@ -151,7 +152,7 @@ var _ = Describe("Stream", func() {
 
 				wg.Go(func() {
 					for range numE {
-						_ = <-s.Notify()
+						_, _ = s.Next()
 					}
 				})
 
@@ -184,9 +185,12 @@ var _ = Describe("Stream", func() {
 				publisher.Publish(event3)
 
 				go func() {
-					eventResult[0] = <-receiver.Notify()
-					eventResult[1] = <-receiver.Notify()
-					eventResult[2] = <-receiver.Notify()
+					r1, _ := receiver.Next()
+					eventResult[0] = r1[0]
+					r2, _ := receiver.Next()
+					eventResult[1] = r2[0]
+					r3, _ := receiver.Next()
+					eventResult[2] = r3[0]
 					done <- true
 				}()
 
@@ -240,7 +244,7 @@ var _ = Describe("Stream", func() {
 			wg.Go(func() {
 				defer GinkgoRecover()
 				for range maxRange {
-					<-sub.Notify()
+					sub.Next()
 				}
 			})
 

@@ -32,7 +32,7 @@ type typedStream[T any] interface {
 
 	//publish(events.Event[T]) error
 
-	subscribe() (Subscriber[T], error)
+	subscribe(opts ...SubscriptionOption[T]) (Subscriber[T], error)
 	unsubscribe(id SubscriberID)
 	newPublisher() (Publisher[T], error)
 	removePublisher(id PublisherID)
@@ -301,12 +301,12 @@ func (l *localAsyncStream[T]) newPublisher() (Publisher[T], error) {
 	return l.publisherMap.newPublisher()
 }
 
-func (l *localAsyncStream[T]) subscribe() (Subscriber[T], error) {
+func (l *localAsyncStream[T]) subscribe(opts ...SubscriptionOption[T]) (Subscriber[T], error) {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
 	if l.active || !l.started {
-		rec := l.subscriberMap.newSubscriber(l.ID())
+		rec := l.subscriberMap.newSubscriber(l.ID(), opts...)
 		return rec, nil
 	}
 
@@ -345,12 +345,12 @@ func (s *localSyncStream[T]) removePublisher(id PublisherID) {
 	s.publisherMap.remove(id)
 }
 
-func (s *localSyncStream[T]) subscribe() (Subscriber[T], error) {
+func (s *localSyncStream[T]) subscribe(opts ...SubscriptionOption[T]) (Subscriber[T], error) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
 
 	if s.active || !s.started {
-		rec := s.subscriberMap.newSubscriber(s.ID())
+		rec := s.subscriberMap.newSubscriber(s.ID(), opts...)
 		return rec, nil
 	}
 
