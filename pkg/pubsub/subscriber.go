@@ -239,7 +239,9 @@ func (m *notificationMap[T]) copyFrom(old *notificationMap[T]) {
 	old.mutex.Lock()
 	defer old.mutex.Unlock()
 
-	m.receiver = old.receiver
+	for id, sub := range old.receiver {
+		m.receiver[id] = sub
+	}
 	old.receiver = make(map[SubscriberID]Subscriber[T])
 }
 

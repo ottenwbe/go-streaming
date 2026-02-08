@@ -18,7 +18,7 @@ var _ = Describe("PubSub", func() {
 			Expect(err).To(BeNil())
 			Expect(s).NotTo(BeNil())
 			Expect(s.Topic).To(Equal(topic))
-			pubsub.ForceRemoveStream(s)
+			pubsub.TryRemoveStreams(s)
 		})
 
 		It("returns existing stream if it exists", func() {
@@ -26,24 +26,46 @@ var _ = Describe("PubSub", func() {
 			desc := pubsub.MakeStreamDescription[int](topic)
 			s1, _ := pubsub.GetOrAddStream[int](desc)
 			s2, err := pubsub.GetOrAddStream[int](desc)
-			defer pubsub.ForceRemoveStream(s1)
-			defer pubsub.ForceRemoveStream(s2)
+			defer pubsub.TryRemoveStreams(s1)
+			defer pubsub.TryRemoveStreams(s2)
 			Expect(err).To(BeNil())
 			Expect(s1).To(Equal(s2))
 		})
 
-		It("is not successful if an existing stream should be preserved", func() {
+		It("is not replacing an existing stream if the latter should be preserved", func() {
 			var topic = "test-ps-2"
-			s1 := pubsub.MakeStreamDescription[string](topic)
-			s2 := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsyncStream(true))
+			d1 := pubsub.MakeStreamDescription[string](topic)
+			d2 := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsyncStream(true))
 
-			_, _ = pubsub.GetOrAddStream[string](s1)
-			sResult, _ := pubsub.GetOrAddStream[string](s2)
+			stream1, _ := pubsub.GetOrAddStream[string](d1)
+			stream2, _ := pubsub.GetOrAddStream[string](d2)
+			defer pubsub.TryRemoveStreams(stream1)
+			defer pubsub.TryRemoveStreams(stream2)
 
-			d, _ := pubsub.GetDescription(sResult)
-			Expect(d).To(Equal(s1))
-			Expect(d).ToNot(Equal(s2))
+			d, _ := pubsub.GetDescription(stream2)
+			Expect(d).To(Equal(d1))
+			Expect(d).ToNot(Equal(d2))
 		})
+
+		It("can add streams that are auto cleaned when no longer used", func() {
+			var topic = "test-auto-clean"
+			d := pubsub.MakeStreamDescription[string](topic, pubsub.WithAutoCleanup(true))
+
+			s, err := pubsub.GetOrAddStream[string](d)
+			Expect(err).To(BeNil())
+
+			dResult, _ := pubsub.GetDescription(s)
+			Expect(dResult.AutoCleanup).To(BeTrue())
+
+			sub, err := pubsub.SubscribeByTopic[string](topic)
+			Expect(err).To(BeNil())
+			err = pubsub.Unsubscribe[string](sub)
+			Expect(err).To(BeNil())
+
+			_, err = pubsub.GetDescription(d.ID)
+			Expect(err).To(Equal(pubsub.StreamNotFoundError))
+		})
+
 	})
 
 	Describe("AddOrReplaceStreamFromDescription", func() {
@@ -336,6 +358,34 @@ asyncStream: true
 			Expect(e).To(BeNil())
 			Expect(rec).NotTo(BeNil())
 			pubsub.Unsubscribe(rec)
+		})
+	})
+
+	Describe("Metrics", func() {
+		It("handles NilStreamID gracefully", func() {
+			m, err := pubsub.Metrics(pubsub.NilStreamID())
+			Expect(err).ToNot(BeNil())
+			Expect(m).ToNot(BeNil())
+			Expect(m.NumEventsIn()).To(Equal(uint64(0)))
+			Expect(m.NumEventsOut()).To(Equal(uint64(0)))
+		})
+
+		It("returns accurate metrics for a stream", func() {
+
+			id := pubsub.MakeStreamID[int]("metrics-topic")
+
+			pub, err := pubsub.RegisterPublisher[int](id)
+			defer pubsub.UnRegisterPublisher(pub)
+
+			Expect(err).To(BeNil())
+
+			pub.PublishC(1)
+
+			m, err := pubsub.Metrics(id)
+			Expect(err).To(BeNil())
+			Expect(m).ToNot(BeNil())
+			Eventually(m.NumEventsIn()).Should(Equal(uint64(1)))
+			Eventually(m.NumEventsOut()).Should(Equal(uint64(1)))
 		})
 	})
 

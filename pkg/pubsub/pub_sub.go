@@ -32,11 +32,7 @@ func GetOrAddStream[T any](streamDescription StreamDescription) (StreamID, error
 
 // AddOrReplaceStreamFromDescription uses a description of a stream to add it or replace it to the pub sub system
 func AddOrReplaceStreamFromDescription[T any](description StreamDescription) (StreamID, error) {
-	streamIdxAccessMutex.Lock()
-	defer streamIdxAccessMutex.Unlock()
-
 	stream := newStreamFromDescription[T](description)
-
 	return doAddOrReplaceStream(stream)
 }
 
@@ -218,12 +214,21 @@ func doAddOrReplaceStream(newStream stream) (StreamID, error) {
 		return NilStreamID(), err
 	}
 
-	if existingStream, ok := streamIdx[newStream.ID()]; ok {
+	existingStream := func() stream {
+		streamIdxAccessMutex.Lock()
+		defer streamIdxAccessMutex.Unlock()
+
+		old, _ := streamIdx[newStream.ID()]
+		streamIdx[newStream.ID()] = newStream
+		return old
+	}()
+
+	if existingStream != nil {
 		newStream.copyFrom(existingStream)
-		doTryRemoveStreams(existingStream.ID())
+		existingStream.tryClose()
 	}
 
-	addAndStartStream(newStream)
+	newStream.run()
 
 	return newStream.ID(), nil
 }
@@ -284,7 +289,6 @@ func getAndConvertStreamByID[T any](id StreamID) (typedStream[T], error) {
 	if stream, ok := streamIdx[id]; ok {
 		switch stream := stream.(type) {
 		case typedStream[T]:
-
 			return stream, nil
 		default:
 			return nil, StreamTypeMismatchError

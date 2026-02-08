@@ -109,6 +109,8 @@ type baseStream[T any] struct {
 type localSyncStream[T any] struct {
 	baseStream[T]
 	channel events.EventChannel[T]
+	active  bool
+	started bool
 }
 
 func (s *localSyncStream[T]) streamMetrics() *StreamMetrics {
@@ -122,8 +124,9 @@ type localAsyncStream[T any] struct {
 	outChannel events.EventChannel[T]
 	buffer     buffer.Buffer[T]
 
-	active bool
-	closed sync.WaitGroup
+	active  bool
+	started bool
+	closed  sync.WaitGroup
 }
 
 func (l *localAsyncStream[T]) streamMetrics() *StreamMetrics {
@@ -154,6 +157,8 @@ func newLocalSyncStream[T any](description StreamDescription) *localSyncStream[T
 			metrics:       metrics,
 		},
 		channel: c,
+		active:  false,
+		started: false,
 	}
 	return l
 }
@@ -179,6 +184,7 @@ func newLocalAsyncStream[T any](description StreamDescription) *localAsyncStream
 			metrics:       metrics,
 		},
 		active:     false,
+		started:    false,
 		buffer:     buf,
 		inChannel:  cIn,
 		outChannel: cOut,
@@ -237,8 +243,11 @@ func (l *localAsyncStream[T]) run() {
 
 	l.subscriberMap.start()
 
-	if !l.active {
+	l.notifyMutex.Lock()
+	defer l.notifyMutex.Unlock()
 
+	if !l.active {
+		l.started = true
 		l.active = true
 		l.closed = sync.WaitGroup{}
 		l.closed.Add(2)
@@ -297,7 +306,7 @@ func (l *localAsyncStream[T]) subscribe() (Subscriber[T], error) {
 	l.notifyMutex.Lock()
 	defer l.notifyMutex.Unlock()
 
-	if l.active {
+	if l.active || !l.started {
 		rec := l.subscriberMap.newSubscriber(l.ID())
 		return rec, nil
 	}
@@ -341,12 +350,20 @@ func (s *localSyncStream[T]) subscribe() (Subscriber[T], error) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
 
-	rec := s.subscriberMap.newSubscriber(s.ID())
+	if s.active || !s.started {
+		rec := s.subscriberMap.newSubscriber(s.ID())
+		return rec, nil
+	}
 
-	return rec, nil
+	return nil, StreamInactiveError
 }
 
 func (s *localSyncStream[T]) run() {
+	s.notifyMutex.Lock()
+	defer s.notifyMutex.Unlock()
+
+	s.started = true
+	s.active = true
 	s.subscriberMap.start()
 }
 
@@ -361,10 +378,13 @@ func (s *localSyncStream[T]) doForceClose(force bool) bool {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
 
+	s.active = false
+
 	if force {
 		s.subscriberMap.close()
 		s.publisherMap.close()
 	}
+
 	if s.subscriberMap.len() == 0 || force {
 		close(s.channel)
 		return true
@@ -406,7 +426,7 @@ func (l *localAsyncStream[T]) copyFrom(stream stream) {
 	defer l.notifyMutex.Unlock()
 
 	if oldStream, ok := stream.(typedStream[T]); ok {
-		l.publisherMap = oldStream.publishers()
+		l.publisherMap.copyFrom(oldStream.publishers())
 
 		// active waiting until the stream is drained
 		oldStream.streamMetrics().WaitUntilDrained()
