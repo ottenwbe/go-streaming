@@ -1,6 +1,7 @@
 package buffer
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -13,6 +14,10 @@ import (
 var defaultBufferCapacity = 5
 
 const LimitExceededFormat = "LimitedSimpleAsyncBuffer: Limit exceeded (%v > %v)"
+
+var (
+	BufferStoppedErr = errors.New("buffer: is stopped")
+)
 
 // basicBuffer is an (internal) alias for an event array
 type basicBuffer[T any] []events.Event[T]
@@ -192,6 +197,10 @@ func (s *SimpleAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
+	if s.stopped {
+		return BufferStoppedErr
+	}
+
 	s.buffer = append(s.buffer, events...)
 	s.cond.Broadcast()
 	return nil
@@ -201,6 +210,10 @@ func (s *SimpleAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
 func (s *SimpleAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
+
+	if s.stopped {
+		return BufferStoppedErr
+	}
 
 	s.buffer = append(s.buffer, event)
 	s.cond.Broadcast()
@@ -253,6 +266,10 @@ func (s *ConsumableAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
+	if s.stopped {
+		return BufferStoppedErr
+	}
+
 	s.buffer = append(s.buffer, events...)
 	s.selectionPolicy.UpdateSelection()
 
@@ -264,6 +281,10 @@ func (s *ConsumableAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
 func (s *ConsumableAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
+
+	if s.stopped {
+		return BufferStoppedErr
+	}
 
 	s.buffer = append(s.buffer, event)
 	s.selectionPolicy.UpdateSelection()
@@ -277,9 +298,15 @@ func (s *LimitedSimpleAsyncBuffer[T]) AddEvents(events []events.Event[T]) error 
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
-	err := ensureLimit(s.limit, s.buffer.Len()+len(events))
-	if err != nil {
-		return err
+	if len(events) > s.limit {
+		return fmt.Errorf(LimitExceededFormat, len(events), s.limit)
+	}
+	if s.stopped {
+		return BufferStoppedErr
+	}
+
+	for s.buffer.Len()+len(events) > s.limit {
+		s.cond.Wait()
 	}
 
 	s.buffer = append(s.buffer, events...)
@@ -292,9 +319,12 @@ func (s *LimitedSimpleAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
 	s.bufferMutex.Lock()
 	defer s.bufferMutex.Unlock()
 
-	err := ensureLimit(s.limit, s.buffer.Len()+1)
-	if err != nil {
-		return err
+	if s.stopped {
+		return BufferStoppedErr
+	}
+
+	for s.buffer.Len() >= s.limit {
+		s.cond.Wait()
 	}
 
 	s.buffer = append(s.buffer, event)
@@ -302,11 +332,23 @@ func (s *LimitedSimpleAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
 	return nil
 }
 
-func ensureLimit(limit, newBufferLen int) error {
-	if limit < newBufferLen {
-		return fmt.Errorf(LimitExceededFormat, newBufferLen, limit)
+// GetAndConsumeNextEvents returns the next event from the buffer and removes it.
+func (s *LimitedSimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
+	nextEvents := s.SimpleAsyncBuffer.GetAndConsumeNextEvents()
+
+	if len(nextEvents) > 0 {
+		s.cond.Broadcast()
 	}
-	return nil
+	return nextEvents
+}
+
+// GetAndRemoveNextEvent returns the next event from the buffer and removes it.
+func (s *LimitedSimpleAsyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
+	event := s.SimpleAsyncBuffer.GetAndRemoveNextEvent()
+	if event != nil {
+		s.cond.Broadcast()
+	}
+	return event
 }
 
 func (i *iterator[T]) hasNext() bool {

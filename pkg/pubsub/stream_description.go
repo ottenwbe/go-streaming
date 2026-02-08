@@ -11,9 +11,11 @@ var StreamDescriptionWithoutID = errors.New("stream description: no id provided"
 
 // StreamDescription details the stream configurations
 type StreamDescription struct {
-	ID            StreamID `yaml:"id" json:"id"`
-	AsyncStream   bool     `yaml:"asyncStream" json:"asyncStream"`
-	AsyncReceiver bool     `yaml:"asyncReceiver" json:"asyncReceiver"`
+	ID             StreamID `yaml:"id" json:"id"`
+	AsyncStream    bool     `yaml:"asyncStream" json:"asyncStream"`
+	AsyncReceiver  bool     `yaml:"asyncReceiver" json:"asyncReceiver"`
+	BufferCapacity int      `yaml:"bufferCapacity" json:"bufferCapacity"`
+	AutoCleanup    bool     `yaml:"autoCleanup" json:"autoCleanup"`
 }
 
 type StreamOption func(*StreamDescription)
@@ -27,6 +29,18 @@ func WithAsyncStream(async bool) StreamOption {
 func WithAsyncReceiver(asyncReceiver bool) StreamOption {
 	return func(s *StreamDescription) {
 		s.AsyncReceiver = asyncReceiver
+	}
+}
+
+func WithBufferCapacity(capacity int) StreamOption {
+	return func(s *StreamDescription) {
+		s.BufferCapacity = capacity
+	}
+}
+
+func WithAutoCleanup(autoCleanup bool) StreamOption {
+	return func(s *StreamDescription) {
+		s.AutoCleanup = autoCleanup
 	}
 }
 

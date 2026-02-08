@@ -1,6 +1,8 @@
 package pubsub
 
 import (
+	"sync"
+
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -111,6 +113,50 @@ var _ = Describe("Subscriber", func() {
 		})
 	})
 
+	Describe("bufferedSubscriber with limit", func() {
+		var (
+			rec      Subscriber[string]
+			streamID StreamID
+			nMap     *notificationMap[string]
+			ch       events.EventChannel[string]
+		)
+
+		BeforeEach(func() {
+			streamID = MakeStreamID[string]("test-topic-buffered-limit")
+			ch = make(events.EventChannel[string])
+			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic", WithAsyncReceiver(true), WithBufferCapacity(1)), ch, newStreamMetrics())
+			rec = nMap.newStreamReceiver(streamID)
+		})
+
+		AfterEach(func() {
+			_ = nMap.close()
+		})
+
+		It("should apply backpressure when limit is reached", func() {
+			event1 := events.NewEvent("e1")
+			event2 := events.NewEvent("e2")
+			event3 := events.NewEvent("e3")
+
+			rec.doNotify(event1) // Moves to notify channel (blocked there)
+			rec.doNotify(event2) // Sits in buffer (limit reached)
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				rec.doNotify(event3) // Should block
+				close(done)
+			}()
+
+			Consistently(done).ShouldNot(BeClosed())
+
+			v, err := rec.Consume()
+			Expect(err).To(BeNil())
+			Expect(v).To(Equal(event1))
+
+			Eventually(done).Should(BeClosed())
+		})
+	})
+
 	Describe("notificationMap", func() {
 		var (
 			nMap *notificationMap[string]
@@ -142,8 +188,19 @@ var _ = Describe("Subscriber", func() {
 			event := events.NewEvent("broadcast")
 			go func() { ch <- event }()
 
-			e1, err1 := rec1.Consume()
-			e2, err2 := rec2.Consume()
+			var (
+				e1, e2     events.Event[string]
+				err1, err2 error
+				wg         sync.WaitGroup
+			)
+
+			wg.Go(func() {
+				e1, err1 = rec1.Consume()
+			})
+			wg.Go(func() {
+				e2, err2 = rec2.Consume()
+			})
+			wg.Wait()
 
 			Expect(err1).To(BeNil())
 			Expect(err2).To(BeNil())

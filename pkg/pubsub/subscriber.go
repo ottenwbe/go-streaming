@@ -54,12 +54,19 @@ type bufferedSubscriber[T any] struct {
 	active   bool
 }
 
-func newBufferedSubscriber[T any](streamID StreamID) Subscriber[T] {
+func newBufferedSubscriber[T any](streamID StreamID, limit int) Subscriber[T] {
+	var buf buffer.Buffer[T]
+	if limit > 0 {
+		buf = buffer.NewLimitedSimpleAsyncBuffer[T](limit)
+	} else {
+		buf = buffer.NewSimpleAsyncBuffer[T]()
+	}
+
 	rec := &bufferedSubscriber[T]{
 		streamID: streamID,
 		iD:       SubscriberID(uuid.New()),
 		notify:   make(chan events.Event[T]),
-		buffer:   buffer.NewSimpleAsyncBuffer[T](),
+		buffer:   buf,
 		active:   true,
 	}
 
@@ -161,7 +168,7 @@ func (m *notificationMap[T]) newStreamReceiver(streamID StreamID) Subscriber[T] 
 
 	var rec Subscriber[T]
 	if m.description.AsyncReceiver {
-		rec = newBufferedSubscriber[T](streamID)
+		rec = newBufferedSubscriber[T](streamID, m.description.BufferCapacity)
 	} else {
 		rec = newDefaultSubscriber[T](streamID)
 	}
@@ -193,33 +200,27 @@ func (m *notificationMap[T]) remove(id SubscriberID) {
 }
 
 func (m *notificationMap[T]) doNotify() {
-	for m.active {
-		e := <-m.channel
-		if e == nil {
-			return
-		}
-		wg := sync.WaitGroup{}
-
-		m.mutex.RLock()
-
-		for _, notifier := range m.receiver {
-			/*
-				The code should never panic here, because notifiers are unsubscribed before the stream closes.
-				However, if the concept changes, consider to handle the panic here:
-
-				defer func() {
-					if r := recover(); r != nil {
-						zap.S().Debugf("recovered subscriberMap panic for stream %v", id)
-					}
-				}()*/
-			wg.Go(func() {
-				notifier.doNotify(e)
-			})
-		}
-		m.mutex.RUnlock()
-		wg.Wait()
-		m.metrics.incNumEventsOut()
+	for e := range m.channel {
+		m.callNotifiers(e)
 	}
+}
+
+func (m *notificationMap[T]) callNotifiers(e events.Event[T]) {
+	m.mutex.RLock()
+	targets := make([]Subscriber[T], 0, len(m.receiver))
+	for _, notifier := range m.receiver {
+		targets = append(targets, notifier)
+	}
+	m.mutex.RUnlock()
+
+	for _, notifier := range targets {
+		// Wrap in a function to recover from panics if a subscriber is closed concurrently.
+		func() {
+			defer func() { _ = recover() }()
+			notifier.doNotify(e)
+		}()
+	}
+	m.metrics.incNumEventsOut()
 }
 
 func (m *notificationMap[T]) len() int {

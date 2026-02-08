@@ -117,13 +117,14 @@ var _ = Describe("Stream", func() {
 				Expect(err).To(BeNil()) // stream should still exist
 			})
 
-			It("should no longer be subscribable after closing the stream", func() {
+			It("should be subscribable (auto-create) after closing the stream", func() {
 				// close stream (it has no subscribers/publishers yet)
 				pubsub.TryRemoveStreams(streamID)
 
 				result, err := pubsub.SubscribeByTopicID[string](streamID)
-				Expect(result).To(BeNil())
-				Expect(err).To(Equal(pubsub.StreamNotFoundError))
+				Expect(result).NotTo(BeNil())
+				Expect(err).To(BeNil())
+				pubsub.Unsubscribe(result)
 			})
 		})
 
@@ -254,9 +255,9 @@ var _ = Describe("Stream", func() {
 
 			metrics, err := pubsub.Metrics(streamID)
 			Expect(err).To(BeNil())
-			Eventually(metrics.NumEventsIn()).Should(Equal(maxRange))
-			Eventually(func() uint64 { return metrics.NumEventsOut() }).Should(Equal(maxRange))
-			Eventually(metrics.NumInEventsEqualsNumOutEvents()).Should(BeTrue())
+			Eventually(metrics.NumEventsIn).Should(Equal(maxRange))
+			Eventually(metrics.NumEventsOut).Should(Equal(maxRange))
+			Eventually(metrics.NumInEventsEqualsNumOutEvents).Should(BeTrue())
 
 		})
 	})

@@ -222,10 +222,9 @@ asyncStream: true
 	})
 
 	Describe("InstantPublishByTopic", func() {
-		It("fails if stream does not exist", func() {
+		It("succeeds if stream does not exist (auto-create)", func() {
 			err := pubsub.InstantPublishByTopic("non-existent-topic", events.NewEvent("hello"))
-			Expect(err).NotTo(BeNil())
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
+			Expect(err).To(BeNil())
 		})
 	})
 
@@ -242,11 +241,12 @@ asyncStream: true
 			Expect(pub).NotTo(BeNil())
 			Expect(pub.StreamID()).To(Equal(sID))
 		})
-		It("fails if stream does not exist", func() {
+		It("creates stream if stream does not exist", func() {
 			id := pubsub.RandomStreamID()
 			pub, err := pubsub.RegisterPublisher[int](id)
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
-			Expect(pub).To(BeNil())
+			Expect(err).To(BeNil())
+			Expect(pub).NotTo(BeNil())
+			pubsub.UnRegisterPublisher(pub)
 		})
 	})
 
@@ -263,10 +263,11 @@ asyncStream: true
 			Expect(pub).NotTo(BeNil())
 			Expect(pub.StreamID()).To(Equal(sID))
 		})
-		It("fails if stream does not exist", func() {
+		It("creates stream if stream does not exist", func() {
 			pub, err := pubsub.RegisterPublisherByTopic[int]("non-existent-topic-pub")
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
-			Expect(pub).To(BeNil())
+			Expect(err).To(BeNil())
+			Expect(pub).NotTo(BeNil())
+			pubsub.UnRegisterPublisher(pub)
 		})
 	})
 
@@ -323,15 +324,18 @@ asyncStream: true
 			Expect(rec).NotTo(BeNil())
 			Expect(rec.StreamID().Topic).To(Equal(topic))
 		})
-		It("fails if stream does not exist", func() {
+		It("creates stream if stream does not exist", func() {
 			rec, err := pubsub.SubscribeByTopic[int]("non-existent-topic-sub")
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
-			Expect(rec).To(BeNil())
+			Expect(err).To(BeNil())
+			Expect(rec).NotTo(BeNil())
+			pubsub.Unsubscribe(rec)
 		})
-		It("ends up in an error if non existing in the pub sub system", func() {
+		It("creates stream if non existing in the pub sub system", func() {
 			id := pubsub.RandomStreamID()
-			_, e := pubsub.SubscribeByTopicID[int](id)
-			Expect(e).NotTo(BeNil())
+			rec, e := pubsub.SubscribeByTopicID[int](id)
+			Expect(e).To(BeNil())
+			Expect(rec).NotTo(BeNil())
+			pubsub.Unsubscribe(rec)
 		})
 	})
 

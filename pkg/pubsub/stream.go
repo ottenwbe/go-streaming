@@ -164,6 +164,13 @@ func newLocalAsyncStream[T any](description StreamDescription) *localAsyncStream
 	cIn := make(chan events.Event[T])
 	cOut := make(chan events.Event[T])
 	metrics := newStreamMetrics()
+
+	var buf buffer.Buffer[T]
+	if description.BufferCapacity > 0 {
+		buf = buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
+	} else {
+		buf = buffer.NewSimpleAsyncBuffer[T]()
+	}
 	a := &localAsyncStream[T]{
 		baseStream: baseStream[T]{
 			description:   description,
@@ -172,7 +179,7 @@ func newLocalAsyncStream[T any](description StreamDescription) *localAsyncStream
 			metrics:       metrics,
 		},
 		active:     false,
-		buffer:     buffer.NewSimpleAsyncBuffer[T](),
+		buffer:     buf,
 		inChannel:  cIn,
 		outChannel: cOut,
 	}

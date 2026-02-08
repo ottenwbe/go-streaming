@@ -72,10 +72,7 @@ func SubscribeByTopic[T any](topic string) (Subscriber[T], error) {
 
 // SubscribeByTopicID to a stream by the stream's id
 func SubscribeByTopicID[T any](id StreamID) (Subscriber[T], error) {
-	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
-
-	if stream, err := getAndConvertStreamByID[T](id); err == nil {
+	if stream, err := getOrAddStreamByID[T](id); err == nil {
 		return stream.subscribe()
 	} else {
 		return nil, err
@@ -85,18 +82,27 @@ func SubscribeByTopicID[T any](id StreamID) (Subscriber[T], error) {
 // Unsubscribe removes a subscriber from a stream.
 func Unsubscribe[T any](rec Subscriber[T]) error {
 	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
 
 	if rec == nil {
+		streamIdxAccessMutex.RUnlock()
 		return StreamRecNilError
 	}
 
-	if s, err := getAndConvertStreamByID[T](rec.StreamID()); err == nil {
-		s.unsubscribe(rec.ID())
-		return nil
-	} else {
+	s, err := getAndConvertStreamByID[T](rec.StreamID())
+	if err != nil {
+		streamIdxAccessMutex.RUnlock()
 		return err
 	}
+
+	s.unsubscribe(rec.ID())
+	autoCleanup := s.Description().AutoCleanup
+	id := s.ID()
+	streamIdxAccessMutex.RUnlock()
+
+	if autoCleanup {
+		TryRemoveStreams(id)
+	}
+	return nil
 }
 
 // InstantPublishByTopic routes the event to the given topic, iff the stream exists.
@@ -124,10 +130,7 @@ func RegisterPublisherByTopic[T any](topic string) (Publisher[T], error) {
 
 // RegisterPublisher creates and registers a new publisher for the stream identified by the given ID.
 func RegisterPublisher[T any](id StreamID) (Publisher[T], error) {
-	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
-
-	if s, err := getAndConvertStreamByID[T](id); err == nil {
+	if s, err := getOrAddStreamByID[T](id); err == nil {
 		return s.newPublisher()
 	} else {
 		return nil, err
@@ -137,18 +140,27 @@ func RegisterPublisher[T any](id StreamID) (Publisher[T], error) {
 // UnRegisterPublisher removes a publisher from its associated stream.
 func UnRegisterPublisher[T any](publisher Publisher[T]) error {
 	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
 
 	if publisher == nil {
+		streamIdxAccessMutex.RUnlock()
 		return nil
 	}
 
-	if s, err := getAndConvertStreamByID[T](publisher.StreamID()); err == nil {
-		s.removePublisher(publisher.ID())
-		return nil
-	} else {
+	s, err := getAndConvertStreamByID[T](publisher.StreamID())
+	if err != nil {
+		streamIdxAccessMutex.RUnlock()
 		return err
 	}
+
+	s.removePublisher(publisher.ID())
+	autoCleanup := s.Description().AutoCleanup
+	id := s.ID()
+	streamIdxAccessMutex.RUnlock()
+
+	if autoCleanup {
+		TryRemoveStreams(id)
+	}
+	return nil
 }
 
 // GetDescription retrieves the description of a stream identified by the given ID.
@@ -226,6 +238,32 @@ func validateStream(newStream stream) error {
 		return StreamIDNilError
 	}
 	return nil
+}
+
+func getOrAddStreamByID[T any](id StreamID) (typedStream[T], error) {
+	streamIdxAccessMutex.RLock()
+	s, err := getAndConvertStreamByID[T](id)
+	streamIdxAccessMutex.RUnlock()
+
+	if err == nil {
+		return s, nil
+	}
+	if err != StreamNotFoundError {
+		return nil, err
+	}
+
+	streamIdxAccessMutex.Lock()
+	defer streamIdxAccessMutex.Unlock()
+
+	if s, err := getAndConvertStreamByID[T](id); err == nil {
+		return s, nil
+	}
+
+	desc := MakeStreamDescriptionFromID(id, WithAutoCleanup(true))
+	newS := newStreamFromDescription[T](desc)
+	addAndStartStream(newS)
+
+	return newS, nil
 }
 
 func getAndConvertStreamByID[T any](id StreamID) (typedStream[T], error) {
