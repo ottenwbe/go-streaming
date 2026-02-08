@@ -165,6 +165,7 @@ func newLocalAsyncStream[T any](description StreamDescription) *localAsyncStream
 	metrics := newStreamMetrics()
 
 	var buf buffer.Buffer[T]
+	// TODO: check if we can use the channel's buffer capacity instead
 	if description.BufferCapacity > 0 {
 		buf = buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
 	} else {
@@ -297,7 +298,7 @@ func (l *localAsyncStream[T]) subscribe() (Subscriber[T], error) {
 	defer l.notifyMutex.Unlock()
 
 	if l.active {
-		rec := l.subscriberMap.newStreamReceiver(l.ID())
+		rec := l.subscriberMap.newSubscriber(l.ID())
 		return rec, nil
 	}
 
@@ -340,7 +341,7 @@ func (s *localSyncStream[T]) subscribe() (Subscriber[T], error) {
 	s.notifyMutex.Lock()
 	defer s.notifyMutex.Unlock()
 
-	rec := s.subscriberMap.newStreamReceiver(s.ID())
+	rec := s.subscriberMap.newSubscriber(s.ID())
 
 	return rec, nil
 }

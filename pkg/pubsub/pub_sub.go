@@ -81,27 +81,32 @@ func SubscribeByTopicID[T any](id StreamID) (Subscriber[T], error) {
 
 // Unsubscribe removes a subscriber from a stream.
 func Unsubscribe[T any](rec Subscriber[T]) error {
+	var (
+		autoCleanup = false
+		id          StreamID
+	)
+
 	streamIdxAccessMutex.RLock()
+	defer func() {
+		streamIdxAccessMutex.RUnlock()
+		if autoCleanup {
+			TryRemoveStreams(id)
+		}
+	}()
 
 	if rec == nil {
-		streamIdxAccessMutex.RUnlock()
 		return StreamRecNilError
 	}
 
 	s, err := getAndConvertStreamByID[T](rec.StreamID())
 	if err != nil {
-		streamIdxAccessMutex.RUnlock()
 		return err
 	}
 
 	s.unsubscribe(rec.ID())
-	autoCleanup := s.Description().AutoCleanup
-	id := s.ID()
-	streamIdxAccessMutex.RUnlock()
+	autoCleanup = s.Description().AutoCleanup
+	id = s.ID()
 
-	if autoCleanup {
-		TryRemoveStreams(id)
-	}
 	return nil
 }
 
@@ -139,27 +144,32 @@ func RegisterPublisher[T any](id StreamID) (Publisher[T], error) {
 
 // UnRegisterPublisher removes a publisher from its associated stream.
 func UnRegisterPublisher[T any](publisher Publisher[T]) error {
+	var (
+		autoCleanup = false
+		id          StreamID
+	)
+
 	streamIdxAccessMutex.RLock()
+	defer func() {
+		streamIdxAccessMutex.RUnlock()
+		if autoCleanup {
+			TryRemoveStreams(id)
+		}
+	}()
 
 	if publisher == nil {
-		streamIdxAccessMutex.RUnlock()
 		return nil
 	}
 
 	s, err := getAndConvertStreamByID[T](publisher.StreamID())
 	if err != nil {
-		streamIdxAccessMutex.RUnlock()
 		return err
 	}
 
 	s.removePublisher(publisher.ID())
-	autoCleanup := s.Description().AutoCleanup
-	id := s.ID()
-	streamIdxAccessMutex.RUnlock()
+	id = s.ID()
+	autoCleanup = s.Description().AutoCleanup
 
-	if autoCleanup {
-		TryRemoveStreams(id)
-	}
 	return nil
 }
 
@@ -248,7 +258,7 @@ func getOrAddStreamByID[T any](id StreamID) (typedStream[T], error) {
 	if err == nil {
 		return s, nil
 	}
-	if err != StreamNotFoundError {
+	if !errors.Is(err, StreamNotFoundError) {
 		return nil, err
 	}
 

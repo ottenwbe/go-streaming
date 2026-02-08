@@ -151,10 +151,10 @@ type notificationMap[T any] struct {
 	mutex       sync.RWMutex
 }
 
-func newNotificationMap[T any](description StreamDescription, c events.EventChannel[T], metrics *StreamMetrics) *notificationMap[T] {
+func newNotificationMap[T any](description StreamDescription, inChannel events.EventChannel[T], metrics *StreamMetrics) *notificationMap[T] {
 	m := &notificationMap[T]{
 		description: description,
-		channel:     c,
+		channel:     inChannel,
 		receiver:    make(map[SubscriberID]Subscriber[T]),
 		active:      false,
 		metrics:     metrics,
@@ -162,7 +162,7 @@ func newNotificationMap[T any](description StreamDescription, c events.EventChan
 	return m
 }
 
-func (m *notificationMap[T]) newStreamReceiver(streamID StreamID) Subscriber[T] {
+func (m *notificationMap[T]) newSubscriber(streamID StreamID) Subscriber[T] {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -201,26 +201,29 @@ func (m *notificationMap[T]) remove(id SubscriberID) {
 
 func (m *notificationMap[T]) doNotify() {
 	for e := range m.channel {
-		m.callNotifiers(e)
+
+		// avoid concurrency issues with unsubscriptions/subscriptions by working on a snapshot
+		targets := m.snapshot() //TODO: double check if really needed
+		for _, notifier := range targets {
+			// Wrap in a function to recover from panics if a subscriber is closed concurrently.
+			func() {
+				//TODO: double check if really needed
+				defer func() { _ = recover() }()
+				notifier.doNotify(e)
+			}()
+		}
+		m.metrics.incNumEventsOut()
 	}
 }
 
-func (m *notificationMap[T]) callNotifiers(e events.Event[T]) {
+func (m *notificationMap[T]) snapshot() []Subscriber[T] {
 	m.mutex.RLock()
-	targets := make([]Subscriber[T], 0, len(m.receiver))
+	defer m.mutex.RUnlock()
+	copyOfSubscribers := make([]Subscriber[T], 0, len(m.receiver))
 	for _, notifier := range m.receiver {
-		targets = append(targets, notifier)
+		copyOfSubscribers = append(copyOfSubscribers, notifier)
 	}
-	m.mutex.RUnlock()
-
-	for _, notifier := range targets {
-		// Wrap in a function to recover from panics if a subscriber is closed concurrently.
-		func() {
-			defer func() { _ = recover() }()
-			notifier.doNotify(e)
-		}()
-	}
-	m.metrics.incNumEventsOut()
+	return copyOfSubscribers
 }
 
 func (m *notificationMap[T]) len() int {

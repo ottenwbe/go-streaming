@@ -75,7 +75,7 @@ var _ = Describe("Subscriber", func() {
 			streamID = MakeStreamID[string]("test-topic-buffered")
 			ch = make(events.EventChannel[string])
 			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic", WithAsyncReceiver(true)), ch, newStreamMetrics())
-			rec = nMap.newStreamReceiver(streamID)
+			rec = nMap.newSubscriber(streamID)
 		})
 
 		AfterEach(func() {
@@ -125,7 +125,7 @@ var _ = Describe("Subscriber", func() {
 			streamID = MakeStreamID[string]("test-topic-buffered-limit")
 			ch = make(events.EventChannel[string])
 			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic", WithAsyncReceiver(true), WithBufferCapacity(1)), ch, newStreamMetrics())
-			rec = nMap.newStreamReceiver(streamID)
+			rec = nMap.newSubscriber(streamID)
 		})
 
 		AfterEach(func() {
@@ -176,14 +176,14 @@ var _ = Describe("Subscriber", func() {
 		})
 
 		It("should create new receivers", func() {
-			rec := nMap.newStreamReceiver(sID)
+			rec := nMap.newSubscriber(sID)
 			Expect(rec).NotTo(BeNil())
 			Expect(nMap.len()).To(Equal(1))
 		})
 
 		It("should notify all receivers", func() {
-			rec1 := nMap.newStreamReceiver(sID)
-			rec2 := nMap.newStreamReceiver(sID)
+			rec1 := nMap.newSubscriber(sID)
+			rec2 := nMap.newSubscriber(sID)
 
 			event := events.NewEvent("broadcast")
 			go func() { ch <- event }()
@@ -209,15 +209,15 @@ var _ = Describe("Subscriber", func() {
 		})
 
 		It("should remove receivers", func() {
-			rec := nMap.newStreamReceiver(sID)
+			rec := nMap.newSubscriber(sID)
 			Expect(nMap.len()).To(Equal(1))
 			nMap.remove(rec.ID())
 			Expect(nMap.len()).To(Equal(0))
 		})
 
 		It("should clear all receivers", func() {
-			nMap.newStreamReceiver(sID)
-			nMap.newStreamReceiver(sID)
+			nMap.newSubscriber(sID)
+			nMap.newSubscriber(sID)
 			Expect(nMap.len()).To(Equal(2))
 			_ = nMap.close()
 			Expect(nMap.len()).To(Equal(0))
