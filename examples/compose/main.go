@@ -49,7 +49,7 @@ func defineContinuousQueries() (*query.ContinuousQuery, *query.ContinuousQuery) 
 
 func receiveProcessedEvents(res *query.TypedContinuousQuery[int]) {
 	for i := 0; i < numEvents/shift; i++ {
-		e, _ := res.Notify()
+		e, _ := res.Next()
 		zap.S().Infof("event received %v", e)
 	}
 }

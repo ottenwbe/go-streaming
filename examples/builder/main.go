@@ -35,8 +35,8 @@ func main() {
 
 func waitForProcessedEvents(res *query.TypedContinuousQuery[float64]) {
 	for i := 0; i < numEvents/shift; i++ {
-		if e, more := res.Notify(); more {
-			zap.S().Infof("event received %v", e)
+		if e, more := res.Next(); more {
+			zap.S().Infof("event received %v", e[0])
 		}
 	}
 }

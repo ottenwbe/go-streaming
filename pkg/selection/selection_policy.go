@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// Reader allows read-only access to an underlying event buffer that implements Reader
-type Reader[T any] interface {
+// BufferReader allows read-only access to an underlying event buffer that implements BufferReader
+type BufferReader[T any] interface {
 	Get(i int) events.Event[T]
 	Len() int
 }
@@ -39,7 +39,8 @@ const (
 
 // PolicyDescription is a serializable representation of a selection policy.
 type PolicyDescription struct {
-	Type string `json:"type" yaml:"type"`
+	Active bool   `json:"active" yaml:"active"`
+	Type   string `json:"type" yaml:"type"`
 	// For CountingWindowPolicy
 	Size  int `json:"size,omitempty" yaml:"size,omitempty"`
 	Slide int `json:"slide,omitempty" yaml:"slide,omitempty"`
@@ -58,14 +59,14 @@ type (
 		Shift()
 		Offset(offset int)
 		ID() PolicyID
-		SetBuffer(reader Reader[T])
+		SetBuffer(reader BufferReader[T])
 		Description() PolicyDescription
 	}
 
 	// CountingWindowPolicy selects a fixed number of events (n) with a sliding window (shift).
 	CountingWindowPolicy[T any] struct {
 		PolicyID
-		buffer       Reader[T]
+		buffer       BufferReader[T]
 		n            int
 		shift        int
 		currentRange EventSelection
@@ -73,7 +74,7 @@ type (
 	// TemporalWindowPolicy selects events based on a time window.
 	TemporalWindowPolicy[T any] struct {
 		PolicyID
-		buffer       Reader[T]
+		buffer       BufferReader[T]
 		currentRange EventSelection
 		windowStart  time.Time
 		windowEnd    time.Time
@@ -82,7 +83,7 @@ type (
 	}
 )
 
-func (s *CountingWindowPolicy[T]) SetBuffer(buffer Reader[T]) {
+func (s *CountingWindowPolicy[T]) SetBuffer(buffer BufferReader[T]) {
 	s.buffer = buffer
 }
 
@@ -175,7 +176,7 @@ func (s *TemporalWindowPolicy[T]) Offset(offset int) {
 	s.currentRange.End = max(-1, s.currentRange.End-offset)
 }
 
-func (s *TemporalWindowPolicy[T]) SetBuffer(buffer Reader[T]) {
+func (s *TemporalWindowPolicy[T]) SetBuffer(buffer BufferReader[T]) {
 	s.buffer = buffer
 }
 
@@ -212,6 +213,18 @@ func NewTemporalWindowPolicy[T any](startingTime time.Time, windowLength time.Du
 		windowEnd:    startingTime.Add(windowLength),
 		windowLength: windowLength,
 		windowShift:  windowShift,
+	}
+}
+
+func MakePolicy(t string, size int, slide int, windowStart time.Time, windowLength time.Duration, windowShift time.Duration) PolicyDescription {
+	return PolicyDescription{
+		Active:       true,
+		Type:         t,
+		Size:         size,
+		Slide:        slide,
+		WindowStart:  windowStart,
+		WindowLength: windowLength,
+		WindowShift:  windowShift,
 	}
 }
 

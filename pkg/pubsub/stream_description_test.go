@@ -4,32 +4,48 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 var _ = Describe("Descriptions", func() {
+
+	Describe("MakeSubscriberDescription", func() {
+		It("creates a description with defaults", func() {
+			d := pubsub.MakeSubscriberDescription()
+			Expect(d.AsyncReceiver).To(BeFalse())
+			Expect(d.BufferCapacity).To(Equal(0))
+			Expect(d.BufferPolicySelection).To(Equal(selection.PolicyDescription{}))
+		})
+	})
 
 	Describe("MakeStreamDescription", func() {
 		It("creates a description with defaults", func() {
 			d := pubsub.MakeStreamDescription[int]("topic")
 			Expect(d.ID.Topic).To(Equal("topic"))
 			Expect(d.AsyncStream).To(BeFalse())
-			Expect(d.AsyncReceiver).To(BeFalse())
+			Expect(d.AutoCleanup).To(BeFalse())
+			Expect(d.BufferCapacity).To(Equal(0))
+			Expect(d.DefaultSubscribers).To(Equal(pubsub.MakeSubscriberDescription()))
 		})
 
 		It("applies options correctly", func() {
+			v := pubsub.MakeSubscriberDescription()
+
 			d := pubsub.MakeStreamDescription[int]("topic",
 				pubsub.WithAsyncStream(true),
-				pubsub.WithAsyncReceiver(true),
+				pubsub.WithAutoCleanup(true),
+				pubsub.WithDefaultSubscribers(v),
 			)
 			Expect(d.AsyncStream).To(BeTrue())
-			Expect(d.AsyncReceiver).To(BeTrue())
+			Expect(d.AutoCleanup).To(BeTrue())
+			Expect(d.DefaultSubscribers).To(Equal(v))
 		})
 	})
 
-	Describe("MakeStreamDescriptionFromID", func() {
+	Describe("MakeStreamDescriptionByID", func() {
 		It("creates a description from ID with options", func() {
 			id := pubsub.MakeStreamID[string]("topic-id")
-			d := pubsub.MakeStreamDescriptionFromID(id, pubsub.WithAsyncStream(true))
+			d := pubsub.MakeStreamDescriptionByID(id, pubsub.WithAsyncStream(true))
 			Expect(d.ID).To(Equal(id))
 			Expect(d.AsyncStream).To(BeTrue())
 		})
@@ -45,14 +61,13 @@ id:
   topic: 3c191d62-6574-4951-a8e6-4ec83c947250
   type: string
 asyncStream: true
-asyncReceiver: true
-singleFanIn: true
+autoCleanup: true
 `
 				v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
 				Expect(err).To(BeNil())
 				Expect(v.ID).To(Equal(pubsub.MakeStreamID[string]("3c191d62-6574-4951-a8e6-4ec83c947250")))
 				Expect(v.AsyncStream).To(BeTrue())
-				Expect(v.AsyncReceiver).To(BeTrue())
+				Expect(v.AutoCleanup).To(BeTrue())
 			})
 
 			It("parses correctly with default values", func() {
@@ -64,7 +79,7 @@ id:
 				v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
 				Expect(err).To(BeNil())
 				Expect(v.AsyncStream).To(BeFalse())
-				Expect(v.AsyncReceiver).To(BeFalse())
+				Expect(v.AutoCleanup).To(BeFalse())
 			})
 		})
 
@@ -77,14 +92,13 @@ id:
     "type": "float64"
   },
   "asyncStream": true,
-  "asyncReceiver": false,
-  "singleFanIn": true
+  "asyncReceiver": false
 }
 `
 				v, err := pubsub.StreamDescriptionFromJSON([]byte(jsonStr))
 				Expect(err).To(BeNil())
 				Expect(v.AsyncStream).To(BeTrue())
-				Expect(v.AsyncReceiver).To(BeFalse())
+				Expect(v.AutoCleanup).To(BeFalse())
 			})
 		})
 
