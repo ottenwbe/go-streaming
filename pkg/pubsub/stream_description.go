@@ -4,18 +4,50 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 	"gopkg.in/yaml.v3"
 )
 
-var StreamDescriptionWithoutID = errors.New("stream description: no id provided")
+var (
+	StreamDescriptionWithoutID = errors.New("stream description: no id provided")
+)
+
+// SubscriberDescription details the subscriber configurations
+type SubscriberDescription struct {
+	AsyncReceiver         bool                        `yaml:"asyncReceiver" json:"asyncReceiver"`
+	BufferCapacity        int                         `yaml:"bufferCapacity" json:"bufferCapacity"`
+	BufferPolicySelection selection.PolicyDescription `yaml:"selectionPolicy" json:"selectionPolicy"`
+}
 
 // StreamDescription details the stream configurations
 type StreamDescription struct {
-	ID             StreamID `yaml:"id" json:"id"`
-	AsyncStream    bool     `yaml:"asyncStream" json:"asyncStream"`
-	AsyncReceiver  bool     `yaml:"asyncReceiver" json:"asyncReceiver"`
-	BufferCapacity int      `yaml:"bufferCapacity" json:"bufferCapacity"`
-	AutoCleanup    bool     `yaml:"autoCleanup" json:"autoCleanup"`
+	ID                 StreamID              `yaml:"id" json:"id"`
+	AsyncStream        bool                  `yaml:"asyncStream" json:"asyncStream"`
+	BufferCapacity     int                   `yaml:"bufferCapacity" json:"bufferCapacity"`
+	AutoCleanup        bool                  `yaml:"autoCleanup" json:"autoCleanup"`
+	DefaultSubscribers SubscriberDescription `yaml:"subscribers" json:"subscribers"`
+}
+
+// SubscriberOption allows to configure the subscription
+type SubscriberOption func(*SubscriberDescription)
+
+// WithSubscriberSelectionPolicy allows to provide a selection policy for the subscriber
+func WithSubscriberSelectionPolicy(p selection.PolicyDescription) SubscriberOption {
+	return func(s *SubscriberDescription) {
+		s.BufferPolicySelection = p
+	}
+}
+
+func WithSubscriberAsync(asyncReceiver bool) SubscriberOption {
+	return func(s *SubscriberDescription) {
+		s.AsyncReceiver = asyncReceiver
+	}
+}
+
+func WithSubscriberBufferCapacity(capacity int) SubscriberOption {
+	return func(s *SubscriberDescription) {
+		s.BufferCapacity = capacity
+	}
 }
 
 type StreamOption func(*StreamDescription)
@@ -23,12 +55,6 @@ type StreamOption func(*StreamDescription)
 func WithAsyncStream(async bool) StreamOption {
 	return func(s *StreamDescription) {
 		s.AsyncStream = async
-	}
-}
-
-func WithAsyncReceiver(asyncReceiver bool) StreamOption {
-	return func(s *StreamDescription) {
-		s.AsyncReceiver = asyncReceiver
 	}
 }
 
@@ -44,16 +70,40 @@ func WithAutoCleanup(autoCleanup bool) StreamOption {
 	}
 }
 
-// MakeStreamDescription creates a new StreamDescription with the provided parameters.
-func MakeStreamDescription[T any](topic string, options ...StreamOption) StreamDescription {
-	return MakeStreamDescriptionFromID(MakeStreamID[T](topic), options...)
+func WithDefaultSubscribers(subscribers SubscriberDescription) StreamOption {
+	return func(s *StreamDescription) {
+		s.DefaultSubscribers = subscribers
+	}
 }
 
-// MakeStreamDescriptionFromID creates a new StreamDescription using an existing StreamID.
-func MakeStreamDescriptionFromID(id StreamID, options ...StreamOption) StreamDescription {
+// MakeStreamDescription creates a new StreamDescription with the provided parameters.
+func MakeStreamDescription[T any](topic string, options ...StreamOption) StreamDescription {
+	return MakeStreamDescriptionByID(MakeStreamID[T](topic), options...)
+}
+
+// MakeStreamDescriptionByID creates a new StreamDescription using an existing StreamID.
+func MakeStreamDescriptionByID(id StreamID, options ...StreamOption) StreamDescription {
 	d := StreamDescription{
 		ID: id,
 	}
+	for _, option := range options {
+		option(&d)
+	}
+
+	return d
+}
+
+func EnrichSubscriberDescription(description *SubscriberDescription, options ...SubscriberOption) {
+	if description != nil {
+		for _, option := range options {
+			option(description)
+		}
+	}
+}
+
+// MakeSubscriberDescription creates a new SubscriberDescription based on provided options.
+func MakeSubscriberDescription(options ...SubscriberOption) SubscriberDescription {
+	d := SubscriberDescription{}
 	for _, option := range options {
 		option(&d)
 	}

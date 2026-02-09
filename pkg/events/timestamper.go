@@ -25,7 +25,6 @@ func createStampBasedOnOthers(meta StampMeta, stamps ...TimeStamp) TimeStamp {
 		maxTime := stamps[0].EndTime
 
 		newMeta := StampMeta{}
-		maps.Copy(newMeta, meta)
 
 		for _, eventStamp := range stamps {
 
@@ -39,6 +38,7 @@ func createStampBasedOnOthers(meta StampMeta, stamps ...TimeStamp) TimeStamp {
 
 			maps.Copy(newMeta, eventStamp.Meta)
 		}
+		maps.Copy(newMeta, meta)
 
 		return TimeStamp{
 			StartTime: minTime,

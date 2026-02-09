@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
@@ -71,7 +72,7 @@ var _ = Describe("Subscriber", func() {
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-topic-buffered")
 			ch = make(events.EventChannel[string])
-			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic", WithAsyncReceiver(true)), ch, newStreamMetrics())
+			nMap = newNotificationMap[string](MakeSubscriberDescription(WithSubscriberAsync(true)), ch, newStreamMetrics())
 			var err error
 			rec, err = nMap.newSubscriber(streamID)
 			Expect(err).To(BeNil())
@@ -118,7 +119,7 @@ var _ = Describe("Subscriber", func() {
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-topic-buffered-limit")
 			ch = make(events.EventChannel[string])
-			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic", WithAsyncReceiver(true), WithBufferCapacity(1)), ch, newStreamMetrics())
+			nMap = newNotificationMap[string](MakeSubscriberDescription(WithSubscriberAsync(true), WithSubscriberBufferCapacity(1)), ch, newStreamMetrics())
 			var err error
 			rec, err = nMap.newSubscriber(streamID)
 			Expect(err).To(BeNil())
@@ -160,7 +161,7 @@ var _ = Describe("Subscriber", func() {
 
 		BeforeEach(func() {
 			ch = make(events.EventChannel[string])
-			nMap = newNotificationMap[string](MakeStreamDescription[string]("aTopic"), ch, newStreamMetrics())
+			nMap = newNotificationMap[string](MakeSubscriberDescription(), ch, newStreamMetrics())
 			sID = MakeStreamID[string]("topic")
 			nMap.start()
 		})
@@ -220,7 +221,7 @@ var _ = Describe("Subscriber", func() {
 		})
 
 		It("should return error when policy is set for single subscriber", func() {
-			_, err := nMap.newSubscriber(sID, WithSelectionPolicy(selection.NewSelectNextPolicy[string]()))
+			_, err := nMap.newSubscriber(sID, WithSubscriberSelectionPolicy(selection.MakePolicy(selection.CountingWindow, 0, 0, time.Now(), time.Nanosecond, time.Nanosecond)))
 			Expect(err).To(Equal(SubscriberPolicyError))
 		})
 	})

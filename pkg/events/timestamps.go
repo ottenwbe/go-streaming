@@ -10,9 +10,9 @@ import (
 type (
 	StampMeta map[string]interface{}
 	TimeStamp struct {
-		StartTime time.Time `json:"start_time"`
-		EndTime   time.Time `json:"end_time"`
-		Meta      StampMeta `json:"meta"`
+		StartTime time.Time `json:"start_time" yaml:"start_time"`
+		EndTime   time.Time `json:"end_time"  yaml:"end_time"`
+		Meta      StampMeta `json:"meta"  yaml:"meta"`
 	}
 )
 

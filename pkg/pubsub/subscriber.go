@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/ottenwbe/go-streaming/internal/buffer"
@@ -10,26 +11,17 @@ import (
 	"github.com/google/uuid"
 )
 
+var (
+	SubscriberPolicyError = errors.New("subscriber: single subscriber cannot have a selection policy")
+	BufferError           = errors.New("subscriber: batch subscribers need to be async")
+)
+
 // SubscriberID uniquely identifies a stream receiver.
 type SubscriberID uuid.UUID
 
 // String returns the string representation of the SubscriberID.
 func (i SubscriberID) String() string {
 	return uuid.UUID(i).String()
-}
-
-// SubscriptionOption allows to configure the subscription
-type SubscriptionOption[T any] func(*subscriptionOptions[T])
-
-type subscriptionOptions[T any] struct {
-	policy selection.Policy[T]
-}
-
-// WithSelectionPolicy allows to provide a selection policy for the subscriber
-func WithSelectionPolicy[T any](p selection.Policy[T]) SubscriptionOption[T] {
-	return func(o *subscriptionOptions[T]) {
-		o.policy = p
-	}
 }
 
 // AnySubscriber is the common interface for internal management
@@ -175,7 +167,7 @@ func (r *bufferedBatchSubscriber[T]) Next() ([]events.Event[T], bool) {
 }
 
 type notificationMap[T any] struct {
-	description StreamDescription
+	description SubscriberDescription
 	channel     events.EventChannel[T]
 	receiver    map[SubscriberID]AnySubscriber[T]
 	active      bool
@@ -183,7 +175,7 @@ type notificationMap[T any] struct {
 	mutex       sync.RWMutex
 }
 
-func newNotificationMap[T any](description StreamDescription, inChannel events.EventChannel[T], metrics *StreamMetrics) *notificationMap[T] {
+func newNotificationMap[T any](description SubscriberDescription, inChannel events.EventChannel[T], metrics *StreamMetrics) *notificationMap[T] {
 	m := &notificationMap[T]{
 		description: description,
 		channel:     inChannel,
@@ -194,23 +186,25 @@ func newNotificationMap[T any](description StreamDescription, inChannel events.E
 	return m
 }
 
-func (m *notificationMap[T]) newSubscriber(streamID StreamID, opts ...SubscriptionOption[T]) (Subscriber[T], error) {
+func (m *notificationMap[T]) newSubscriber(streamID StreamID, options ...SubscriberOption) (Subscriber[T], error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	options := &subscriptionOptions[T]{}
-	for _, opt := range opts {
-		opt(options)
+	var description = m.description
+	if len(options) > 0 {
+		EnrichSubscriberDescription(&description, options...)
+
+		// validate description
+		if description.BufferPolicySelection.Active {
+			return nil, SubscriberPolicyError
+		}
 	}
 
-	if options.policy != nil {
-		return nil, SubscriberPolicyError
-	}
-
+	// subscribe
 	var rec Subscriber[T]
-	if m.description.AsyncReceiver {
+	if description.AsyncReceiver {
 		var buf buffer.Buffer[T]
-		if m.description.BufferCapacity > 0 {
+		if description.BufferCapacity > 0 {
 			buf = buffer.NewLimitedSimpleAsyncBuffer[T](m.description.BufferCapacity)
 		} else {
 			buf = buffer.NewSimpleAsyncBuffer[T]()
@@ -225,23 +219,32 @@ func (m *notificationMap[T]) newSubscriber(streamID StreamID, opts ...Subscripti
 	return rec, nil
 }
 
-func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, opts ...SubscriptionOption[T]) (BatchSubscriber[T], error) {
+func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, options ...SubscriberOption) (BatchSubscriber[T], error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	options := &subscriptionOptions[T]{}
-	for _, opt := range opts {
-		opt(options)
+	var description = m.description
+	if len(options) > 0 {
+		EnrichSubscriberDescription(&description, options...)
+
+		// validate description
+		if !description.AsyncReceiver {
+			return nil, BufferError
+		}
 	}
 
 	var rec BatchSubscriber[T]
-	if options.policy != nil {
-		buf := buffer.NewConsumableAsyncBuffer[T](options.policy)
+	if description.BufferPolicySelection.Active {
+		p, err := selection.NewPolicyFromDescription[T](description.BufferPolicySelection)
+		if err != nil {
+			return nil, err
+		}
+		buf := buffer.NewConsumableAsyncBuffer[T](p)
 		rec = newBufferedBatchSubscriber[T](streamID, buf)
 	} else {
 		// Default batch subscriber (no policy, just buffering)
 		var buf buffer.Buffer[T]
-		if m.description.BufferCapacity > 0 {
+		if description.BufferCapacity > 0 {
 			buf = buffer.NewLimitedSimpleAsyncBuffer[T](m.description.BufferCapacity)
 		} else {
 			buf = buffer.NewSimpleAsyncBuffer[T]()

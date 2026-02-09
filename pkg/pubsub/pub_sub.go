@@ -19,7 +19,6 @@ var (
 	StreamNotFoundError     = errors.New("pub sub: no stream found")
 	StreamIDNilError        = errors.New("pub sub: stream id nil")
 	StreamRecNilError       = errors.New("pub sub: stream receiver nil")
-	SubscriberPolicyError   = errors.New("pub sub: single subscriber cannot have a selection policy")
 )
 
 // GetOrAddStream adds one streams to the pub sub system or returns an existing one.
@@ -63,17 +62,18 @@ func TryRemoveStreams(streamIDs ...StreamID) {
 }
 
 // SubscribeByTopic to get a stream for this topic with type T
-func SubscribeByTopic[T any](topic string, opts ...SubscriptionOption[T]) (Subscriber[T], error) {
+func SubscribeByTopic[T any](topic string, opts ...SubscriberOption) (Subscriber[T], error) {
+
 	return SubscribeByTopicID[T](MakeStreamID[T](topic), opts...)
 }
 
 // SubscribeBatchByTopic to get a stream for this topic with type T returning a batch subscriber
-func SubscribeBatchByTopic[T any](topic string, opts ...SubscriptionOption[T]) (BatchSubscriber[T], error) {
+func SubscribeBatchByTopic[T any](topic string, opts ...SubscriberOption) (BatchSubscriber[T], error) {
 	return SubscribeBatchByTopicID[T](MakeStreamID[T](topic), opts...)
 }
 
 // SubscribeByTopicID to a stream by the stream's id
-func SubscribeByTopicID[T any](id StreamID, opts ...SubscriptionOption[T]) (Subscriber[T], error) {
+func SubscribeByTopicID[T any](id StreamID, opts ...SubscriberOption) (Subscriber[T], error) {
 	if stream, err := getOrAddStreamByID[T](id); err == nil {
 		return stream.subscribe(opts...)
 	} else {
@@ -82,7 +82,7 @@ func SubscribeByTopicID[T any](id StreamID, opts ...SubscriptionOption[T]) (Subs
 }
 
 // SubscribeBatchByTopicID to a stream by the stream's id returning a batch subscriber
-func SubscribeBatchByTopicID[T any](id StreamID, opts ...SubscriptionOption[T]) (BatchSubscriber[T], error) {
+func SubscribeBatchByTopicID[T any](id StreamID, opts ...SubscriberOption) (BatchSubscriber[T], error) {
 	if stream, err := getOrAddStreamByID[T](id); err == nil {
 		return stream.subscribeBatch(opts...)
 	} else {
@@ -281,7 +281,7 @@ func getOrAddStreamByID[T any](id StreamID) (typedStream[T], error) {
 		return s, nil
 	}
 
-	desc := MakeStreamDescriptionFromID(id, WithAutoCleanup(true))
+	desc := MakeStreamDescriptionByID(id, WithAutoCleanup(true))
 	newS := newStreamFromDescription[T](desc)
 	addAndStartStream(newS)
 
