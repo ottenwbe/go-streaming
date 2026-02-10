@@ -31,26 +31,44 @@ type StreamDescription struct {
 // SubscriberOption allows to configure the subscription
 type SubscriberOption func(*SubscriberDescription)
 
-// WithSubscriberSelectionPolicy allows to provide a selection policy for the subscriber
-func WithSubscriberSelectionPolicy(p selection.PolicyDescription) SubscriberOption {
+// SubscriberWithSelectionPolicy allows to provide a selection policy for the subscriber
+func SubscriberWithSelectionPolicy(p selection.PolicyDescription) SubscriberOption {
 	return func(s *SubscriberDescription) {
 		s.BufferPolicySelection = p
 	}
 }
 
-func WithSubscriberAsync(asyncReceiver bool) SubscriberOption {
+func SubscriberIsAsync(asyncReceiver bool) SubscriberOption {
 	return func(s *SubscriberDescription) {
 		s.AsyncReceiver = asyncReceiver
 	}
 }
 
-func WithSubscriberBufferCapacity(capacity int) SubscriberOption {
+func SubscriberWithBufferCapacity(capacity int) SubscriberOption {
 	return func(s *SubscriberDescription) {
 		s.BufferCapacity = capacity
 	}
 }
 
 type StreamOption func(*StreamDescription)
+
+func WithSubscriberSelectionPolicy(p selection.PolicyDescription) StreamOption {
+	return func(s *StreamDescription) {
+		s.DefaultSubscribers.BufferPolicySelection = p
+	}
+}
+
+func WithSubscriberAsync(asyncReceiver bool) StreamOption {
+	return func(s *StreamDescription) {
+		s.DefaultSubscribers.AsyncReceiver = asyncReceiver
+	}
+}
+
+func WithSubscriberBufferCapacity(capacity int) StreamOption {
+	return func(s *StreamDescription) {
+		s.DefaultSubscribers.BufferCapacity = capacity
+	}
+}
 
 func WithAsyncStream(async bool) StreamOption {
 	return func(s *StreamDescription) {

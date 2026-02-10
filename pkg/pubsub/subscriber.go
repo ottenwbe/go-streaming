@@ -175,6 +175,10 @@ type notificationMap[T any] struct {
 	mutex       sync.RWMutex
 }
 
+//TODO: check if the fanin logic should be directly part of stream
+// pro outside: seperation of conerns
+// inside: less mutexes
+
 func newNotificationMap[T any](description SubscriberDescription, inChannel events.EventChannel[T], metrics *StreamMetrics) *notificationMap[T] {
 	m := &notificationMap[T]{
 		description: description,

@@ -72,7 +72,7 @@ var _ = Describe("Subscriber", func() {
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-topic-buffered")
 			ch = make(events.EventChannel[string])
-			nMap = newNotificationMap[string](MakeSubscriberDescription(WithSubscriberAsync(true)), ch, newStreamMetrics())
+			nMap = newNotificationMap[string](MakeSubscriberDescription(SubscriberIsAsync(true)), ch, newStreamMetrics())
 			var err error
 			rec, err = nMap.newSubscriber(streamID)
 			Expect(err).To(BeNil())
@@ -119,7 +119,7 @@ var _ = Describe("Subscriber", func() {
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-topic-buffered-limit")
 			ch = make(events.EventChannel[string])
-			nMap = newNotificationMap[string](MakeSubscriberDescription(WithSubscriberAsync(true), WithSubscriberBufferCapacity(1)), ch, newStreamMetrics())
+			nMap = newNotificationMap[string](MakeSubscriberDescription(SubscriberIsAsync(true), SubscriberWithBufferCapacity(1)), ch, newStreamMetrics())
 			var err error
 			rec, err = nMap.newSubscriber(streamID)
 			Expect(err).To(BeNil())
@@ -221,7 +221,7 @@ var _ = Describe("Subscriber", func() {
 		})
 
 		It("should return error when policy is set for single subscriber", func() {
-			_, err := nMap.newSubscriber(sID, WithSubscriberSelectionPolicy(selection.MakePolicy(selection.CountingWindow, 0, 0, time.Now(), time.Nanosecond, time.Nanosecond)))
+			_, err := nMap.newSubscriber(sID, SubscriberWithSelectionPolicy(selection.MakePolicy(selection.CountingWindow, 0, 0, time.Now(), time.Nanosecond, time.Nanosecond)))
 			Expect(err).To(Equal(SubscriberPolicyError))
 		})
 	})

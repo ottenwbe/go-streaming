@@ -18,7 +18,7 @@ func main() {
 	var wg sync.WaitGroup
 
 	// 1. Configure the publish/subscribe system for the topic 'Some Integers'
-	streamConfig := pubsub.MakeStreamDescription[int]("Some Integers", pubsub.WithAsyncReceiver(true))
+	streamConfig := pubsub.MakeStreamDescription[int]("Some Integers", pubsub.WithSubscriberAsync(true))
 	intStreamID, err := pubsub.AddOrReplaceStreamFromDescription[int](streamConfig)
 	if err != nil {
 		zap.S().Fatalf("Failed to create stream: %v", err)

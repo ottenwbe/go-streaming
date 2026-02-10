@@ -26,9 +26,9 @@ type (
 	// Publisher routes events to a stream
 	Publisher[T any] interface {
 		// Publish an event to a stream with a given StreamID
-		Publish(event events.Event[T])
+		Publish(event events.Event[T]) error
 		// PublishC publishes content to a stream with a given StreamID
-		PublishC(content T)
+		PublishC(content T) error
 		// ID that identifies this publisher
 		ID() PublisherID
 		// StreamID of the stream that an event of this publisher is published to
@@ -41,10 +41,13 @@ type (
 	}
 )
 type (
+	//TODO: check if the fanin logic should be directly part of stream
+	// pro outside: seperation of conerns
+	// inside: less mutexes
 	publisherFanIn[T any] interface {
 		close() error
-		publish(event events.Event[T])
-		publishC(content T)
+		publish(event events.Event[T]) error
+		publishC(content T) error
 		streamID() StreamID
 		len() int
 		newPublisher() (Publisher[T], error)
@@ -72,9 +75,9 @@ func (e emptyPublisherFanIn[T]) setPublishers(publishers []*defaultPublisher[T])
 
 func (e emptyPublisherFanIn[T]) copyFrom(publishers publisherFanIn[T]) {}
 
-func (e emptyPublisherFanIn[T]) publish(events.Event[T]) {}
+func (e emptyPublisherFanIn[T]) publish(events.Event[T]) error { return nil }
 
-func (e emptyPublisherFanIn[T]) publishC(T) {}
+func (e emptyPublisherFanIn[T]) publishC(T) error { return nil }
 
 func (e emptyPublisherFanIn[T]) streamID() StreamID {
 	return NilStreamID()
@@ -141,17 +144,18 @@ func (p *defaultPublisherFanIn[T]) streamID() StreamID {
 	return p.description.ID
 }
 
-func (p *defaultPublisherFanIn[T]) publishC(content T) {
-	p.publish(events.NewEvent(content))
+func (p *defaultPublisherFanIn[T]) publishC(content T) error {
+	return p.publish(events.NewEvent(content))
 }
 
-func (p *defaultPublisherFanIn[T]) publish(event events.Event[T]) {
+func (p *defaultPublisherFanIn[T]) publish(event events.Event[T]) error {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
 
 	p.metrics.incNumEventsIn()
-
 	p.channel <- event
+
+	return nil
 }
 
 func (p *defaultPublisherFanIn[T]) newPublisher() (Publisher[T], error) {
@@ -201,9 +205,9 @@ func (p *defaultPublisher[T]) ID() PublisherID {
 	return p.id
 }
 
-func (p *defaultPublisher[T]) PublishC(content T) {
-	p.fanIn.publishC(content)
+func (p *defaultPublisher[T]) PublishC(content T) error {
+	return p.fanIn.publishC(content)
 }
-func (p *defaultPublisher[T]) Publish(event events.Event[T]) {
-	p.fanIn.publish(event)
+func (p *defaultPublisher[T]) Publish(event events.Event[T]) error {
+	return p.fanIn.publish(event)
 }
