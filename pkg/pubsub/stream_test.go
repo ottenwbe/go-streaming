@@ -86,7 +86,7 @@ var _ = Describe("Stream", func() {
 		)
 
 		BeforeEach(func() {
-			desc = pubsub.MakeStreamDescription[string](topic, pubsub.WithAsyncStream(true))
+			desc = pubsub.MakeStreamDescription[string](topic, pubsub.WithAsynchronousStream(true))
 			var err error
 			streamID, err = pubsub.AddOrReplaceStreamFromDescription[string](desc)
 			Expect(err).To(BeNil())
@@ -156,7 +156,7 @@ var _ = Describe("Stream", func() {
 					}
 				})
 
-				desc2 := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsyncStream(false))
+				desc2 := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsynchronousStream(false))
 				streamID2, err := pubsub.AddOrReplaceStreamFromDescription[string](desc2)
 				Expect(err).To(BeNil())
 				defer pubsub.TryRemoveStreams(streamID2)

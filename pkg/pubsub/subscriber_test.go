@@ -66,13 +66,11 @@ var _ = Describe("Subscriber", func() {
 			rec      Subscriber[string]
 			streamID StreamID
 			nMap     *notificationMap[string]
-			ch       events.EventChannel[string]
 		)
 
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-topic-buffered")
-			ch = make(events.EventChannel[string])
-			nMap = newNotificationMap[string](MakeSubscriberDescription(SubscriberIsAsync(true)), ch, newStreamMetrics())
+			nMap = newNotificationMap[string](MakeSubscriberDescription(), newStreamMetrics())
 			var err error
 			rec, err = nMap.newSubscriber(streamID)
 			Expect(err).To(BeNil())
@@ -113,13 +111,11 @@ var _ = Describe("Subscriber", func() {
 			rec      Subscriber[string]
 			streamID StreamID
 			nMap     *notificationMap[string]
-			ch       events.EventChannel[string]
 		)
 
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-topic-buffered-limit")
-			ch = make(events.EventChannel[string])
-			nMap = newNotificationMap[string](MakeSubscriberDescription(SubscriberIsAsync(true), SubscriberWithBufferCapacity(1)), ch, newStreamMetrics())
+			nMap = newNotificationMap[string](MakeSubscriberDescription(SubscriberWithBufferCapacity(1)), newStreamMetrics())
 			var err error
 			rec, err = nMap.newSubscriber(streamID)
 			Expect(err).To(BeNil())
@@ -156,12 +152,10 @@ var _ = Describe("Subscriber", func() {
 		var (
 			nMap *notificationMap[string]
 			sID  StreamID
-			ch   events.EventChannel[string]
 		)
 
 		BeforeEach(func() {
-			ch = make(events.EventChannel[string])
-			nMap = newNotificationMap[string](MakeSubscriberDescription(), ch, newStreamMetrics())
+			nMap = newNotificationMap[string](MakeSubscriberDescription(), newStreamMetrics())
 			sID = MakeStreamID[string]("topic")
 			nMap.start()
 		})
@@ -181,14 +175,14 @@ var _ = Describe("Subscriber", func() {
 			rec1, _ := nMap.newSubscriber(sID)
 			rec2, _ := nMap.newSubscriber(sID)
 
-			event := events.NewEvent("broadcast")
-			go func() { ch <- event }()
-
 			var (
 				e1, e2       events.Event[string]
 				more1, more2 bool
 				wg           sync.WaitGroup
 			)
+
+			event := events.NewEvent("broadcast")
+			wg.Go(func() { _ = nMap.notify(event) })
 
 			wg.Go(func() {
 				e1, more1 = rec1.Next()

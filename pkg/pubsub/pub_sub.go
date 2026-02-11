@@ -234,7 +234,7 @@ func doAddOrReplaceStream(newStream stream) (StreamID, error) {
 	}()
 
 	if existingStream != nil {
-		newStream.copyFrom(existingStream)
+		newStream.migrateStream(existingStream)
 		existingStream.tryClose()
 	}
 
@@ -245,7 +245,7 @@ func doAddOrReplaceStream(newStream stream) (StreamID, error) {
 
 func doTryRemoveStreams(streamIDs ...StreamID) {
 	for _, id := range streamIDs {
-		if s, ok := streamIdx[id]; ok && !s.hasPublishersOrSubscribers() {
+		if s, ok := streamIdx[id]; ok {
 			if s.tryClose() {
 				delete(streamIdx, id)
 			}

@@ -14,6 +14,7 @@ import (
 var (
 	SubscriberPolicyError = errors.New("subscriber: single subscriber cannot have a selection policy")
 	BufferError           = errors.New("subscriber: batch subscribers need to be async")
+	NotificationError     = errors.New("subscriber: could not notify all subscribers")
 )
 
 // SubscriberID uniquely identifies a stream receiver.
@@ -28,7 +29,7 @@ func (i SubscriberID) String() string {
 type AnySubscriber[T any] interface {
 	StreamID() StreamID
 	ID() SubscriberID
-	doNotify(e events.Event[T])
+	doNotify(e events.Event[T]) error
 	close()
 }
 
@@ -103,8 +104,9 @@ func (r *defaultSubscriber[T]) close() {
 	}
 }
 
-func (r *defaultSubscriber[T]) doNotify(event events.Event[T]) {
+func (r *defaultSubscriber[T]) doNotify(event events.Event[T]) error {
 	r.notify <- event
+	return nil
 }
 
 func (r *defaultSubscriber[T]) StreamID() StreamID {
@@ -124,8 +126,8 @@ func (r *defaultSubscriber[T]) Next() (events.Event[T], bool) {
 	return e, more
 }
 
-func (r *bufferedSingleSubscriber[T]) doNotify(event events.Event[T]) {
-	r.buffer.AddEvent(event)
+func (r *bufferedSingleSubscriber[T]) doNotify(event events.Event[T]) error {
+	return r.buffer.AddEvent(event)
 }
 
 func (r *bufferedSingleSubscriber[T]) close() {
@@ -145,8 +147,8 @@ func (r *bufferedSingleSubscriber[T]) Next() (events.Event[T], bool) {
 	return r.buffer.GetAndRemoveNextEvent(), r.active
 }
 
-func (r *bufferedBatchSubscriber[T]) doNotify(event events.Event[T]) {
-	r.buffer.AddEvent(event)
+func (r *bufferedBatchSubscriber[T]) doNotify(event events.Event[T]) error {
+	return r.buffer.AddEvent(event)
 }
 
 func (r *bufferedBatchSubscriber[T]) close() {
@@ -168,21 +170,15 @@ func (r *bufferedBatchSubscriber[T]) Next() ([]events.Event[T], bool) {
 
 type notificationMap[T any] struct {
 	description SubscriberDescription
-	channel     events.EventChannel[T]
 	receiver    map[SubscriberID]AnySubscriber[T]
 	active      bool
 	metrics     *StreamMetrics
 	mutex       sync.RWMutex
 }
 
-//TODO: check if the fanin logic should be directly part of stream
-// pro outside: seperation of conerns
-// inside: less mutexes
-
-func newNotificationMap[T any](description SubscriberDescription, inChannel events.EventChannel[T], metrics *StreamMetrics) *notificationMap[T] {
+func newNotificationMap[T any](description SubscriberDescription, metrics *StreamMetrics) *notificationMap[T] {
 	m := &notificationMap[T]{
 		description: description,
-		channel:     inChannel,
 		receiver:    make(map[SubscriberID]AnySubscriber[T]),
 		active:      false,
 		metrics:     metrics,
@@ -206,10 +202,10 @@ func (m *notificationMap[T]) newSubscriber(streamID StreamID, options ...Subscri
 
 	// subscribe
 	var rec Subscriber[T]
-	if description.AsyncReceiver {
+	if !description.Synchronous {
 		var buf buffer.Buffer[T]
 		if description.BufferCapacity > 0 {
-			buf = buffer.NewLimitedSimpleAsyncBuffer[T](m.description.BufferCapacity)
+			buf = buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
 		} else {
 			buf = buffer.NewSimpleAsyncBuffer[T]()
 		}
@@ -232,7 +228,7 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, options ...Su
 		EnrichSubscriberDescription(&description, options...)
 
 		// validate description
-		if !description.AsyncReceiver {
+		if description.Synchronous {
 			return nil, BufferError
 		}
 	}
@@ -249,7 +245,7 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, options ...Su
 		// Default batch subscriber (no policy, just buffering)
 		var buf buffer.Buffer[T]
 		if description.BufferCapacity > 0 {
-			buf = buffer.NewLimitedSimpleAsyncBuffer[T](m.description.BufferCapacity)
+			buf = buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
 		} else {
 			buf = buffer.NewSimpleAsyncBuffer[T]()
 		}
@@ -282,21 +278,44 @@ func (m *notificationMap[T]) remove(id SubscriberID) {
 	}
 }
 
-func (m *notificationMap[T]) doNotify() {
-	for e := range m.channel {
+func (m *notificationMap[T]) notify(event events.Event[T]) error {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
 
-		// avoid concurrency issues with unsubscriptions/subscriptions by working on a snapshot
-		targets := m.snapshot()
-		for _, notifier := range targets {
-			// Wrap in a function to recover from panics if a subscriber is closed concurrently.
-			func() {
-				defer func() { _ = recover() }()
-				notifier.doNotify(e)
-			}()
-		}
-		m.metrics.incNumEventsOut()
+	var err error
+
+	for _, notifier := range m.receiver {
+		// Wrap in a function to recover from panics if a subscriber is closed concurrently.
+		func() {
+			defer func() { _ = recover() }()
+			errNotify := notifier.doNotify(event)
+			if errNotify != nil {
+				err = NotificationError
+			}
+		}()
 	}
+	m.metrics.incNumEventsOut()
+
+	return err
 }
+
+//
+//func (m *notificationMap[T]) doNotify() {
+//
+//	for e := range m.channel {
+//
+//		// avoid concurrency issues with unsubscriptions/subscriptions by working on a snapshot
+//		targets := m.snapshot()
+//		for _, notifier := range targets {
+//			// Wrap in a function to recover from panics if a subscriber is closed concurrently.
+//			func() {
+//				defer func() { _ = recover() }()
+//				notifier.doNotify(e)
+//			}()
+//		}
+//		m.metrics.incNumEventsOut()
+//	}
+//}
 
 func (m *notificationMap[T]) snapshot() []AnySubscriber[T] {
 	m.mutex.RLock()
@@ -330,6 +349,6 @@ func (m *notificationMap[T]) copyFrom(old *notificationMap[T]) {
 func (m *notificationMap[T]) start() {
 	if !m.active {
 		m.active = true
-		go m.doNotify()
+		//go m.doNotify()
 	}
 }

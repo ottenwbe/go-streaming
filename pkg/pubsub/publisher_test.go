@@ -15,17 +15,27 @@ type mockStream[T any] struct {
 	publishedEvents []events.Event[T]
 }
 
+func (m *mockStream[T]) subscribeBatch(opts ...SubscriberOption) (BatchSubscriber[T], error) {
+	return nil, nil
+}
+func (m *mockStream[T]) publishC(content T) error {
+	e := events.NewEvent(content)
+	return m.publish(e)
+}
+func (m *mockStream[T]) publishers() publisherArr[T] { return nil }
+
+func (m *mockStream[T]) clearPublishers() {}
 func (m *mockStream[T]) streamMetrics() *StreamMetrics {
 	return newStreamMetrics()
 }
-
-func (m *mockStream[T]) run()                             {}
-func (m *mockStream[T]) tryClose() bool                   { return true }
-func (m *mockStream[T]) forceClose()                      { close(m.channel) }
-func (m *mockStream[T]) hasPublishersOrSubscribers() bool { return false }
-func (m *mockStream[T]) ID() StreamID                     { return m.id }
-func (m *mockStream[T]) Description() StreamDescription   { return StreamDescription{} }
-func (m *mockStream[T]) copyFrom(stream)                  {}
+func (m *mockStream[T]) run()                                  {}
+func (m *mockStream[T]) tryClose() bool                        { return true }
+func (m *mockStream[T]) forceClose()                           { close(m.channel) }
+func (m *mockStream[T]) hasPublishersOrSubscribers() bool      { return false }
+func (m *mockStream[T]) ID() StreamID                          { return m.id }
+func (m *mockStream[T]) Description() StreamDescription        { return StreamDescription{} }
+func (m *mockStream[T]) migrateStream(stream)                  {}
+func (m *mockStream[T]) addPublisher(pub *defaultPublisher[T]) {}
 
 func (m *mockStream[T]) publish(e events.Event[T]) error {
 	m.publishedEvents = append(m.publishedEvents, e)
@@ -37,8 +47,8 @@ func (m *mockStream[T]) unsubscribe(id SubscriberID)         {}
 func (m *mockStream[T]) newPublisher() (Publisher[T], error) { return nil, nil }
 func (m *mockStream[T]) removePublisher(id PublisherID)      {}
 func (m *mockStream[T]) subscribers() *notificationMap[T]    { return nil }
-func (m *mockStream[T]) publishers() publisherFanIn[T]       { return nil }
-func (m *mockStream[T]) events() buffer.Buffer[T]            { return nil }
+
+func (m *mockStream[T]) events() buffer.Buffer[T] { return nil }
 
 func createMockStream[T any](id StreamID) *mockStream[T] {
 
@@ -81,7 +91,7 @@ var _ = Describe("Publisher", func() {
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-stream")
 			mockS = createMockStream[string](streamID)
-			fanIn = newPublisherSync[string](mockS.Description(), mockS.channel, newStreamMetrics())
+			fanIn = mockS
 			pub = newDefaultPublisher(streamID, fanIn)
 		})
 
@@ -128,69 +138,12 @@ var _ = Describe("Publisher", func() {
 	Describe("emptyPublisherFanIn", func() {
 		var empty emptyPublisherFanIn[string]
 
-		It("should have length 0", func() {
-			Expect(empty.len()).To(Equal(0))
-		})
-
-		It("should return error on newPublisher", func() {
-			p, err := empty.newPublisher()
-			Expect(p).To(BeNil())
-			Expect(err).To(Equal(EmptyPublisherFanInPublisherError))
-		})
-
 		It("should do nothing on publish", func() {
 			empty.publish(events.NewEvent("test"))
-
 		})
 
 		It("should do nothing on publishC", func() {
 			empty.publishC("test")
-
-		})
-	})
-
-	Describe("defaultPublisherFanIn", func() {
-		var (
-			mockS *mockStream[string]
-			fanIn publisherFanIn[string]
-		)
-
-		BeforeEach(func() {
-			mockS = createMockStream[string](MakeStreamID[string]("multi"))
-			fanIn = newPublisherSync[string](mockS.Description(), mockS.channel, newStreamMetrics())
-		})
-
-		AfterEach(func() {
-			mockS.forceClose()
-		})
-
-		It("should allow multiple publishers", func() {
-			p1, err1 := fanIn.newPublisher()
-			p2, err2 := fanIn.newPublisher()
-			Expect(err1).To(BeNil())
-			Expect(err2).To(BeNil())
-			Expect(p1).NotTo(BeNil())
-			Expect(p2).NotTo(BeNil())
-			Expect(fanIn.len()).To(Equal(2))
-		})
-
-		It("should remove publisher", func() {
-			p1, _ := fanIn.newPublisher()
-			p2, _ := fanIn.newPublisher()
-			Expect(fanIn.len()).To(Equal(2))
-			fanIn.remove(p1.ID())
-			Expect(fanIn.len()).To(Equal(1))
-			fanIn.remove(p2.ID())
-			Expect(fanIn.len()).To(Equal(0))
-		})
-
-		It("should clear publishers", func() {
-			p1, _ := fanIn.newPublisher()
-			fanIn.close()
-			Expect(fanIn.len()).To(Equal(0))
-
-			p1.PublishC("test")
-			Expect(mockS.publishedEvents).To(BeEmpty())
 		})
 	})
 })

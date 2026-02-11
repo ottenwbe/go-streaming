@@ -12,7 +12,7 @@ var _ = Describe("Descriptions", func() {
 	Describe("MakeSubscriberDescription", func() {
 		It("creates a description with defaults", func() {
 			d := pubsub.MakeSubscriberDescription()
-			Expect(d.AsyncReceiver).To(BeFalse())
+			Expect(d.Synchronous).To(BeFalse())
 			Expect(d.BufferCapacity).To(Equal(0))
 			Expect(d.BufferPolicySelection).To(Equal(selection.PolicyDescription{}))
 		})
@@ -22,7 +22,7 @@ var _ = Describe("Descriptions", func() {
 		It("creates a description with defaults", func() {
 			d := pubsub.MakeStreamDescription[int]("topic")
 			Expect(d.ID.Topic).To(Equal("topic"))
-			Expect(d.AsyncStream).To(BeFalse())
+			Expect(d.Asynchronous).To(BeFalse())
 			Expect(d.AutoCleanup).To(BeFalse())
 			Expect(d.BufferCapacity).To(Equal(0))
 			Expect(d.DefaultSubscribers).To(Equal(pubsub.MakeSubscriberDescription()))
@@ -32,11 +32,11 @@ var _ = Describe("Descriptions", func() {
 			v := pubsub.MakeSubscriberDescription()
 
 			d := pubsub.MakeStreamDescription[int]("topic",
-				pubsub.WithAsyncStream(true),
+				pubsub.WithAsynchronousStream(true),
 				pubsub.WithAutoCleanup(true),
 				pubsub.WithDefaultSubscribers(v),
 			)
-			Expect(d.AsyncStream).To(BeTrue())
+			Expect(d.Asynchronous).To(BeTrue())
 			Expect(d.AutoCleanup).To(BeTrue())
 			Expect(d.DefaultSubscribers).To(Equal(v))
 		})
@@ -45,9 +45,9 @@ var _ = Describe("Descriptions", func() {
 	Describe("MakeStreamDescriptionByID", func() {
 		It("creates a description from ID with options", func() {
 			id := pubsub.MakeStreamID[string]("topic-id")
-			d := pubsub.MakeStreamDescriptionByID(id, pubsub.WithAsyncStream(true))
+			d := pubsub.MakeStreamDescriptionByID(id, pubsub.WithAsynchronousStream(true))
 			Expect(d.ID).To(Equal(id))
-			Expect(d.AsyncStream).To(BeTrue())
+			Expect(d.Asynchronous).To(BeTrue())
 		})
 	})
 
@@ -66,7 +66,7 @@ autoCleanup: true
 				v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
 				Expect(err).To(BeNil())
 				Expect(v.ID).To(Equal(pubsub.MakeStreamID[string]("3c191d62-6574-4951-a8e6-4ec83c947250")))
-				Expect(v.AsyncStream).To(BeTrue())
+				Expect(v.Asynchronous).To(BeTrue())
 				Expect(v.AutoCleanup).To(BeTrue())
 			})
 
@@ -78,7 +78,7 @@ id:
 `
 				v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
 				Expect(err).To(BeNil())
-				Expect(v.AsyncStream).To(BeFalse())
+				Expect(v.Asynchronous).To(BeFalse())
 				Expect(v.AutoCleanup).To(BeFalse())
 			})
 		})
@@ -97,7 +97,7 @@ id:
 `
 				v, err := pubsub.StreamDescriptionFromJSON([]byte(jsonStr))
 				Expect(err).To(BeNil())
-				Expect(v.AsyncStream).To(BeTrue())
+				Expect(v.Asynchronous).To(BeTrue())
 				Expect(v.AutoCleanup).To(BeFalse())
 			})
 		})

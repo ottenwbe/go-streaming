@@ -14,7 +14,7 @@ var (
 
 // SubscriberDescription details the subscriber configurations
 type SubscriberDescription struct {
-	AsyncReceiver         bool                        `yaml:"asyncReceiver" json:"asyncReceiver"`
+	Synchronous           bool                        `yaml:"synchronous" json:"synchronous"`
 	BufferCapacity        int                         `yaml:"bufferCapacity" json:"bufferCapacity"`
 	BufferPolicySelection selection.PolicyDescription `yaml:"selectionPolicy" json:"selectionPolicy"`
 }
@@ -22,7 +22,7 @@ type SubscriberDescription struct {
 // StreamDescription details the stream configurations
 type StreamDescription struct {
 	ID                 StreamID              `yaml:"id" json:"id"`
-	AsyncStream        bool                  `yaml:"asyncStream" json:"asyncStream"`
+	Asynchronous       bool                  `yaml:"asyncStream" json:"asyncStream"`
 	BufferCapacity     int                   `yaml:"bufferCapacity" json:"bufferCapacity"`
 	AutoCleanup        bool                  `yaml:"autoCleanup" json:"autoCleanup"`
 	DefaultSubscribers SubscriberDescription `yaml:"subscribers" json:"subscribers"`
@@ -38,9 +38,9 @@ func SubscriberWithSelectionPolicy(p selection.PolicyDescription) SubscriberOpti
 	}
 }
 
-func SubscriberIsAsync(asyncReceiver bool) SubscriberOption {
+func SubscriberIsSync(synchronous bool) SubscriberOption {
 	return func(s *SubscriberDescription) {
-		s.AsyncReceiver = asyncReceiver
+		s.Synchronous = synchronous
 	}
 }
 
@@ -58,9 +58,9 @@ func WithSubscriberSelectionPolicy(p selection.PolicyDescription) StreamOption {
 	}
 }
 
-func WithSubscriberAsync(asyncReceiver bool) StreamOption {
+func WithSubscriberSync(synchronous bool) StreamOption {
 	return func(s *StreamDescription) {
-		s.DefaultSubscribers.AsyncReceiver = asyncReceiver
+		s.DefaultSubscribers.Synchronous = synchronous
 	}
 }
 
@@ -70,9 +70,9 @@ func WithSubscriberBufferCapacity(capacity int) StreamOption {
 	}
 }
 
-func WithAsyncStream(async bool) StreamOption {
+func WithAsynchronousStream(async bool) StreamOption {
 	return func(s *StreamDescription) {
-		s.AsyncStream = async
+		s.Asynchronous = async
 	}
 }
 

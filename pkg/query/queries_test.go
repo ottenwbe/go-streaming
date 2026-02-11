@@ -13,7 +13,7 @@ var _ = Describe("Query Builder", func() {
 
 	Context("Build", func() {
 		It("creates a successful query", func() {
-			b := query.NewBuilder().Stream(query.S[int]("builder1", pubsub.WithAsyncStream(true))).Query(query.ContinuousBatchSum[int]("builder1", "builder2", selection.NewCountingWindowPolicy[int](10, 10)))
+			b := query.NewBuilder().Stream(query.S[int]("builder1", pubsub.WithAsynchronousStream(true))).Query(query.ContinuousBatchSum[int]("builder1", "builder2", selection.NewCountingWindowPolicy[int](10, 10)))
 			q, ok := b.Build()
 
 			Expect(ok).To(BeNil())

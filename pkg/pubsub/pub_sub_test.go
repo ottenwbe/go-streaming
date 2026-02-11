@@ -35,7 +35,7 @@ var _ = Describe("PubSub", func() {
 		It("is not replacing an existing stream if the latter should be preserved", func() {
 			var topic = "test-ps-2"
 			d1 := pubsub.MakeStreamDescription[string](topic)
-			d2 := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsyncStream(true))
+			d2 := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsynchronousStream(true))
 
 			stream1, _ := pubsub.GetOrAddStream[string](d1)
 			stream2, _ := pubsub.GetOrAddStream[string](d2)
@@ -104,7 +104,7 @@ asyncStream: true
 		})
 		It("allows for two streams with same name but different types to exist", func() {
 			s1 := pubsub.MakeStreamDescription[int]("same")
-			s2 := pubsub.MakeStreamDescription[float64]("same", pubsub.WithAsyncStream(true))
+			s2 := pubsub.MakeStreamDescription[float64]("same", pubsub.WithAsynchronousStream(true))
 
 			s1ID, _ := pubsub.AddOrReplaceStreamFromDescription[int](s1)
 			s2ID, _ := pubsub.AddOrReplaceStreamFromDescription[float64](s2)
@@ -123,7 +123,7 @@ asyncStream: true
 		It("supports replacing streams", func() {
 			topic := "streamA"
 			s1 := pubsub.MakeStreamDescription[int](topic)
-			s2 := pubsub.MakeStreamDescription[int](topic, pubsub.WithAsyncStream(true))
+			s2 := pubsub.MakeStreamDescription[int](topic, pubsub.WithAsynchronousStream(true))
 
 			s1ID, _ := pubsub.AddOrReplaceStreamFromDescription[int](s1)
 			s2ID, _ := pubsub.AddOrReplaceStreamFromDescription[int](s2)
@@ -135,7 +135,7 @@ asyncStream: true
 
 			Expect(err1).To(BeNil())
 			Expect(err2).To(BeNil())
-			Expect(r1.AsyncStream).To(BeTrue())
+			Expect(r1.Asynchronous).To(BeTrue())
 		})
 	})
 
