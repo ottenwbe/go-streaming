@@ -127,8 +127,8 @@ asyncStream: true
 
 			s1ID, _ := pubsub.AddOrReplaceStreamFromDescription[int](s1)
 			s2ID, _ := pubsub.AddOrReplaceStreamFromDescription[int](s2)
-			defer pubsub.ForceRemoveStream(s1ID)
-			defer pubsub.ForceRemoveStream(s2ID)
+			defer pubsub.TryRemoveStreams(s1ID)
+			defer pubsub.TryRemoveStreams(s2ID)
 
 			r1, err1 := pubsub.GetDescription(s1ID)
 			_, err2 := pubsub.GetDescription(s2ID)

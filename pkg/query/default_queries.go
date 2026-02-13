@@ -42,9 +42,9 @@ func ContinuousGreater[T number](inEventType, outEvenType string, greaterThan T)
 	greater := func(input engine.SingleStreamSelection1[T]) []events.Event[T] {
 		if input.GetContent() > greaterThan {
 			return []events.Event[T]{input}
-		} else {
-			return []events.Event[T]{}
 		}
+
+		return []events.Event[T]{}
 	}
 
 	return TemplateQueryMultipleEventsOverSingleStreamSelection1[T, T](inEventType, greater, outEvenType)

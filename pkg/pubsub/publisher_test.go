@@ -22,7 +22,7 @@ func (m *mockStream[T]) publishC(content T) error {
 	e := events.NewEvent(content)
 	return m.publish(e)
 }
-func (m *mockStream[T]) publishers() publisherArr[T] { return nil }
+func (m *mockStream[T]) publishers() publisherManager[T] { return nil }
 
 func (m *mockStream[T]) clearPublishers() {}
 func (m *mockStream[T]) streamMetrics() *StreamMetrics {
@@ -36,7 +36,8 @@ func (m *mockStream[T]) ID() StreamID                          { return m.id }
 func (m *mockStream[T]) Description() StreamDescription        { return StreamDescription{} }
 func (m *mockStream[T]) migrateStream(stream)                  {}
 func (m *mockStream[T]) addPublisher(pub *defaultPublisher[T]) {}
-
+func (m *mockStream[T]) lock()                                 {}
+func (m *mockStream[T]) unlock()                               {}
 func (m *mockStream[T]) publish(e events.Event[T]) error {
 	m.publishedEvents = append(m.publishedEvents, e)
 	return nil

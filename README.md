@@ -2,7 +2,7 @@
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/ottenwbe/go-streaming/blob/main/LICENSE)
 [![Go](https://github.com/ottenwbe/go-streaming/actions/workflows/go.yml/badge.svg)](https://github.com/ottenwbe/go-streaming/actions/workflows/go.yml)
 
-This project is created as a playground to understand concurrency in go. 
+This project is created as a playground to understand concurrency in go; channels, mutexes, etc. 
 That said the idea is to build a simple event streaming playground.
 The processing engine is mainly designed for flexibility and extendability to test (GoLang) features.
 It provides a lightweight, in-memory Pub/Sub system and a Continuous Query engine. Hence, also no specific language like CQL is supported.

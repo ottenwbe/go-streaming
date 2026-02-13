@@ -143,18 +143,26 @@ var _ = Describe("Stream", func() {
 				Expect(err).To(BeNil())
 				defer pubsub.Unsubscribe[string](s)
 
+				fmt.Println("event 1")
+
 				wg.Go(func() {
 					for i := range numE {
+						fmt.Println("event send")
 						e := events.NewEvent[string](fmt.Sprintf("a%v", i))
 						p.Publish(e)
+
 					}
 				})
 
 				wg.Go(func() {
 					for range numE {
+						fmt.Println("event rec")
 						_, _ = s.Next()
+
 					}
 				})
+
+				fmt.Println("event 2")
 
 				desc2 := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsynchronousStream(false))
 				streamID2, err := pubsub.AddOrReplaceStreamFromDescription[string](desc2)
