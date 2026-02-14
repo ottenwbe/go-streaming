@@ -5,7 +5,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ottenwbe/go-streaming/internal/buffer"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
@@ -23,22 +22,28 @@ type stream interface {
 	ID() StreamID
 	Description() StreamDescription
 
-	migrateStream(stream)
+	migrateStream(StreamDescription)
 	streamMetrics() *StreamMetrics
 }
 
 type typedStream[T any] interface {
 	stream
 
-	subscribe(opts ...SubscriberOption) (Subscriber[T], error)
-	subscribeBatch(opts ...SubscriberOption) (BatchSubscriber[T], error)
-	unsubscribe(id SubscriberID)
-	subscribers() *notificationMap[T]
+	SubscribersManagement[T]
 
 	publisherFanIn[T]
 	publishers() publisherManager[T]
 	removePublisher(publisherID PublisherID)
 	newPublisher() (Publisher[T], error)
+
+	lock()
+	unlock()
+}
+
+type streamExecutor[T any] interface {
+	publisherFanIn[T]
+	close()
+	run()
 }
 
 type baseStream[T any] struct {
@@ -52,8 +57,90 @@ type baseStream[T any] struct {
 	active  bool
 	started bool
 
+	streamCoordinator streamExecutor[T]
+
 	mutex sync.RWMutex
 	cond  *sync.Cond
+}
+
+func (b *baseStream[T]) run() {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if !b.started {
+		b.started = true
+		b.active = true
+
+		b.subscriberMap.start()
+
+		b.streamCoordinator.run()
+		b.cond.Broadcast()
+	}
+}
+
+func (b *baseStream[T]) tryClose() bool {
+	return b.doTryClose(false)
+}
+
+func (b *baseStream[T]) forceClose() {
+	b.doTryClose(true)
+}
+
+func (b *baseStream[T]) doTryClose(force bool) bool {
+
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if force {
+		b.subscriberMap.close()
+		b.publisherArray.closePublishers()
+	}
+
+	if (!b.hasPublishersOrSubscribers() || force) && b.active {
+		b.active = false
+		b.streamCoordinator.close()
+		return true
+	}
+	return false
+}
+
+func (b *baseStream[T]) migrateStream(description StreamDescription) {
+
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	newEngine := newStreamEngine(description, b.subscriberMap)
+
+	b.streamMetrics().WaitUntilDrained()
+
+	b.description = description
+	b.subscriberMap.description = description.DefaultSubscribers
+	b.streamCoordinator.close()
+	b.streamCoordinator = newEngine
+	b.streamCoordinator.run()
+}
+
+func (b *baseStream[T]) publishC(content T) error {
+	e := events.NewEvent(content)
+	return b.publish(e)
+}
+
+func (b *baseStream[T]) publish(event events.Event[T]) error {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+	for !b.started {
+		b.cond.Wait()
+	}
+
+	b.metrics.incNumEventsIn()
+	return b.streamCoordinator.publish(event)
+}
+
+func (b *baseStream[T]) newPublisher() (Publisher[T], error) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	return b.publisherArray.newPublisher(b.ID(), b)
 }
 
 type StreamMetrics struct {
@@ -110,138 +197,127 @@ func newStreamMetrics() *StreamMetrics {
 }
 
 type localSyncStream[T any] struct {
-	baseStream[T]
+	subscriberMap subscribers[T]
 }
 
 type localAsyncStream[T any] struct {
-	baseStream[T]
-
-	buffer buffer.Buffer[T]
-	closed sync.WaitGroup
+	streamChan    events.EventChannel[T]
+	closed        sync.WaitGroup
+	subscriberMap subscribers[T]
 }
 
 // newStreamFromDescription creates and returns a typedStream of a given stream type T
 func newStreamFromDescription[T any](description StreamDescription) typedStream[T] {
-	var stream typedStream[T]
-	if description.Asynchronous {
-		stream = newLocalAsyncStream[T](description)
-	} else {
-		stream = newLocalSyncStream[T](description)
+	var (
+		streamEngine streamExecutor[T]
+		metrics      = newStreamMetrics()
+		subscribers  = newNotificationMap[T](description.DefaultSubscribers, metrics)
+	)
+
+	streamEngine = newStreamEngine(description, subscribers)
+
+	stream := &baseStream[T]{
+		description:       description,
+		subscriberMap:     subscribers,
+		publisherArray:    newPublisherManager[T](),
+		metrics:           metrics,
+		active:            false,
+		started:           false,
+		streamCoordinator: streamEngine,
 	}
+	stream.cond = sync.NewCond(&stream.mutex)
+
 	return stream
+}
+
+func newStreamEngine[T any](description StreamDescription, subscribers *notificationMap[T]) (streamEngine streamExecutor[T]) {
+	if description.Asynchronous {
+		streamEngine = newLocalAsyncStream[T](subscribers, description)
+	} else {
+		streamEngine = newLocalSyncStream[T](subscribers)
+	}
+	return streamEngine
 }
 
 // newLocalSyncStream is a local in-memory stream that delivers events synchronously
 // aka is created w/o event buffering
-func newLocalSyncStream[T any](description StreamDescription) *localSyncStream[T] {
-	metrics := newStreamMetrics()
+func newLocalSyncStream[T any](subscribers subscribers[T]) *localSyncStream[T] {
 	l := &localSyncStream[T]{
-		baseStream: baseStream[T]{
-			description:    description,
-			subscriberMap:  newNotificationMap[T](description.DefaultSubscribers, metrics),
-			publisherArray: newPublisherManager[T](),
-			metrics:        metrics,
-			active:         false,
-			started:        false,
-		},
+		subscriberMap: subscribers,
 	}
-	l.cond = sync.NewCond(&l.mutex)
 	return l
 }
 
 // newLocalAsyncStream is created w/ event buffering
-func newLocalAsyncStream[T any](description StreamDescription) *localAsyncStream[T] {
-	metrics := newStreamMetrics()
+func newLocalAsyncStream[T any](subscribers subscribers[T], description StreamDescription) *localAsyncStream[T] {
 
-	var buf buffer.Buffer[T]
+	var ch events.EventChannel[T]
 	if description.BufferCapacity > 0 {
-		buf = buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
+		ch = make(events.EventChannel[T], description.BufferCapacity)
 	} else {
-		buf = buffer.NewSimpleAsyncBuffer[T]()
+		ch = make(events.EventChannel[T])
 	}
 	a := &localAsyncStream[T]{
-		baseStream: baseStream[T]{
-			description:    description,
-			subscriberMap:  newNotificationMap[T](description.DefaultSubscribers, metrics),
-			publisherArray: newPublisherManager[T](),
-			metrics:        metrics,
-			active:         false,
-			started:        false,
-		},
-		buffer: buf,
+		subscriberMap: subscribers,
+		closed:        sync.WaitGroup{},
+		streamChan:    ch,
 	}
 	return a
 }
 
-func (l *localAsyncStream[T]) forceClose() {
-	l.doTryClose(true)
+func (s *localSyncStream[T]) close() {
 }
 
-func (l *localAsyncStream[T]) tryClose() bool {
-	return l.doTryClose(false)
-}
-
-func (s *localSyncStream[T]) doTryClose(force bool) bool {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	if force {
-		s.subscriberMap.close()
-		s.publisherArray.closePublishers()
-	}
-
-	if (!s.hasPublishersOrSubscribers() || force) && s.active {
-		s.active = false
-		return true
-	}
-	return false
-}
-
-func (l *localAsyncStream[T]) doTryClose(force bool) bool {
-
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	if force {
-		l.subscriberMap.close()
-		l.publisherArray.closePublishers()
-	}
-
-	if (!l.hasPublishersOrSubscribers() || force) && l.active {
-		l.active = false
-		l.buffer.StopBlocking()
-
-		l.closed.Wait()
-		return true
-	}
-	return false
+func (l *localAsyncStream[T]) close() {
+	close(l.streamChan)
+	l.closed.Wait()
 }
 
 func (l *localAsyncStream[T]) run() {
 
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	l.subscriberMap.start()
-
-	if !l.active {
-		l.started = true
-		l.active = true
-		l.closed = sync.WaitGroup{}
-		l.closed.Add(1)
-
-		// read buffer and publish via subscriberMap
-		go func() {
-			for l.active {
-				e := l.buffer.GetAndRemoveNextEvent()
-				if e != nil {
-					_ = l.subscriberMap.notify(e)
-				}
+	// read buffer and publish via subscriberMap
+	l.closed.Go(func() {
+		for e := range l.streamChan {
+			if e != nil {
+				_ = l.subscriberMap.notify(e)
 			}
-			l.closed.Done()
-		}()
+		}
+	})
 
-	}
+}
+
+func (s *localSyncStream[T]) run() {
+}
+
+func (b *baseStream[T]) subscribers() subscribers[T] {
+	return b.subscriberMap
+}
+
+func (s *localSyncStream[T]) publishC(content T) error {
+	e := events.NewEvent(content)
+	return s.publish(e)
+}
+
+func (s *localSyncStream[T]) publish(event events.Event[T]) error {
+
+	return s.subscriberMap.notify(event)
+}
+
+func (l *localAsyncStream[T]) publish(event events.Event[T]) error {
+	l.streamChan <- event
+	return nil
+}
+
+func (l *localAsyncStream[T]) publishC(content T) error {
+	e := events.NewEvent(content)
+	return l.publish(e)
+}
+
+func (b *baseStream[T]) removePublisher(publisherID PublisherID) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	b.publisherArray.removePublisher(publisherID)
 }
 
 func (b *baseStream[T]) unsubscribe(id SubscriberID) {
@@ -270,111 +346,6 @@ func (b *baseStream[T]) subscribeBatch(opts ...SubscriberOption) (BatchSubscribe
 		return b.subscriberMap.newBatchSubscriber(b.ID(), opts...)
 	}
 	return nil, StreamInactiveError
-}
-
-func (s *localSyncStream[T]) run() {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	s.started = true
-	s.active = true
-	s.subscriberMap.start()
-	s.cond.Broadcast()
-}
-
-func (s *localSyncStream[T]) tryClose() bool {
-	return s.doTryClose(false)
-}
-
-func (s *localSyncStream[T]) forceClose() {
-	s.doTryClose(true)
-}
-
-func (s *localSyncStream[T]) migrateStream(stream stream) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	if oldStream, ok := stream.(typedStream[T]); ok {
-		oldStream.lock()
-		defer oldStream.unlock()
-
-		s.publisherArray.migratePublishers(s, oldStream.publishers())
-		// waiting until the stream is drained
-		oldStream.streamMetrics().WaitUntilDrained()
-
-		s.subscriberMap.copyFrom(oldStream.subscribers())
-	}
-}
-
-func (l *localAsyncStream[T]) migrateStream(stream stream) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	if oldStream, ok := stream.(typedStream[T]); ok {
-		oldStream.lock()
-		defer oldStream.unlock()
-
-		l.publisherArray.migratePublishers(l, oldStream.publishers())
-
-		// waiting until the stream is drained
-		oldStream.streamMetrics().WaitUntilDrained()
-
-		l.subscriberMap.copyFrom(oldStream.subscribers())
-	}
-}
-
-func (b *baseStream[T]) subscribers() *notificationMap[T] {
-	return b.subscriberMap
-}
-
-func (s *localSyncStream[T]) publishC(content T) error {
-	e := events.NewEvent(content)
-	return s.publish(e)
-}
-
-func (s *localSyncStream[T]) publish(event events.Event[T]) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	for !s.started {
-		s.cond.Wait()
-	}
-
-	s.metrics.incNumEventsIn()
-
-	return s.subscriberMap.notify(event)
-}
-
-func (l *localAsyncStream[T]) publish(event events.Event[T]) error {
-
-	l.metrics.incNumEventsIn()
-
-	return l.buffer.AddEvent(event)
-}
-
-func (l *localAsyncStream[T]) publishC(content T) error {
-	e := events.NewEvent(content)
-	return l.publish(e)
-}
-
-func (s *localSyncStream[T]) newPublisher() (Publisher[T], error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	return s.publisherArray.newPublisher(s.ID(), s)
-}
-
-func (l *localAsyncStream[T]) newPublisher() (Publisher[T], error) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	return l.publisherArray.newPublisher(l.ID(), l)
-}
-
-func (b *baseStream[T]) removePublisher(publisherID PublisherID) {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
-	b.publisherArray.removePublisher(publisherID)
 }
 
 func (b *baseStream[T]) clearPublishers() { b.clearPublishers() }
@@ -409,10 +380,4 @@ func (b *baseStream[T]) unlock() {
 
 func (b *baseStream[T]) publishers() publisherManager[T] {
 	return b.publisherArray
-}
-
-func (b *baseStream[T]) waitForStart() {
-	for !b.active {
-		b.cond.Wait()
-	}
 }

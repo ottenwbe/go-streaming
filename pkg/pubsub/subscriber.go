@@ -17,6 +17,24 @@ var (
 	NotificationError     = errors.New("subscriber: could not notify all subscribers")
 )
 
+type subscribers[T any] interface {
+	newSubscriber(streamID StreamID, options ...SubscriberOption) (Subscriber[T], error)
+	newBatchSubscriber(streamID StreamID, options ...SubscriberOption) (BatchSubscriber[T], error)
+	close() error
+	remove(id SubscriberID)
+	notify(event events.Event[T]) error
+	snapshot() []AnySubscriber[T]
+	copyFrom(old *notificationMap[T])
+	start()
+}
+
+type SubscribersManagement[T any] interface {
+	subscribe(opts ...SubscriberOption) (Subscriber[T], error)
+	subscribeBatch(opts ...SubscriberOption) (BatchSubscriber[T], error)
+	unsubscribe(id SubscriberID)
+	subscribers() subscribers[T]
+}
+
 // SubscriberID uniquely identifies a stream receiver.
 type SubscriberID uuid.UUID
 

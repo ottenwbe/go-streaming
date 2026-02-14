@@ -160,10 +160,8 @@ asyncStream: true
 	Describe("TryRemoveStreams", func() {
 		It("is successful if stream still has no subscribers/publishers", func() {
 			d := pubsub.MakeStreamDescription[int]("try-close-1")
-			sID, err := pubsub.AddOrReplaceStreamFromDescription[map[string]interface{}](d)
-			defer pubsub.ForceRemoveStream(sID)
 
-			pubsub.AddOrReplaceStreamFromDescription[int](d)
+			sID, err := pubsub.AddOrReplaceStreamFromDescription[int](d)
 			pubsub.TryRemoveStreams(sID)
 
 			_, err = pubsub.GetDescription(d.StreamID())
@@ -184,13 +182,13 @@ asyncStream: true
 		})
 		It("is not successful if stream still has subscribers", func() {
 			d := pubsub.MakeStreamDescription[int]("try-close-2")
-			s, err := pubsub.AddOrReplaceStreamFromDescription[map[string]interface{}](d)
-			defer pubsub.ForceRemoveStream(s)
 
-			pubsub.AddOrReplaceStreamFromDescription[int](d)
+			s, err := pubsub.AddOrReplaceStreamFromDescription[int](d)
+			Expect(err).To(BeNil())
 			pubsub.SubscribeByTopicID[int](d.StreamID())
 
 			pubsub.TryRemoveStreams(s)
+			defer pubsub.ForceRemoveStream(s)
 
 			_, err = pubsub.GetDescription(d.StreamID())
 			Expect(err).To(BeNil())

@@ -43,8 +43,6 @@ type (
 	publisherFanIn[T any] interface {
 		publish(event events.Event[T]) error
 		publishC(content T) error
-		lock()
-		unlock()
 	}
 	publisherManager[T any] interface {
 		publishers() []*defaultPublisher[T]
@@ -147,7 +145,5 @@ func (p *defaultPublisher[T]) PublishC(content T) error {
 	return p.Publish(e)
 }
 func (p *defaultPublisher[T]) Publish(event events.Event[T]) error {
-	p.fanIn.lock()
-	defer p.fanIn.unlock()
 	return p.fanIn.publish(event)
 }

@@ -27,13 +27,26 @@ func GetOrAddStream[T any](streamDescription StreamDescription) (StreamID, error
 	defer streamIdxAccessMutex.Unlock()
 
 	stream := newStreamFromDescription[T](streamDescription)
-	return doGetOrAddStream(stream)
+	return doGetOrAddStream[T](stream)
 }
 
 // AddOrReplaceStreamFromDescription uses a description of a stream to add it or replace it to the pub sub system
 func AddOrReplaceStreamFromDescription[T any](description StreamDescription) (StreamID, error) {
-	stream := newStreamFromDescription[T](description)
-	return doAddOrReplaceStream(stream)
+	streamIdxAccessMutex.Lock()
+	defer streamIdxAccessMutex.Unlock()
+
+	s, err := getAndConvertStreamByID[T](description.StreamID())
+
+	// add new stream if no existing stream exists
+	if errors.Is(err, StreamNotFoundError) {
+		stream := newStreamFromDescription[T](description)
+		return doGetOrAddStream[T](stream)
+	} else if err != nil {
+		return NilStreamID(), err
+	}
+
+	s.migrateStream(description)
+	return s.ID(), nil
 }
 
 // ForceRemoveStream forces removal of streams by their id, ensuring all resources are closed.
@@ -203,8 +216,8 @@ func Metrics(id StreamID) (*StreamMetrics, error) {
 	return newStreamMetrics(), StreamNotFoundError
 }
 
-func doGetOrAddStream(stream stream) (StreamID, error) {
-	err := validateStream(stream)
+func doGetOrAddStream[T any](stream stream) (StreamID, error) {
+	err := validateStream[T](stream)
 	if err != nil {
 		return NilStreamID(), err
 	}
@@ -215,32 +228,6 @@ func doGetOrAddStream(stream stream) (StreamID, error) {
 
 	addAndStartStream(stream)
 	return stream.ID(), nil
-}
-
-func doAddOrReplaceStream(newStream stream) (StreamID, error) {
-
-	err := validateStream(newStream)
-	if err != nil {
-		return NilStreamID(), err
-	}
-
-	existingStream := func() stream {
-		streamIdxAccessMutex.Lock()
-		defer streamIdxAccessMutex.Unlock()
-
-		old, _ := streamIdx[newStream.ID()]
-		streamIdx[newStream.ID()] = newStream
-		return old
-	}()
-
-	if existingStream != nil {
-		newStream.migrateStream(existingStream)
-		existingStream.tryClose()
-	}
-
-	newStream.run()
-
-	return newStream.ID(), nil
 }
 
 func doTryRemoveStreams(streamIDs ...StreamID) {
@@ -258,9 +245,13 @@ func addAndStartStream(newStream stream) {
 	streamIdx[newStream.ID()] = newStream
 }
 
-func validateStream(newStream stream) error {
+func validateStream[T any](newStream stream) error {
 	if newStream.ID().IsNil() {
 		return StreamIDNilError
+	}
+	testID := MakeStreamID[T](newStream.Description().ID.Topic)
+	if testID != newStream.ID() {
+		return StreamTypeMismatchError
 	}
 	return nil
 }
