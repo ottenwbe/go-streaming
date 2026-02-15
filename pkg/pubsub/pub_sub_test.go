@@ -212,14 +212,14 @@ var _ = Describe("PubSub", func() {
 
 			rec, _ := pubsub.SubscribeByTopicID[string](id)
 
-			content := "test 1"
+			event := "test 1"
 			go func() {
 				publisher, _ := pubsub.RegisterPublisher[string](id)
-				publisher.Publish(content)
+				publisher.Publish(event)
 			}()
 			eResult, _ := rec.Next()
 
-			Expect(content).To(Equal(eResult.GetContent()))
+			Expect(event).To(Equal(eResult.GetContent()))
 		})
 	})
 

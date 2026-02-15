@@ -23,7 +23,7 @@ type (
 	// Publisher routes events to a stream
 	Publisher[T any] interface {
 		// Publish an event to a stream with a given StreamID
-		Publish(content T) error
+		Publish(eventBody T) error
 		// ID that identifies this publisher
 		ID() PublisherID
 		// StreamID of the stream that an event of this publisher is published to
@@ -130,6 +130,6 @@ func (p *defaultPublisher[T]) StreamID() StreamID {
 func (p *defaultPublisher[T]) ID() PublisherID {
 	return p.id
 }
-func (p *defaultPublisher[T]) Publish(content T) error {
-	return p.fanIn.publish(content)
+func (p *defaultPublisher[T]) Publish(eventBody T) error {
+	return p.fanIn.publish(eventBody)
 }
