@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
 
@@ -13,7 +12,7 @@ func main() {
 
 	// 2. Publish to the same topic
 	pub, _ := pubsub.RegisterPublisherByTopic[int]("my-topic")
-	pub.Publish(events.NewEvent(42))
+	pub.Publish(42)
 
 	// 3. Consume the event
 	event, _ := sub.Next()

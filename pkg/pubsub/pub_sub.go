@@ -89,8 +89,8 @@ func SubscribeBatchByTopic[T any](topic string, opts ...SubscriberOption) (Batch
 
 // SubscribeByTopicID to a stream by the stream's id
 func SubscribeByTopicID[T any](id StreamID, opts ...SubscriberOption) (Subscriber[T], error) {
-	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
+	streamIdxAccessMutex.Lock()
+	defer streamIdxAccessMutex.Unlock()
 
 	if stream, err := getOrAddStreamByID[T](id); err == nil {
 		return stream.subscribe(opts...)
@@ -101,8 +101,8 @@ func SubscribeByTopicID[T any](id StreamID, opts ...SubscriberOption) (Subscribe
 
 // SubscribeBatchByTopicID to a stream by the stream's id returning a batch subscriber
 func SubscribeBatchByTopicID[T any](id StreamID, opts ...SubscriberOption) (BatchSubscriber[T], error) {
-	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
+	streamIdxAccessMutex.Lock()
+	defer streamIdxAccessMutex.Unlock()
 
 	if stream, err := getOrAddStreamByID[T](id); err == nil {
 		return stream.subscribeBatch(opts...)
@@ -162,8 +162,8 @@ func RegisterPublisherByTopic[T any](topic string) (Publisher[T], error) {
 
 // RegisterPublisher creates and registers a new publisher for the stream identified by the given ID.
 func RegisterPublisher[T any](id StreamID) (Publisher[T], error) {
-	streamIdxAccessMutex.RLock()
-	defer streamIdxAccessMutex.RUnlock()
+	streamIdxAccessMutex.Lock()
+	defer streamIdxAccessMutex.Unlock()
 
 	if s, err := getOrAddStreamByID[T](id); err == nil {
 		return s.newPublisher()

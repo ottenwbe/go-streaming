@@ -335,7 +335,7 @@ func (b *baseStream[T]) subscribeBatch(opts ...SubscriberOption) (BatchSubscribe
 	return nil, StreamInactiveError
 }
 
-func (b *baseStream[T]) clearPublishers() { b.clearPublishers() }
+func (b *baseStream[T]) clearPublishers() { b.publisherArray.clearPublishers() }
 
 func (b *baseStream[T]) streamMetrics() *StreamMetrics {
 	return b.metrics

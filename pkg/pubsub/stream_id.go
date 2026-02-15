@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/google/uuid"
 )
@@ -98,19 +99,32 @@ func (s *StreamID) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
-var typeMap = map[string]reflect.Type{
-	"int":                     reflect.TypeOf(int(0)),
-	"int32":                   reflect.TypeOf(int32(0)),
-	"int64":                   reflect.TypeOf(int64(0)),
-	"float32":                 reflect.TypeOf(float32(0)),
-	"float64":                 reflect.TypeOf(float64(0)),
-	"string":                  reflect.TypeOf(""),
-	"map[string]interface{}":  reflect.TypeOf(map[string]interface{}{}),
-	"map[string]interface {}": reflect.TypeOf(map[string]interface{}{}),
+var (
+	typeRegistryMutex sync.RWMutex
+	typeRegistry      = map[string]reflect.Type{}
+)
+
+func RegisterType[T any]() {
+	typeRegistryMutex.Lock()
+	defer typeRegistryMutex.Unlock()
+
+	t := reflect.TypeFor[T]()
+	typeRegistry[t.String()] = t
+}
+
+func UnRegisterType[T any]() {
+	typeRegistryMutex.Lock()
+	defer typeRegistryMutex.Unlock()
+
+	t := reflect.TypeFor[T]()
+	delete(typeRegistry, t.String())
 }
 
 func getTypeFromString(typeName string) reflect.Type {
-	if t, ok := typeMap[typeName]; ok {
+	typeRegistryMutex.RLock()
+	defer typeRegistryMutex.RUnlock()
+
+	if t, ok := typeRegistry[typeName]; ok {
 		return t
 	}
 	return nil
@@ -165,9 +179,8 @@ func RandomStreamID() StreamID {
 
 // MakeStreamID creates a StreamID for a given topic and generic type T.
 func MakeStreamID[T any](topic string) StreamID {
-	var tmp T
 	return StreamID{
 		Topic:     topic,
-		TopicType: reflect.TypeOf(tmp),
+		TopicType: reflect.TypeFor[T](),
 	}
 }

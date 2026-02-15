@@ -14,6 +14,7 @@ import (
 var defaultBufferCapacity = 5
 
 const LimitExceededFormat = "LimitedSimpleAsyncBuffer: Limit exceeded (%v > %v)"
+const LimitConsumableExceededFormat = "LimitedConsumableAsyncBuffer: Limit exceeded (%v > %v)"
 
 var (
 	BufferStoppedErr = errors.New("buffer: is stopped")
@@ -64,6 +65,12 @@ type LimitedSimpleAsyncBuffer[T any] struct {
 	limit int
 }
 
+// LimitedConsumableAsyncBuffer is a buffer with a fixed capacity limit that consumes events based on a policy.
+type LimitedConsumableAsyncBuffer[T any] struct {
+	*ConsumableAsyncBuffer[T]
+	limit int
+}
+
 // ConsumableAsyncBuffer allows to sync exactly one reader and n writer.
 // The Read operations PeekNextEvent and RemoveNextEvent either return the next event,
 // if any is available in the buffer or wait until next event is available based on a selection policy.
@@ -108,6 +115,19 @@ func NewLimitedSimpleAsyncBuffer[T any](limit int) Buffer[T] {
 		},
 		limit: limit,
 	}
+	return s
+}
+
+// NewLimitedConsumableAsyncBuffer creates a new buffer that consumes events based on a selection policy with a maximum event limit.
+func NewLimitedConsumableAsyncBuffer[T any](policy selection.Policy[T], limit int) Buffer[T] {
+	s := &LimitedConsumableAsyncBuffer[T]{
+		ConsumableAsyncBuffer: &ConsumableAsyncBuffer[T]{
+			asyncBuffer:     newAsyncBuffer[T](),
+			selectionPolicy: policy,
+		},
+		limit: limit,
+	}
+	s.selectionPolicy.SetBuffer(&s.buffer)
 	return s
 }
 
@@ -349,6 +369,65 @@ func (s *LimitedSimpleAsyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
 		s.cond.Broadcast()
 	}
 	return event
+}
+
+// AddEvents adds multiple events to the buffer, ensuring the limit is not exceeded.
+func (s *LimitedConsumableAsyncBuffer[T]) AddEvents(events []events.Event[T]) error {
+	s.bufferMutex.Lock()
+	defer s.bufferMutex.Unlock()
+
+	if len(events) > s.limit {
+		return fmt.Errorf(LimitConsumableExceededFormat, len(events), s.limit)
+	}
+	if s.stopped {
+		return BufferStoppedErr
+	}
+
+	for s.buffer.Len()+len(events) > s.limit {
+		s.cond.Wait()
+	}
+
+	s.buffer = append(s.buffer, events...)
+	s.selectionPolicy.UpdateSelection()
+
+	s.cond.Broadcast()
+	return nil
+}
+
+// AddEvent adds a single event to the buffer, ensuring the limit is not exceeded.
+func (s *LimitedConsumableAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
+	s.bufferMutex.Lock()
+	defer s.bufferMutex.Unlock()
+
+	if s.stopped {
+		return BufferStoppedErr
+	}
+
+	for s.buffer.Len() >= s.limit {
+		s.cond.Wait()
+	}
+
+	s.buffer = append(s.buffer, event)
+	s.selectionPolicy.UpdateSelection()
+
+	s.cond.Broadcast()
+	return nil
+}
+
+// GetAndConsumeNextEvents returns the next event from the buffer and removes it.
+func (s *LimitedConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
+	nextEvents := s.ConsumableAsyncBuffer.GetAndConsumeNextEvents()
+
+	if len(nextEvents) > 0 {
+		s.cond.Broadcast()
+	}
+	return nextEvents
+}
+
+func (s *LimitedConsumableAsyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
+	e := s.ConsumableAsyncBuffer.GetAndRemoveNextEvent()
+	s.cond.Broadcast()
+	return e
 }
 
 func (i *iterator[T]) hasNext() bool {

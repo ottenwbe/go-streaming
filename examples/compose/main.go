@@ -3,7 +3,6 @@ package main
 import (
 	"math/rand"
 
-	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"github.com/ottenwbe/go-streaming/pkg/query"
 	"github.com/ottenwbe/go-streaming/pkg/selection"
@@ -57,7 +56,7 @@ func receiveProcessedEvents(res *query.TypedContinuousQuery[int]) {
 func publishEvents() {
 	go func() {
 		for i := 0; i < numEvents; i++ {
-			if err := pubsub.InstantPublishByTopic[float64]("in", events.NewEvent[float64](rand.Float64())); err != nil {
+			if err := pubsub.InstantPublishByTopic[float64]("in", rand.Float64()); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
 			}
 		}

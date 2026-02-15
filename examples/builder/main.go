@@ -20,7 +20,7 @@ func main() {
 
 	policy := selection.NewCountingWindowPolicy[float64](10, shift)
 	q, err := query.NewBuilder().
-		Stream(query.S[float64]("in", pubsub.WithAsyncStream(true))).
+		Stream(query.S[float64]("in", pubsub.WithAsynchronousStream(true))).
 		Query(query.ContinuousBatchSum("in", "out", policy)).
 		Build()
 

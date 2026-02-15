@@ -257,7 +257,12 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, options ...Su
 		if err != nil {
 			return nil, err
 		}
-		buf := buffer.NewConsumableAsyncBuffer[T](p)
+		var buf buffer.Buffer[T]
+		if description.BufferCapacity > 0 {
+			buf = buffer.NewLimitedConsumableAsyncBuffer[T](p, description.BufferCapacity)
+		} else {
+			buf = buffer.NewConsumableAsyncBuffer[T](p)
+		}
 		rec = newBufferedBatchSubscriber[T](streamID, buf)
 	} else {
 		// Default batch subscriber (no policy, just buffering)
@@ -297,12 +302,12 @@ func (m *notificationMap[T]) remove(id SubscriberID) {
 }
 
 func (m *notificationMap[T]) notify(event events.Event[T]) error {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
+
+	// Prevent blocking Subscribe/Unsubscribe if a subscriber is slow.
+	snaphot := m.snapshot()
 
 	var err error
-
-	for _, notifier := range m.receiver {
+	for _, notifier := range snaphot {
 		// Wrap in a function to recover from panics if a subscriber is closed concurrently.
 		func() {
 			defer func() { _ = recover() }()

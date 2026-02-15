@@ -9,6 +9,20 @@ import (
 
 var _ = Describe("Descriptions", func() {
 
+	BeforeEach(func() {
+		pubsub.RegisterType[int]()
+		pubsub.RegisterType[string]()
+		pubsub.RegisterType[float64]()
+		pubsub.RegisterType[float32]()
+	})
+
+	AfterEach(func() {
+		pubsub.UnRegisterType[int]()
+		pubsub.UnRegisterType[string]()
+		pubsub.UnRegisterType[float64]()
+		pubsub.UnRegisterType[float32]()
+	})
+
 	Describe("MakeSubscriberDescription", func() {
 		It("creates a description with defaults", func() {
 			d := pubsub.MakeSubscriberDescription()

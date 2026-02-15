@@ -21,6 +21,21 @@ type: int`
 )
 
 var _ = Describe("StreamID", func() {
+
+	BeforeEach(func() {
+		pubsub.RegisterType[int]()
+		pubsub.RegisterType[string]()
+		pubsub.RegisterType[float64]()
+		pubsub.RegisterType[float32]()
+	})
+
+	AfterEach(func() {
+		pubsub.UnRegisterType[int]()
+		pubsub.UnRegisterType[string]()
+		pubsub.UnRegisterType[float64]()
+		pubsub.UnRegisterType[float32]()
+	})
+
 	Describe("IsNil", func() {
 		It("should return true for nil topic", func() {
 			id := pubsub.NilStreamID()
@@ -48,7 +63,7 @@ var _ = Describe("StreamID", func() {
 		It("should be be possible with a random id", func() {
 			id := pubsub.RandomStreamID()
 			Expect(len(id.Topic)).To(Equal(len(uuid.New().String())))
-			Expect(id.TopicType).To(BeNil())
+			Expect(id.TopicType).To(Equal(reflect.TypeFor[any]()))
 		})
 	})
 

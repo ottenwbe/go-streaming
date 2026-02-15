@@ -4,7 +4,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
 	"go.uber.org/zap"
@@ -18,8 +17,7 @@ func main() {
 	var wg sync.WaitGroup
 
 	// 1. Configure the publish/subscribe system for the topic 'Some Integers'
-	streamConfig := pubsub.MakeStreamDescription[int]("Some Integers", pubsub.WithSubscriberAsync(true))
-	intStreamID, err := pubsub.AddOrReplaceStream[int](streamConfig)
+	intStreamID, err := pubsub.AddOrReplaceStream[int]("Some Integers", pubsub.WithAsynchronousStream(true), pubsub.WithSubscriberSync(false))
 	if err != nil {
 		zap.S().Fatalf("Failed to create stream: %v", err)
 	}
@@ -48,7 +46,7 @@ func startPublisher(streamID pubsub.StreamID, wg *sync.WaitGroup) {
 
 		for i := 0; i < maxEvents; i++ {
 			zap.S().Infof("Now sending: %v", i)
-			publisher.Publish(events.NewEvent(i))
+			_ = publisher.Publish(i)
 		}
 	})
 }

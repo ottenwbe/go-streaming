@@ -81,7 +81,10 @@ func (p *defaultPublisherManager[T]) closePublishers() {
 }
 
 func (p *defaultPublisherManager[T]) clearPublishers() {
-	p.publisherArr = make([]*defaultPublisher[T], 0)
+	for i := range p.publisherArr {
+		p.publisherArr[i] = nil
+	}
+	p.publisherArr = p.publisherArr[:0]
 }
 
 func (p *defaultPublisherManager[T]) addPublisher(pub *defaultPublisher[T]) {
@@ -89,7 +92,7 @@ func (p *defaultPublisherManager[T]) addPublisher(pub *defaultPublisher[T]) {
 }
 
 func (p *defaultPublisherManager[T]) newPublisher(id StreamID, in publisherFanIn[T]) (Publisher[T], error) {
-	publisher := newDefaultPublisher[T](id, in)
+	publisher := newDefaultPublisher(id, in)
 	p.publisherArr = append(p.publisherArr, publisher)
 
 	return publisher, nil
@@ -97,7 +100,9 @@ func (p *defaultPublisherManager[T]) newPublisher(id StreamID, in publisherFanIn
 
 func (p *defaultPublisherManager[T]) removePublisher(id PublisherID) {
 	if idx := slices.IndexFunc(p.publisherArr, func(publisher *defaultPublisher[T]) bool { return id == publisher.ID() }); idx != -1 {
-		p.publisherArr = append(p.publisherArr[:idx], p.publisherArr[idx+1:]...)
+		copy(p.publisherArr[idx:], p.publisherArr[idx+1:])
+		p.publisherArr[len(p.publisherArr)-1] = nil
+		p.publisherArr = p.publisherArr[:len(p.publisherArr)-1]
 	}
 }
 
