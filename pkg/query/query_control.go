@@ -181,8 +181,7 @@ func NewBuilder() *Builder {
 // S creates or retrieves a stream
 // with the given configuration.
 func S[T any](topic string, options ...pubsub.StreamOption) (pubsub.StreamID, error) {
-	d := pubsub.MakeStreamDescription[T](topic, options...)
-	return pubsub.AddOrReplaceStreamFromDescription[T](d)
+	return pubsub.AddOrReplaceStream[T](topic, options...)
 }
 
 // Query adds a sub-query to the builder.

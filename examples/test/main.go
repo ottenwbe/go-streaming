@@ -1,32 +1,5 @@
 package main
 
-import (
-	"fmt"
-	"sync"
-	"time"
-)
-
-func main() {
-	mutex := sync.Mutex{}
-	cond := sync.NewCond(&mutex)
-
-	go func() {
-		mutex.Lock()
-		mutex.Unlock()
-		cond.Wait()
-		fmt.Println("hi")
-	}()
-
-	go func() {
-		mutex.Lock()
-		mutex.Unlock()
-		cond.Broadcast()
-	}()
-
-	time.Sleep(time.Second)
-
-}
-
 //package main
 //
 //import (

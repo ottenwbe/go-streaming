@@ -19,7 +19,7 @@ func main() {
 
 	// 1. Configure the publish/subscribe system for the topic 'Some Integers'
 	streamConfig := pubsub.MakeStreamDescription[int]("Some Integers", pubsub.WithSubscriberAsync(true))
-	intStreamID, err := pubsub.AddOrReplaceStreamFromDescription[int](streamConfig)
+	intStreamID, err := pubsub.AddOrReplaceStream[int](streamConfig)
 	if err != nil {
 		zap.S().Fatalf("Failed to create stream: %v", err)
 	}

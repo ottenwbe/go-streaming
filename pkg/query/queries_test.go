@@ -3,7 +3,6 @@ package query_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"github.com/ottenwbe/go-streaming/pkg/query"
 	"github.com/ottenwbe/go-streaming/pkg/selection"
@@ -31,8 +30,8 @@ var _ = Describe("Add Operator1", func() {
 			qs, _ := query.RunAndSubscribe[int](c, err1)
 			defer query.Close(qs)
 
-			event := events.NewEvent(8)
-			event2 := events.NewEvent(3)
+			event := 8
+			event2 := 3
 
 			streamAID := pubsub.MakeStreamID[int]("test-add-in1")
 			streamBID := pubsub.MakeStreamID[int]("test-add-in2")
@@ -60,7 +59,7 @@ var _ = Describe("Convert Operator1", func() {
 			qs, _ := query.RunAndSubscribe[float32](c, err1)
 			defer query.Close(qs)
 
-			event := events.NewEvent(8)
+			event := 8
 
 			streamInID := pubsub.MakeStreamID[int]("convert-test-in")
 			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
@@ -84,10 +83,10 @@ var _ = Describe("Sum Operator1", func() {
 			qs, _ := query.RunAndSubscribe[int](query.ContinuousBatchSum[int]("int values", "sum values", selection))
 			defer query.Close(qs)
 
-			event := events.NewEvent(10)
-			event1 := events.NewEvent(10)
-			event2 := events.NewEvent(15)
-			event3 := events.NewEvent(15)
+			event := 10
+			event1 := 10
+			event2 := 15
+			event3 := 15
 
 			streamInID := pubsub.MakeStreamID[int]("int values")
 			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
@@ -117,10 +116,12 @@ var _ = Describe("Count Operator1", func() {
 			qs, _ := query.RunAndSubscribe[int](query.ContinuousBatchCount[float32, int]("countable floats", "counted floats", selection))
 			defer query.Close(qs)
 
-			event := events.NewEvent[float32](1.0)
-			event1 := events.NewEvent[float32](1.1)
-			event2 := events.NewEvent[float32](1.2)
-			event3 := events.NewEvent[float32](1.3)
+			var (
+				event  float32 = 1.0
+				event1 float32 = 1.1
+				event2 float32 = 1.2
+				event3 float32 = 1.3
+			)
 
 			streamInID := pubsub.MakeStreamID[float32]("countable floats")
 			publisher, _ := pubsub.RegisterPublisher[float32](streamInID)
@@ -150,10 +151,10 @@ var _ = Describe("Smaller OperatorControl", func() {
 
 			streamInID := pubsub.MakeStreamID[int]("q-s-1")
 
-			event := events.NewEvent(9)
-			event1 := events.NewEvent(10)
-			event2 := events.NewEvent(15)
-			event3 := events.NewEvent(35)
+			event := 9
+			event1 := 10
+			event2 := 15
+			event3 := 35
 
 			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
 
@@ -181,10 +182,10 @@ var _ = Describe("Greater OperatorControl", func() {
 			qs, _ := query.RunAndSubscribe[int](query.ContinuousGreater("test-greater-11", "test-greater-11-out", 11))
 			defer query.Close(qs)
 
-			event := events.NewEvent(10)
-			event1 := events.NewEvent(10)
-			event2 := events.NewEvent(15)
-			event3 := events.NewEvent(35)
+			event := 10
+			event1 := 10
+			event2 := 15
+			event3 := 35
 
 			streamInID := pubsub.MakeStreamID[int]("test-greater-11")
 			publisher, _ := pubsub.RegisterPublisher[int](streamInID)

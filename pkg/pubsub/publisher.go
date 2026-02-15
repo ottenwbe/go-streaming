@@ -4,8 +4,6 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/ottenwbe/go-streaming/pkg/events"
-
 	"github.com/google/uuid"
 )
 
@@ -25,9 +23,7 @@ type (
 	// Publisher routes events to a stream
 	Publisher[T any] interface {
 		// Publish an event to a stream with a given StreamID
-		Publish(event events.Event[T]) error
-		// PublishC publishes content to a stream with a given StreamID
-		PublishC(content T) error
+		Publish(content T) error
 		// ID that identifies this publisher
 		ID() PublisherID
 		// StreamID of the stream that an event of this publisher is published to
@@ -41,8 +37,7 @@ type (
 )
 type (
 	publisherFanIn[T any] interface {
-		publish(event events.Event[T]) error
-		publishC(content T) error
+		publish(content T) error
 	}
 	publisherManager[T any] interface {
 		publishers() []*defaultPublisher[T]
@@ -110,14 +105,9 @@ func (p *defaultPublisherManager[T]) len() int {
 	return len(p.publisherArr)
 }
 
-func (e emptyPublisherFanIn[T]) publish(events.Event[T]) error {
+func (e emptyPublisherFanIn[T]) publish(T) error {
 	return EmptyPublisherFanInPublisherError
 }
-func (e emptyPublisherFanIn[T]) publishC(T) error {
-	return EmptyPublisherFanInPublisherError
-}
-func (e emptyPublisherFanIn[T]) lock()   {}
-func (e emptyPublisherFanIn[T]) unlock() {}
 
 func newDefaultPublisher[T any](streamID StreamID, fanIn publisherFanIn[T]) *defaultPublisher[T] {
 	return &defaultPublisher[T]{
@@ -140,10 +130,6 @@ func (p *defaultPublisher[T]) StreamID() StreamID {
 func (p *defaultPublisher[T]) ID() PublisherID {
 	return p.id
 }
-func (p *defaultPublisher[T]) PublishC(content T) error {
-	e := events.NewEvent(content)
-	return p.Publish(e)
-}
-func (p *defaultPublisher[T]) Publish(event events.Event[T]) error {
-	return p.fanIn.publish(event)
+func (p *defaultPublisher[T]) Publish(content T) error {
+	return p.fanIn.publish(content)
 }

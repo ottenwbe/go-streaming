@@ -23,8 +23,8 @@ var _ = Describe("OperatorRepository", func() {
 	)
 
 	BeforeEach(func() {
-		streamInID, _ := pubsub.GetOrAddStream[int](pubsub.MakeStreamDescription[int]("int values"))
-		streamOutID, _ := pubsub.GetOrAddStream[int](pubsub.MakeStreamDescription[int]("summed up values"))
+		streamInID, _ := pubsub.GetOrAddStream[int]("int values")
+		streamOutID, _ := pubsub.GetOrAddStream[int]("summed up values")
 		defer pubsub.ForceRemoveStream(streamOutID, streamOutID)
 
 		inStream := engine.NewSingleStreamInput1[int](streamInID)

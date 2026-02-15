@@ -273,7 +273,8 @@ func (op *Operator1[TIn, Tout]) Start() {
 
 				resultEvent := op.f(inputEvents)
 
-				op.Output.Publish(resultEvent)
+				//TODO: no longer valid with new publish logic
+				op.Output.Publish(resultEvent.GetContent())
 			}
 		}()
 	}
@@ -311,7 +312,8 @@ func (op *OperatorN[TIN, TOUT]) Start() {
 				resultEvents := op.f(inputEvents)
 
 				for _, resultEvent := range resultEvents {
-					op.Output.Publish(resultEvent)
+					// TODO: no longer valid with current logic
+					op.Output.Publish(resultEvent.GetContent())
 				}
 			}
 			zap.S().Debug("operator stopped", zap.String("operator", op.id.String()))

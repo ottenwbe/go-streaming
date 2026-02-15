@@ -20,7 +20,7 @@ func main() {
 	// 1. Configure the publish/subscribe system for the topic 'Some Integers'
 	// Note: this is a synchronous stream, which means that the subscribers need to consume events before a publisher cans send the next event
 	streamConfig := pubsub.MakeStreamDescription[int]("Some Integers")
-	intStreamID, err := pubsub.AddOrReplaceStreamFromDescription[int](streamConfig)
+	intStreamID, err := pubsub.AddOrReplaceStream[int](streamConfig)
 	if err != nil {
 		zap.S().Fatalf("Failed to create stream: %v", err)
 	}

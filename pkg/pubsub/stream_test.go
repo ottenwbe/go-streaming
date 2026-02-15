@@ -16,13 +16,11 @@ var _ = Describe("Stream", func() {
 		var (
 			streamID pubsub.StreamID
 			topic    = "test"
-			desc     pubsub.StreamDescription
 		)
 
 		BeforeEach(func() {
-			desc = pubsub.MakeStreamDescription[string](topic)
 			var err error
-			streamID, err = pubsub.AddOrReplaceStreamFromDescription[string](desc)
+			streamID, err = pubsub.AddOrReplaceStream[string](topic)
 			Expect(err).To(BeNil())
 		})
 
@@ -34,7 +32,7 @@ var _ = Describe("Stream", func() {
 			It("should be retrievable", func() {
 				retrievedDesc, err := pubsub.GetDescription(streamID)
 				Expect(err).To(BeNil())
-				Expect(retrievedDesc).To(Equal(desc))
+				Expect(retrievedDesc.ID).To(Equal(streamID))
 			})
 			It("should contain a valid id", func() {
 				Expect(streamID.IsNil()).ToNot(BeTrue())
@@ -56,7 +54,7 @@ var _ = Describe("Stream", func() {
 		Context("published events", func() {
 			It("should be received", func() {
 				var eventResult events.Event[string]
-				event := events.NewEvent[string]("test-1")
+				content := "test-1"
 				done := make(chan bool)
 
 				receiver, _ := pubsub.SubscribeByTopicID[string](streamID)
@@ -70,10 +68,10 @@ var _ = Describe("Stream", func() {
 				p, _ := pubsub.RegisterPublisher[string](streamID)
 				defer pubsub.UnRegisterPublisher[string](p)
 
-				p.Publish(event)
+				p.Publish(content)
 				<-done
 
-				Expect(eventResult.GetContent()).To(Equal(event.GetContent()))
+				Expect(eventResult.GetContent()).To(Equal(content))
 			})
 		})
 	})
@@ -82,13 +80,11 @@ var _ = Describe("Stream", func() {
 		var (
 			streamID pubsub.StreamID
 			topic    = "test3"
-			desc     pubsub.StreamDescription
 		)
 
 		BeforeEach(func() {
-			desc = pubsub.MakeStreamDescription[string](topic, pubsub.WithAsynchronousStream(true))
 			var err error
-			streamID, err = pubsub.AddOrReplaceStreamFromDescription[string](desc)
+			streamID, err = pubsub.AddOrReplaceStream[string](topic, pubsub.WithAsynchronousStream(true))
 			Expect(err).To(BeNil())
 		})
 
@@ -100,7 +96,7 @@ var _ = Describe("Stream", func() {
 			It("should be retrievable", func() {
 				retrievedDesc, err := pubsub.GetDescription(streamID)
 				Expect(err).To(BeNil())
-				Expect(retrievedDesc).To(Equal(desc))
+				Expect(retrievedDesc.ID).To(Equal(streamID))
 			})
 			It("should contain a valid id", func() {
 				Expect(streamID.IsNil()).ToNot(BeTrue())
@@ -143,29 +139,21 @@ var _ = Describe("Stream", func() {
 				Expect(err).To(BeNil())
 				defer pubsub.Unsubscribe[string](s)
 
-				fmt.Println("event 1")
-
 				wg.Go(func() {
 					for i := range numE {
-						fmt.Println("event send")
-						e := events.NewEvent[string](fmt.Sprintf("a%v", i))
-						p.Publish(e)
+						p.Publish(fmt.Sprintf("a%v", i))
 
 					}
 				})
 
 				wg.Go(func() {
 					for range numE {
-						fmt.Println("event rec")
 						_, _ = s.Next()
 
 					}
 				})
 
-				fmt.Println("event 2")
-
-				desc2 := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsynchronousStream(false))
-				streamID2, err := pubsub.AddOrReplaceStreamFromDescription[string](desc2)
+				streamID2, err := pubsub.AddOrReplaceStream[string](topic, pubsub.WithAsynchronousStream(false))
 				Expect(err).To(BeNil())
 				defer pubsub.TryRemoveStreams(streamID2)
 
@@ -177,9 +165,9 @@ var _ = Describe("Stream", func() {
 			It("should not block", func() {
 
 				eventResult := make([]events.Event[string], 3)
-				event1 := events.NewEvent("test-3-1")
-				event2 := events.NewEvent("test-3-2")
-				event3 := events.NewEvent("test-3-3")
+				content1 := "test-3-1"
+				content2 := "test-3-2"
+				content3 := "test-3-3"
 				done := make(chan bool)
 
 				receiver, _ := pubsub.SubscribeByTopicID[string](streamID)
@@ -188,9 +176,9 @@ var _ = Describe("Stream", func() {
 				publisher, _ := pubsub.RegisterPublisher[string](streamID)
 				defer pubsub.UnRegisterPublisher[string](publisher)
 
-				publisher.Publish(event1)
-				publisher.Publish(event2)
-				publisher.Publish(event3)
+				publisher.Publish(content1)
+				publisher.Publish(content2)
+				publisher.Publish(content3)
 
 				go func() {
 					r1, _ := receiver.Next()
@@ -209,11 +197,8 @@ var _ = Describe("Stream", func() {
 				er1 := eventResult[0].GetContent()
 				er2 := eventResult[1].GetContent()
 
-				e1 := event1.GetContent()
-				e2 := event2.GetContent()
-
-				Expect(e1).To(Equal(er1))
-				Expect(e2).To(Equal(er2))
+				Expect(content1).To(Equal(er1))
+				Expect(content2).To(Equal(er2))
 			})
 		})
 	})
@@ -222,12 +207,10 @@ var _ = Describe("Stream", func() {
 		var (
 			streamID pubsub.StreamID
 			topic    = "testMetrics"
-			desc     pubsub.StreamDescription
 		)
 
 		BeforeEach(func() {
-			desc = pubsub.MakeStreamDescription[string](topic)
-			streamID, _ = pubsub.AddOrReplaceStreamFromDescription[string](desc)
+			streamID, _ = pubsub.AddOrReplaceStream[string](topic)
 		})
 
 		AfterEach(func() {
@@ -259,7 +242,7 @@ var _ = Describe("Stream", func() {
 			wg.Go(func() {
 				defer GinkgoRecover()
 				for range maxRange {
-					pub.Publish(events.NewEvent("test"))
+					pub.Publish("test")
 				}
 			})
 

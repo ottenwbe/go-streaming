@@ -41,7 +41,7 @@ type typedStream[T any] interface {
 }
 
 type streamExecutor[T any] interface {
-	publisherFanIn[T]
+	publish(events.Event[T]) error
 	close()
 	run()
 }
@@ -120,17 +120,15 @@ func (b *baseStream[T]) migrateStream(description StreamDescription) {
 	b.streamCoordinator.run()
 }
 
-func (b *baseStream[T]) publishC(content T) error {
-	e := events.NewEvent(content)
-	return b.publish(e)
-}
-
-func (b *baseStream[T]) publish(event events.Event[T]) error {
+func (b *baseStream[T]) publish(content T) error {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
+
 	for !b.started {
 		b.cond.Wait()
 	}
+
+	event := events.NewEvent(content)
 
 	b.metrics.incNumEventsIn()
 	return b.streamCoordinator.publish(event)
@@ -293,24 +291,13 @@ func (b *baseStream[T]) subscribers() subscribers[T] {
 	return b.subscriberMap
 }
 
-func (s *localSyncStream[T]) publishC(content T) error {
-	e := events.NewEvent(content)
-	return s.publish(e)
-}
-
 func (s *localSyncStream[T]) publish(event events.Event[T]) error {
-
 	return s.subscriberMap.notify(event)
 }
 
 func (l *localAsyncStream[T]) publish(event events.Event[T]) error {
 	l.streamChan <- event
 	return nil
-}
-
-func (l *localAsyncStream[T]) publishC(content T) error {
-	e := events.NewEvent(content)
-	return l.publish(e)
 }
 
 func (b *baseStream[T]) removePublisher(publisherID PublisherID) {

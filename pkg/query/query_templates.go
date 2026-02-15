@@ -13,11 +13,11 @@ func TemplateQueryOverSingleStreamSelection1[T any, TOut any](
 	operation func(engine.SingleStreamSelection1[T]) events.Event[TOut],
 	out string) (*ContinuousQuery, error) {
 
-	inputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[T](pubsub.MakeStreamDescription[T](in))
+	inputStreamID, err := pubsub.AddOrReplaceStream[T](in)
 	if err != nil {
 		return nil, err
 	}
-	outputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[TOut](pubsub.MakeStreamDescription[TOut](out))
+	outputStreamID, err := pubsub.AddOrReplaceStream[TOut](out)
 	if err != nil {
 		return nil, err
 	}
@@ -47,11 +47,11 @@ func TemplateQueryOverSingleStreamSelectionN[T any, TOut any](
 	op func(engine.SingleStreamSelectionN[T]) events.Event[TOut],
 	out string) (*ContinuousQuery, error) {
 
-	inputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[T](pubsub.MakeStreamDescription[T](in))
+	inputStreamID, err := pubsub.AddOrReplaceStream[T](in)
 	if err != nil {
 		return nil, err
 	}
-	outputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[TOut](pubsub.MakeStreamDescription[TOut](out))
+	outputStreamID, err := pubsub.AddOrReplaceStream[TOut](out)
 	if err != nil {
 		return nil, err
 	}
@@ -77,11 +77,11 @@ func TemplateQueryMultipleEventsOverSingleStreamSelection1[T any, TOut any](
 	op func(engine.SingleStreamSelection1[T]) []events.Event[TOut],
 	out string) (*ContinuousQuery, error) {
 
-	inputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[T](pubsub.MakeStreamDescription[T](in))
+	inputStreamID, err := pubsub.AddOrReplaceStream[T](in)
 	if err != nil {
 		return nil, err
 	}
-	outputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[TOut](pubsub.MakeStreamDescription[TOut](out))
+	outputStreamID, err := pubsub.AddOrReplaceStream[TOut](out)
 	if err != nil {
 		return nil, err
 	}
@@ -110,15 +110,15 @@ func TemplateQueryOverDoubleStreamSelectionN[TIN1, TIN2, TOUT any](
 	op func(n engine.DoubleInputSelectionN[TIN1, TIN2]) events.Event[TOUT],
 	out string) (*ContinuousQuery, error) {
 
-	inputStream1ID, err := pubsub.AddOrReplaceStreamFromDescription[TIN1](pubsub.MakeStreamDescription[TIN1](in1))
+	inputStream1ID, err := pubsub.AddOrReplaceStream[TIN1](in1)
 	if err != nil {
 		return nil, err
 	}
-	inputStream2ID, err := pubsub.AddOrReplaceStreamFromDescription[TIN2](pubsub.MakeStreamDescription[TIN2](in2))
+	inputStream2ID, err := pubsub.AddOrReplaceStream[TIN2](in2)
 	if err != nil {
 		return nil, err
 	}
-	outputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[TOUT](pubsub.MakeStreamDescription[TOUT](out))
+	outputStreamID, err := pubsub.AddOrReplaceStream[TOUT](out)
 	if err != nil {
 		return nil, err
 	}
@@ -140,15 +140,15 @@ func TemplateQueryOverDoubleStreamSelection1[TIN1, TIN2, TOUT any](
 	op func(n engine.DoubleInputSelection1[TIN1, TIN2]) events.Event[TOUT],
 	out string) (*ContinuousQuery, error) {
 
-	inputStream1ID, err := pubsub.AddOrReplaceStreamFromDescription[TIN1](pubsub.MakeStreamDescription[TIN1](in1))
+	inputStream1ID, err := pubsub.AddOrReplaceStream[TIN1](in1)
 	if err != nil {
 		return nil, err
 	}
-	inputStream2ID, err := pubsub.AddOrReplaceStreamFromDescription[TIN2](pubsub.MakeStreamDescription[TIN2](in2))
+	inputStream2ID, err := pubsub.AddOrReplaceStream[TIN2](in2)
 	if err != nil {
 		return nil, err
 	}
-	outputStreamID, err := pubsub.AddOrReplaceStreamFromDescription[TOUT](pubsub.MakeStreamDescription[TOUT](out))
+	outputStreamID, err := pubsub.AddOrReplaceStream[TOUT](out)
 	if err != nil {
 		return nil, err
 	}
