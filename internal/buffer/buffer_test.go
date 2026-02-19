@@ -255,8 +255,7 @@ var _ = Describe("Buffer", func() {
 				go func() {
 					defer GinkgoRecover()
 					res := buf.GetAndConsumeNextEvents()
-					Expect(res).To(HaveLen(1))
-					Expect(res[0]).To(BeNil())
+					Expect(res).To(BeNil())
 					close(done)
 				}()
 

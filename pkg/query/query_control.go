@@ -2,6 +2,7 @@ package query
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/ottenwbe/go-streaming/internal/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
@@ -22,7 +23,7 @@ type Builder struct {
 type ContinuousQuery struct {
 	id ID
 
-	operators []engine.OperatorControl
+	operators []engine.OperatorID
 	streams   []pubsub.StreamID
 	output    pubsub.StreamID
 }
@@ -30,43 +31,61 @@ type ContinuousQuery struct {
 // TypedContinuousQuery is a typed wrapper around ContinuousQuery that provides a typed output receiver.
 type TypedContinuousQuery[T any] struct {
 	*ContinuousQuery
-	OutputReceiver pubsub.BatchSubscriber[T]
+	eventChan <-chan []events.Event[T]
+	sub       pubsub.Subscriber[T]
+	closeOnce sync.Once
+}
+
+// Next waits for the next batch of events from the query's output stream.
+func (tq *TypedContinuousQuery[T]) Next() ([]events.Event[T], bool) {
+	events, ok := <-tq.eventChan
+	return events, ok
 }
 
 // Close stops the query and unsubscribes the output receiver.
 func Close[T any](qs *TypedContinuousQuery[T]) {
 	if qs == nil {
-		return //TODO error
+		return
 	}
-
-	pubsub.Unsubscribe(qs.OutputReceiver)
-	qs.close()
-	qs = nil
+	qs.closeOnce.Do(func() {
+		if qs.sub != nil {
+			pubsub.Unsubscribe(qs.sub)
+		}
+		qs.close()
+	})
 }
 
 // RunAndSubscribe starts the query and returns a typed wrapper with an active subscription to the output.
 func RunAndSubscribe[T any](c *ContinuousQuery, err ...error) (*TypedContinuousQuery[T], []error) {
 
-	err, done := anyErrorExists(err, c)
+	errs, done := anyErrorExists(err, c)
 	if done {
-		return nil, err
+		return nil, errs
 	}
 
 	if runErr := c.run(); runErr != nil {
 		c.close()
-		return nil, append(err, runErr)
+		return nil, append(errs, runErr)
 	}
 
-	res, subErr := pubsub.SubscribeBatchByTopicID[T](c.output)
+	eventChan := make(chan []events.Event[T], 100)
+
+	callback := func(e ...events.Event[T]) {
+		eventChan <- e
+	}
+
+	sub, subErr := pubsub.SubscribeBatchByTopicID[T](c.output, callback)
 	if subErr != nil {
 		c.close()
-		return nil, append(err, subErr)
+		close(eventChan)
+		return nil, append(errs, subErr)
 	}
 
 	return &TypedContinuousQuery[T]{
 		ContinuousQuery: c,
-		OutputReceiver:  res,
-	}, err
+		eventChan:       eventChan,
+		sub:             sub,
+	}, errs
 }
 
 func anyErrorExists(err []error, c *ContinuousQuery) ([]error, bool) {
@@ -81,11 +100,6 @@ func anyErrorExists(err []error, c *ContinuousQuery) ([]error, bool) {
 	}
 
 	return err, len(err) > 0
-}
-
-// Next waits for the next events from the query's output stream.
-func (qs *TypedContinuousQuery[T]) Next() ([]events.Event[T], bool) {
-	return qs.OutputReceiver.Next()
 }
 
 // ComposeWith merges another query into the current one, chaining their operations.
@@ -111,28 +125,27 @@ func (c *ContinuousQuery) ID() ID {
 }
 
 func (c *ContinuousQuery) close() {
-	c.stopEverything()
 
+	for _, o := range c.operators {
+		engine.RemoveOperator(o)
+	}
 	pubsub.TryRemoveStreams(c.streams...)
-	engine.OperatorRepository().Remove(c.operators)
 
 	QueryRepository().remove(c.id)
 }
 
 func (c *ContinuousQuery) run() error {
 
-	c.startEverything()
-
 	err := QueryRepository().put(c)
 	return err
 }
 
-func newQueryControl(outStream pubsub.StreamID) *ContinuousQuery {
+func newQueryControl[T any](outStream string) *ContinuousQuery {
 	return &ContinuousQuery{
 		id:        ID(uuid.New()),
-		operators: make([]engine.OperatorControl, 0),
+		operators: make([]engine.OperatorID, 0),
 		streams:   []pubsub.StreamID{},
-		output:    outStream,
+		output:    pubsub.MakeStreamID[T](outStream),
 	}
 }
 
@@ -140,20 +153,8 @@ func (c *ContinuousQuery) addStreams(streams ...pubsub.StreamID) {
 	c.streams = append(c.streams, streams...)
 }
 
-func (c *ContinuousQuery) addOperations(operators ...engine.OperatorControl) {
+func (c *ContinuousQuery) addOperations(operators ...engine.OperatorID) {
 	c.operators = append(c.operators, operators...)
-}
-
-func (c *ContinuousQuery) startEverything() {
-	for _, operator := range c.operators {
-		operator.Start()
-	}
-}
-
-func (c *ContinuousQuery) stopEverything() {
-	for _, operator := range c.operators {
-		operator.Stop()
-	}
 }
 
 func in(streams []pubsub.StreamID, id pubsub.StreamID) bool {
@@ -170,7 +171,7 @@ func NewBuilder() *Builder {
 	return &Builder{
 		q: &ContinuousQuery{
 			id:        ID(uuid.New()),
-			operators: make([]engine.OperatorControl, 0),
+			operators: make([]engine.OperatorID, 0),
 			streams:   make([]pubsub.StreamID, 0),
 			output:    pubsub.NilStreamID(),
 		},

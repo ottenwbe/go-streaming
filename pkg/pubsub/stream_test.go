@@ -41,7 +41,7 @@ var _ = Describe("Stream", func() {
 
 		Context("closing the stream", func() {
 			It("without force ensures that the stream receiver is still functioning after trying to close the stream", func() {
-				_, err := pubsub.SubscribeByTopicID[string](streamID)
+				_, err := pubsub.SubscribeByTopicID[string](streamID, func(_ events.Event[string]) {})
 				Expect(err).To(BeNil())
 
 				pubsub.TryRemoveStreams(streamID)
@@ -57,13 +57,11 @@ var _ = Describe("Stream", func() {
 				content := "test-1"
 				done := make(chan bool)
 
-				receiver, _ := pubsub.SubscribeByTopicID[string](streamID)
-
-				go func() {
-					res, _ := receiver.Next()
-					eventResult = res
+				receiver, _ := pubsub.SubscribeByTopicID[string](streamID, func(event events.Event[string]) {
+					eventResult = event
 					done <- true
-				}()
+				})
+				defer pubsub.Unsubscribe(receiver)
 
 				p, _ := pubsub.RegisterPublisher[string](streamID)
 				defer pubsub.UnRegisterPublisher[string](p)
@@ -105,7 +103,7 @@ var _ = Describe("Stream", func() {
 
 		Context("closing the stream", func() {
 			It("without force ensures that the stream receiver is still functioning after trying to close the stream", func() {
-				_, err := pubsub.SubscribeByTopicID[string](streamID)
+				_, err := pubsub.SubscribeByTopicID[string](streamID, func(_ events.Event[string]) {})
 				Expect(err).To(BeNil())
 
 				pubsub.TryRemoveStreams(streamID)
@@ -118,7 +116,7 @@ var _ = Describe("Stream", func() {
 				// close stream (it has no subscribers/publishers yet)
 				pubsub.TryRemoveStreams(streamID)
 
-				result, err := pubsub.SubscribeByTopicID[string](streamID)
+				result, err := pubsub.SubscribeByTopicID[string](streamID, func(_ events.Event[string]) {})
 				Expect(result).NotTo(BeNil())
 				Expect(err).To(BeNil())
 				pubsub.Unsubscribe(result)
@@ -135,7 +133,11 @@ var _ = Describe("Stream", func() {
 				Expect(err).To(BeNil())
 				defer pubsub.UnRegisterPublisher(p)
 
-				s, err := pubsub.SubscribeByTopicID[string](streamID)
+				receivedWg := sync.WaitGroup{}
+				receivedWg.Add(numE)
+				s, err := pubsub.SubscribeByTopicID[string](streamID, func(_ events.Event[string]) {
+					receivedWg.Done()
+				})
 				Expect(err).To(BeNil())
 				defer pubsub.Unsubscribe[string](s)
 
@@ -146,18 +148,12 @@ var _ = Describe("Stream", func() {
 					}
 				})
 
-				wg.Go(func() {
-					for range numE {
-						_, _ = s.Next()
-
-					}
-				})
-
 				streamID2, err := pubsub.AddOrReplaceStream[string](topic, pubsub.WithAsynchronousStream(false))
 				Expect(err).To(BeNil())
 				defer pubsub.TryRemoveStreams(streamID2)
 
 				wg.Wait()
+				receivedWg.Wait()
 			})
 		})
 
@@ -169,8 +165,17 @@ var _ = Describe("Stream", func() {
 				content2 := "test-3-2"
 				content3 := "test-3-3"
 				done := make(chan bool)
+				count := 0
 
-				receiver, _ := pubsub.SubscribeByTopicID[string](streamID)
+				receiver, _ := pubsub.SubscribeByTopicID[string](streamID, func(e events.Event[string]) {
+					if count < 3 {
+						eventResult[count] = e
+						count++
+						if count == 3 {
+							done <- true
+						}
+					}
+				})
 				defer pubsub.Unsubscribe[string](receiver)
 
 				publisher, _ := pubsub.RegisterPublisher[string](streamID)
@@ -180,25 +185,15 @@ var _ = Describe("Stream", func() {
 				publisher.Publish(content2)
 				publisher.Publish(content3)
 
-				go func() {
-					r1, _ := receiver.Next()
-					eventResult[0] = r1
-					r2, _ := receiver.Next()
-					eventResult[1] = r2
-					r3, _ := receiver.Next()
-					eventResult[2] = r3
-					done <- true
-				}()
-
 				<-done
 
 				pubsub.TryRemoveStreams(streamID)
 
-				er1 := eventResult[0].GetContent()
-				er2 := eventResult[1].GetContent()
+				Eventually(func() int { return len(eventResult) }).Should(Equal(3))
 
-				Expect(content1).To(Equal(er1))
-				Expect(content2).To(Equal(er2))
+				Expect(content1).To(Equal(eventResult[0].GetContent()))
+				Expect(content2).To(Equal(eventResult[1].GetContent()))
+				Expect(content3).To(Equal(eventResult[2].GetContent()))
 			})
 		})
 	})
@@ -220,24 +215,19 @@ var _ = Describe("Stream", func() {
 		})
 
 		It("counts in and outgoing events", func() {
-
+			wg := sync.WaitGroup{}
 			pub, err := pubsub.RegisterPublisher[string](streamID)
 			Expect(err).To(BeNil())
 			defer pubsub.UnRegisterPublisher(pub)
-			sub, err := pubsub.SubscribeByTopicID[string](streamID)
+			sub, err := pubsub.SubscribeByTopicID[string](streamID, func(event events.Event[string]) {
+				wg.Done()
+			})
 			Expect(err).To(BeNil())
 			defer pubsub.Unsubscribe(sub)
 
 			maxRange := uint64(500)
 
-			wg := sync.WaitGroup{}
-
-			wg.Go(func() {
-				defer GinkgoRecover()
-				for range maxRange {
-					sub.Next()
-				}
-			})
+			wg.Add(int(maxRange))
 
 			wg.Go(func() {
 				defer GinkgoRecover()

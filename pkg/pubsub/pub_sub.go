@@ -3,6 +3,8 @@ package pubsub
 import (
 	"errors"
 	"sync"
+
+	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
 var (
@@ -55,7 +57,6 @@ func AddOrReplaceStream[T any](topic string, opts ...StreamOption) (StreamID, er
 // The streams will be removed from the central pub sub system.
 // BE CAREFUL USING THIS: when active subscribers publishers exist, the code might panic.
 // In most cases TryRemoveStream is the safer and better choice.
-// DEPRECATED
 func ForceRemoveStream(streamIDs ...StreamID) {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
@@ -78,41 +79,41 @@ func TryRemoveStreams(streamIDs ...StreamID) {
 }
 
 // SubscribeByTopic to get a stream for this topic with type T
-func SubscribeByTopic[T any](topic string, opts ...SubscriberOption) (Subscriber[T], error) {
-	return SubscribeByTopicID[T](MakeStreamID[T](topic), opts...)
+func SubscribeByTopic[T any](topic string, callback func(event events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+	return SubscribeByTopicID[T](MakeStreamID[T](topic), callback, opts...)
 }
 
 // SubscribeBatchByTopic to get a stream for this topic with type T returning a batch subscriber
-func SubscribeBatchByTopic[T any](topic string, opts ...SubscriberOption) (BatchSubscriber[T], error) {
-	return SubscribeBatchByTopicID[T](MakeStreamID[T](topic), opts...)
+func SubscribeBatchByTopic[T any](topic string, callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+	return SubscribeBatchByTopicID[T](MakeStreamID[T](topic), callback, opts...)
 }
 
 // SubscribeByTopicID to a stream by the stream's id
-func SubscribeByTopicID[T any](id StreamID, opts ...SubscriberOption) (Subscriber[T], error) {
+func SubscribeByTopicID[T any](id StreamID, callback func(event events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
 
 	if stream, err := getOrAddStreamByID[T](id); err == nil {
-		return stream.subscribe(opts...)
+		return stream.subscribe(callback, opts...)
 	} else {
 		return nil, err
 	}
 }
 
 // SubscribeBatchByTopicID to a stream by the stream's id returning a batch subscriber
-func SubscribeBatchByTopicID[T any](id StreamID, opts ...SubscriberOption) (BatchSubscriber[T], error) {
+func SubscribeBatchByTopicID[T any](id StreamID, callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
 	streamIdxAccessMutex.Lock()
 	defer streamIdxAccessMutex.Unlock()
 
 	if stream, err := getOrAddStreamByID[T](id); err == nil {
-		return stream.subscribeBatch(opts...)
+		return stream.subscribeBatch(callback, opts...)
 	} else {
 		return nil, err
 	}
 }
 
 // Unsubscribe removes a subscriber from a stream.
-func Unsubscribe[T any](rec AnySubscriber[T]) error {
+func Unsubscribe[T any](rec Subscriber[T]) error {
 	var (
 		autoCleanup = false
 		id          StreamID

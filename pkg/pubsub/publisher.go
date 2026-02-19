@@ -5,10 +5,11 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
 var (
-	EmptyPublisherFanInPublisherError = errors.New("empty Publisher cannot publish events")
+	EmptyPublisherFanInPublisherError = errors.New("empty Publisher cannot publishSource events")
 )
 
 // PublisherID uniquely identifies a publisher.
@@ -24,10 +25,14 @@ type (
 	Publisher[T any] interface {
 		// Publish an event to a stream with a given StreamID
 		Publish(eventBody T) error
+		// PublishComplex event to the stream
+		PublishComplex(event events.Event[T]) error
 		// ID that identifies this publisher
 		ID() PublisherID
 		// StreamID of the stream that an event of this publisher is published to
 		StreamID() StreamID
+		// setFanin of the publisher
+		setFanin(fanin publisherFanIn[T])
 	}
 	defaultPublisher[T any] struct {
 		fanIn    publisherFanIn[T]
@@ -35,15 +40,17 @@ type (
 		streamID StreamID
 	}
 )
+
 type (
 	publisherFanIn[T any] interface {
-		publish(content T) error
+		publishSource(content T) error
+		publishComplex(event events.Event[T]) error
 	}
 	publisherManager[T any] interface {
-		publishers() []*defaultPublisher[T]
+		publishers() []Publisher[T]
 		clearPublishers()
 		closePublishers()
-		addPublisher(pub *defaultPublisher[T])
+		addPublisher(pub Publisher[T])
 		newPublisher(id StreamID, in publisherFanIn[T]) (Publisher[T], error)
 		removePublisher(id PublisherID)
 		len() int
@@ -54,26 +61,26 @@ type (
 )
 
 type defaultPublisherManager[T any] struct {
-	publisherArr []*defaultPublisher[T]
+	publisherArr []Publisher[T]
 }
 
 func (p *defaultPublisherManager[T]) migratePublishers(newFanIn publisherFanIn[T], old publisherManager[T]) {
 	for _, pub := range old.publishers() {
-		pub.fanIn = newFanIn
+		pub.setFanin(newFanIn)
 		p.addPublisher(pub)
 	}
 
 	old.clearPublishers()
 }
 
-func (p *defaultPublisherManager[T]) publishers() []*defaultPublisher[T] {
+func (p *defaultPublisherManager[T]) publishers() []Publisher[T] {
 	return p.publisherArr
 }
 func (p *defaultPublisherManager[T]) closePublishers() {
 	// ensure no publisher is dangling
 	for _, publisher := range p.publisherArr {
 		if publisher != nil {
-			publisher.fanIn = emptyPublisherFanIn[T]{}
+			publisher.setFanin(emptyPublisherFanIn[T]{})
 		}
 	}
 
@@ -87,7 +94,7 @@ func (p *defaultPublisherManager[T]) clearPublishers() {
 	p.publisherArr = p.publisherArr[:0]
 }
 
-func (p *defaultPublisherManager[T]) addPublisher(pub *defaultPublisher[T]) {
+func (p *defaultPublisherManager[T]) addPublisher(pub Publisher[T]) {
 	p.publisherArr = append(p.publisherArr, pub)
 }
 
@@ -99,7 +106,7 @@ func (p *defaultPublisherManager[T]) newPublisher(id StreamID, in publisherFanIn
 }
 
 func (p *defaultPublisherManager[T]) removePublisher(id PublisherID) {
-	if idx := slices.IndexFunc(p.publisherArr, func(publisher *defaultPublisher[T]) bool { return id == publisher.ID() }); idx != -1 {
+	if idx := slices.IndexFunc(p.publisherArr, func(publisher Publisher[T]) bool { return id == publisher.ID() }); idx != -1 {
 		copy(p.publisherArr[idx:], p.publisherArr[idx+1:])
 		p.publisherArr[len(p.publisherArr)-1] = nil
 		p.publisherArr = p.publisherArr[:len(p.publisherArr)-1]
@@ -110,7 +117,10 @@ func (p *defaultPublisherManager[T]) len() int {
 	return len(p.publisherArr)
 }
 
-func (e emptyPublisherFanIn[T]) publish(T) error {
+func (e emptyPublisherFanIn[T]) publishSource(T) error {
+	return EmptyPublisherFanInPublisherError
+}
+func (e emptyPublisherFanIn[T]) publishComplex(event events.Event[T]) error {
 	return EmptyPublisherFanInPublisherError
 }
 
@@ -124,7 +134,7 @@ func newDefaultPublisher[T any](streamID StreamID, fanIn publisherFanIn[T]) *def
 
 func newPublisherManager[T any]() publisherManager[T] {
 	publishers := &defaultPublisherManager[T]{
-		publisherArr: make([]*defaultPublisher[T], 0),
+		publisherArr: make([]Publisher[T], 0),
 	}
 	return publishers
 }
@@ -136,5 +146,11 @@ func (p *defaultPublisher[T]) ID() PublisherID {
 	return p.id
 }
 func (p *defaultPublisher[T]) Publish(eventBody T) error {
-	return p.fanIn.publish(eventBody)
+	return p.fanIn.publishSource(eventBody)
+}
+func (p *defaultPublisher[T]) setFanin(fanIn publisherFanIn[T]) {
+	p.fanIn = fanIn
+}
+func (p *defaultPublisher[T]) PublishComplex(event events.Event[T]) error {
+	return p.fanIn.publishComplex(event)
 }

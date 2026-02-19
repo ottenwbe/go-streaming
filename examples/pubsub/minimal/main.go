@@ -8,7 +8,10 @@ import (
 
 func main() {
 	// 1. Subscribe to a topic
-	sub, _ := pubsub.SubscribeByTopic[int]("my-topic")
+	sub, _ := pubsub.SubscribeByTopic[int]("my-topic",
+		func(description *pubsub.SubscriberDescription) {
+
+		})
 
 	// 2. Publish to the same topic
 	pub, _ := pubsub.RegisterPublisherByTopic[int]("my-topic")

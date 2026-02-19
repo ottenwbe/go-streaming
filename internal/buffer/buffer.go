@@ -209,7 +209,11 @@ func (s *asyncBuffer[T]) GetAndRemoveNextEvent() events.Event[T] {
 
 // GetAndConsumeNextEvents returns the next event from the buffer and removes it.
 func (s *SimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
-	return []events.Event[T]{s.asyncBuffer.GetAndRemoveNextEvent()}
+	e := s.asyncBuffer.GetAndRemoveNextEvent()
+	if e != nil {
+		return []events.Event[T]{e}
+	}
+	return nil
 }
 
 // AddEvents adds multiple events to the buffer.
@@ -276,9 +280,10 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 		}
 		s.buffer = s.buffer[offset:]
 		s.selectionPolicy.Offset(offset)
-	}
 
-	return selectedEvents
+		return selectedEvents
+	}
+	return nil
 }
 
 // AddEvents adds multiple events to the buffer and updates the selection policy.
@@ -356,7 +361,7 @@ func (s *LimitedSimpleAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
 func (s *LimitedSimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	nextEvents := s.SimpleAsyncBuffer.GetAndConsumeNextEvents()
 
-	if len(nextEvents) > 0 {
+	if nextEvents != nil && len(nextEvents) > 0 {
 		s.cond.Broadcast()
 	}
 	return nextEvents
@@ -418,7 +423,7 @@ func (s *LimitedConsumableAsyncBuffer[T]) AddEvent(event events.Event[T]) error 
 func (s *LimitedConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	nextEvents := s.ConsumableAsyncBuffer.GetAndConsumeNextEvents()
 
-	if len(nextEvents) > 0 {
+	if nextEvents != nil && len(nextEvents) > 0 {
 		s.cond.Broadcast()
 	}
 	return nextEvents

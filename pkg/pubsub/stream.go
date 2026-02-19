@@ -40,7 +40,7 @@ type typedStream[T any] interface {
 	unlock()
 }
 
-type streamExecutor[T any] interface {
+type streamCoordinator[T any] interface {
 	publish(events.Event[T]) error
 	close()
 	run()
@@ -57,7 +57,7 @@ type baseStream[T any] struct {
 	active  bool
 	started bool
 
-	streamCoordinator streamExecutor[T]
+	streamCoordinator streamCoordinator[T]
 
 	mutex sync.RWMutex
 	cond  *sync.Cond
@@ -109,7 +109,7 @@ func (b *baseStream[T]) migrateStream(description StreamDescription) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	newEngine := newStreamEngine(description, b.subscriberMap)
+	newEngine := newStreamCoordinator(description, b.subscriberMap)
 
 	b.streamMetrics().WaitUntilDrained()
 
@@ -120,7 +120,7 @@ func (b *baseStream[T]) migrateStream(description StreamDescription) {
 	b.streamCoordinator.run()
 }
 
-func (b *baseStream[T]) publish(content T) error {
+func (b *baseStream[T]) publishSource(content T) error {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
@@ -129,6 +129,18 @@ func (b *baseStream[T]) publish(content T) error {
 	}
 
 	event := events.NewEvent(content)
+
+	b.metrics.incNumEventsIn()
+	return b.streamCoordinator.publish(event)
+}
+
+func (b *baseStream[T]) publishComplex(event events.Event[T]) error {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	for !b.started {
+		b.cond.Wait()
+	}
 
 	b.metrics.incNumEventsIn()
 	return b.streamCoordinator.publish(event)
@@ -207,12 +219,12 @@ type localAsyncStream[T any] struct {
 // newStreamFromDescription creates and returns a typedStream of a given stream type T
 func newStreamFromDescription[T any](description StreamDescription) typedStream[T] {
 	var (
-		streamEngine streamExecutor[T]
-		metrics      = newStreamMetrics()
-		subscribers  = newNotificationMap[T](description.DefaultSubscribers, metrics)
+		streamCoordinator streamCoordinator[T]
+		metrics           = newStreamMetrics()
+		subscribers       = newNotificationMap[T](description.DefaultSubscribers, metrics)
 	)
 
-	streamEngine = newStreamEngine(description, subscribers)
+	streamCoordinator = newStreamCoordinator(description, subscribers)
 
 	stream := &baseStream[T]{
 		description:       description,
@@ -221,14 +233,14 @@ func newStreamFromDescription[T any](description StreamDescription) typedStream[
 		metrics:           metrics,
 		active:            false,
 		started:           false,
-		streamCoordinator: streamEngine,
+		streamCoordinator: streamCoordinator,
 	}
 	stream.cond = sync.NewCond(&stream.mutex)
 
 	return stream
 }
 
-func newStreamEngine[T any](description StreamDescription, subscribers *notificationMap[T]) (streamEngine streamExecutor[T]) {
+func newStreamCoordinator[T any](description StreamDescription, subscribers *notificationMap[T]) (streamEngine streamCoordinator[T]) {
 	if description.Asynchronous {
 		streamEngine = newLocalAsyncStream[T](subscribers, description)
 	} else {
@@ -273,7 +285,7 @@ func (l *localAsyncStream[T]) close() {
 
 func (l *localAsyncStream[T]) run() {
 
-	// read buffer and publish via subscriberMap
+	// read buffer and publishSource via subscriberMap
 	l.closed.Go(func() {
 		for e := range l.streamChan {
 			if e != nil {
@@ -314,23 +326,23 @@ func (b *baseStream[T]) unsubscribe(id SubscriberID) {
 	b.subscriberMap.remove(id)
 }
 
-func (b *baseStream[T]) subscribe(opts ...SubscriberOption) (Subscriber[T], error) {
+func (b *baseStream[T]) subscribe(callback func(event events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
 	if b.active || !b.started {
-		return b.subscriberMap.newSubscriber(b.ID(), opts...)
+		return b.subscriberMap.newSubscriber(b.ID(), callback, opts...)
 	}
 
 	return nil, StreamInactiveError
 }
 
-func (b *baseStream[T]) subscribeBatch(opts ...SubscriberOption) (BatchSubscriber[T], error) {
+func (b *baseStream[T]) subscribeBatch(callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
 	if b.active || !b.started {
-		return b.subscriberMap.newBatchSubscriber(b.ID(), opts...)
+		return b.subscriberMap.newBatchSubscriber(b.ID(), callback, opts...)
 	}
 	return nil, StreamInactiveError
 }

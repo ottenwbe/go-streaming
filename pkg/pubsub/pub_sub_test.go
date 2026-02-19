@@ -54,7 +54,7 @@ var _ = Describe("PubSub", func() {
 			dResult, _ := pubsub.GetDescription(s)
 			Expect(dResult.AutoCleanup).To(BeTrue())
 
-			sub, err := pubsub.SubscribeByTopic[string](topic)
+			sub, err := pubsub.SubscribeByTopic[string](topic, func(_ events.Event[string]) {})
 			Expect(err).To(BeNil())
 			err = pubsub.Unsubscribe[string](sub)
 			Expect(err).To(BeNil())
@@ -169,7 +169,7 @@ var _ = Describe("PubSub", func() {
 
 			s, err := pubsub.AddOrReplaceStream[int]("try-close-2")
 			Expect(err).To(BeNil())
-			pubsub.SubscribeByTopicID[int](s)
+			pubsub.SubscribeByTopicID[int](s, func(_ events.Event[int]) {})
 
 			pubsub.TryRemoveStreams(s)
 			defer pubsub.ForceRemoveStream(s)
@@ -193,7 +193,7 @@ var _ = Describe("PubSub", func() {
 
 			sID, _ := pubsub.GetOrAddStream[string](topic)
 
-			rec, _ := pubsub.SubscribeByTopicID[string](sID)
+			rec, _ := pubsub.SubscribeByTopicID[string](sID, func(_ events.Event[string]) {})
 
 			Expect(func() { _ = pubsub.Unsubscribe(rec) }).NotTo(Panic())
 		})
@@ -210,16 +210,23 @@ var _ = Describe("PubSub", func() {
 			id, _ := pubsub.AddOrReplaceStream[string](topic)
 			defer pubsub.ForceRemoveStream(id)
 
-			rec, _ := pubsub.SubscribeByTopicID[string](id)
-
 			event := "test 1"
+			done := make(chan struct{})
+			var result events.Event[string]
+
+			rec, _ := pubsub.SubscribeByTopicID[string](id, func(e events.Event[string]) {
+				result = e
+				close(done)
+			})
+			defer pubsub.Unsubscribe[string](rec)
+
 			go func() {
 				publisher, _ := pubsub.RegisterPublisher[string](id)
 				publisher.Publish(event)
 			}()
-			eResult, _ := rec.Next()
 
-			Expect(event).To(Equal(eResult.GetContent()))
+			Eventually(done).Should(BeClosed())
+			Expect(event).To(Equal(result.GetContent()))
 		})
 	})
 
@@ -319,20 +326,20 @@ var _ = Describe("PubSub", func() {
 			Expect(err).To(BeNil())
 			defer pubsub.ForceRemoveStream(sID)
 
-			rec, err := pubsub.SubscribeByTopic[int](topic)
+			rec, err := pubsub.SubscribeByTopic[int](topic, func(_ events.Event[int]) {})
 			Expect(err).To(BeNil())
 			Expect(rec).NotTo(BeNil())
 			Expect(rec.StreamID().Topic).To(Equal(topic))
 		})
 		It("creates stream if stream does not exist", func() {
-			rec, err := pubsub.SubscribeByTopic[int]("non-existent-topic-sub")
+			rec, err := pubsub.SubscribeByTopic[int]("non-existent-topic-sub", func(_ events.Event[int]) {})
 			Expect(err).To(BeNil())
 			Expect(rec).NotTo(BeNil())
 			pubsub.Unsubscribe(rec)
 		})
 		It("creates stream if non existing in the pub sub system", func() {
 			id := pubsub.RandomStreamID()
-			rec, e := pubsub.SubscribeByTopicID[int](id)
+			rec, e := pubsub.SubscribeByTopicID[int](id, func(_ events.Event[int]) {})
 			Expect(e).To(BeNil())
 			Expect(rec).NotTo(BeNil())
 			pubsub.Unsubscribe(rec)

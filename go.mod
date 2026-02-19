@@ -6,7 +6,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
-	go.uber.org/zap v1.27.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -18,7 +17,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20260202012954-cb029daf43ef // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
-	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/net v0.50.0 // indirect

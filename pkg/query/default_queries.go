@@ -12,75 +12,123 @@ type number interface {
 }
 
 // ContinuousBatchSum creates a query that sums numeric events over a window defined by the selection policy.
-func ContinuousBatchSum[TEvent number](inEventType, outEvenType string, selectionPolicy selection.Policy[TEvent]) (*ContinuousQuery, error) {
+func ContinuousBatchSum[TEvent number](inEventType, outEventType string, selectionPolicy selection.PolicyDescription) (*ContinuousQuery, error) {
 
-	batchSumF := func(input engine.SingleStreamSelectionN[TEvent]) events.Event[TEvent] {
+	batchSumF := func(input []events.Event[TEvent]) []TEvent {
 		var result = TEvent(0)
 		for _, event := range input {
 			result += event.GetContent()
 		}
-		return events.NewNumericEvent[TEvent](result)
+		return []TEvent{result}
 	}
 
-	return TemplateQueryOverSingleStreamSelectionN[TEvent, TEvent](inEventType, selectionPolicy, batchSumF, outEvenType)
+	config := engine.NewOperatorDescription(
+		engine.PIPELINE_OPERATOR,
+		engine.WithOutput(outEventType),
+		engine.WithInput(engine.InputDescription{
+			Stream:      inEventType,
+			InputPolicy: selectionPolicy,
+		}),
+	)
+
+	op, err := engine.NewOperator[TEvent, TEvent](batchSumF, config)
+
+	q := newQueryControl[TEvent](outEventType)
+	q.addOperations(op)
+
+	return q, err
 }
 
 // ContinuousBatchCount creates a query that counts events over a window defined by the selection policy.
-func ContinuousBatchCount[TEvent any, TOut number](inEventType, outEvenType string, selectionPolicy selection.Policy[TEvent]) (*ContinuousQuery, error) {
+func ContinuousBatchCount[TEvent any, TOut number](inEventType, outEventType string, selectionPolicy selection.PolicyDescription) (*ContinuousQuery, error) {
 
-	batchCount := func(input engine.SingleStreamSelectionN[TEvent]) events.Event[TOut] {
+	batchCount := func(input []events.Event[TEvent]) []TOut {
 		result := TOut(len(input))
-		return events.NewNumericEvent[TOut](result)
+		return []TOut{result}
 	}
 
-	return TemplateQueryOverSingleStreamSelectionN[TEvent, TOut](inEventType, selectionPolicy, batchCount, outEvenType)
+	config := engine.NewOperatorDescription(
+		engine.PIPELINE_OPERATOR,
+		engine.WithOutput(outEventType),
+		engine.WithInput(engine.InputDescription{
+			Stream:      inEventType,
+			InputPolicy: selectionPolicy,
+		}),
+	)
+
+	op, err := engine.NewOperator[TEvent, TEvent](batchCount, config)
+
+	q := newQueryControl[TOut](outEventType)
+	q.addOperations(op)
+
+	return q, err
 }
 
 // ContinuousGreater creates a query that filters events greater than a specified value.
-func ContinuousGreater[T number](inEventType, outEvenType string, greaterThan T) (*ContinuousQuery, error) {
+func ContinuousGreater[T number](inEventType, outEventType string, greaterThan T) (*ContinuousQuery, error) {
 
-	greater := func(input engine.SingleStreamSelection1[T]) []events.Event[T] {
-		if input.GetContent() > greaterThan {
-			return []events.Event[T]{input}
-		}
-
-		return []events.Event[T]{}
+	greater := func(input events.Event[T]) bool {
+		return input.GetContent() > greaterThan
 	}
 
-	return TemplateQueryMultipleEventsOverSingleStreamSelection1[T, T](inEventType, greater, outEvenType)
+	config := engine.NewOperatorDescription(
+		engine.FILTER_OPERATOR,
+		engine.WithOutput(outEventType),
+		engine.WithInput(engine.InputDescription{
+			Stream: inEventType,
+		}),
+	)
+
+	op, err := engine.NewOperator[T, T](greater, config)
+
+	q := newQueryControl[T](outEventType)
+	q.addOperations(op)
+
+	return q, err
 }
 
 // ContinuousSmaller creates a query that filters events smaller than a specified value.
-func ContinuousSmaller[T number](inEventType, outEvenType string, than T) (*ContinuousQuery, error) {
+func ContinuousSmaller[T number](inEventType, outEventType string, than T) (*ContinuousQuery, error) {
 
-	smaller := func(input engine.SingleStreamSelection1[T]) []events.Event[T] {
-		if input.GetContent() < than {
-			return []events.Event[T]{input}
-		} else {
-			return []events.Event[T]{}
-		}
-
-	}
-	return TemplateQueryMultipleEventsOverSingleStreamSelection1[T, T](inEventType, smaller, outEvenType)
-}
-
-// ContinuousAdd creates a query that adds values from two input streams.
-func ContinuousAdd[T number](inEventType1, inEventType2, outEventType string) (*ContinuousQuery, error) {
-
-	add := func(input engine.DoubleInputSelection1[T, T]) events.Event[T] {
-		result := input.Input1.GetContent() + input.Input2.GetContent()
-		return events.NewEvent[T](result)
+	smaller := func(input events.Event[T]) bool {
+		return input.GetContent() < than
 	}
 
-	return TemplateQueryOverDoubleStreamSelection1[T, T, T](inEventType1, inEventType2, add, outEventType)
+	config := engine.NewOperatorDescription(
+		engine.FILTER_OPERATOR,
+		engine.WithOutput(outEventType),
+		engine.WithInput(engine.InputDescription{
+			Stream: inEventType,
+		}),
+	)
+
+	op, err := engine.NewOperator[T, T](smaller, config)
+
+	q := newQueryControl[T](outEventType)
+	q.addOperations(op)
+
+	return q, err
 }
 
 // ContinuousConvert creates a query that converts events from one numeric type to another.
 func ContinuousConvert[TIn, TOut number](inEventType, outEventType string) (*ContinuousQuery, error) {
 
-	convert := func(input engine.SingleStreamSelection1[TIn]) events.Event[TOut] {
-		return events.NewEvent[TOut](TOut(input.GetContent()))
+	convert := func(input events.Event[TIn]) TOut {
+		return TOut(input.GetContent())
 	}
 
-	return TemplateQueryOverSingleStreamSelection1[TIn, TOut](inEventType, convert, outEventType)
+	config := engine.NewOperatorDescription(
+		engine.MAP_OPERATOR,
+		engine.WithOutput(outEventType),
+		engine.WithInput(engine.InputDescription{
+			Stream: inEventType,
+		}),
+	)
+
+	op, err := engine.NewOperator[TIn, TOut](convert, config)
+
+	q := newQueryControl[TOut](outEventType)
+	q.addOperations(op)
+
+	return q, err
 }
