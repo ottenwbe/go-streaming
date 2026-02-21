@@ -109,6 +109,14 @@ func StartStream(id StreamID) error {
 	return defaultStreamRepository.StartStream(id)
 }
 
+// StartStream starts the stream with the given ID.
+func StartStreamOnRepository(id StreamID, r *StreamRepository) error {
+	if r == nil {
+		r = defaultStreamRepository
+	}
+	return r.StartStream(id)
+}
+
 func (r *StreamRepository) StartStream(id StreamID) error {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()

@@ -20,7 +20,7 @@ Hence, also no specific language like CQL is supported and optimizations are not
 
 ## Limitations
 
-- **Operator Support**: The primary supported operator types are the `PIPELINE_OPERATOR`, `FILTER` and `MAP` for batch processing. Other  *Standard Operators*: The set of standard, built-in operators is minimal and will need to be expanded for more complex use cases.
+- **Operator Support**: The primary supported operator types are the `PIPELINE_OPERATOR`, `FILTER` and `MAP` for batch processing. -  **Standard Operators**: The set of standard, built-in operators is minimal and will need to be expanded for more complex use cases.
 - **Joins and Multi-Stream Windows**: The current DSL and engine do not support operators with multiple input streams (e.g., joins) or windowing across them.
 - **Builder API**: The Query creation using a fluent builder pattern for query construction is experimental.
 

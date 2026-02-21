@@ -45,55 +45,6 @@ func Close(qs ContinuousQuery) {
 	qs.close()
 }
 
-// RunAndSubscribe starts the query and returns a typed wrapper with an active subscription to the output.
-//func RunAndSubscribe[T any](c *ContinuousQuery, err ...error) (*TypedContinuousQuery[T], []error) {
-//
-//	errs, done := anyErrorExists(err, c)
-//	if done {
-//		return nil, errs
-//	}
-//
-//	if runErr := c.run(); runErr != nil {
-//		c.close()
-//		return nil, append(errs, runErr)
-//	}
-//
-//	return &TypedContinuousQuery[T]{
-//		ContinuousQuery: c,
-//	}, errs
-//}
-//
-//func anyErrorExists(err []error, c *ContinuousQuery) ([]error, bool) {
-//	for i, _ := range err {
-//		if err[i] == nil {
-//			err = append(err[:i], err[i+1:]...)
-//		}
-//	}
-//
-//	if c == nil {
-//		err = append(err, nilContinuousError)
-//	}
-//
-//	return err, len(err) > 0
-//}
-
-// ComposeWith merges another query into the current one, chaining their operations.
-//func (c *TypedContinuousQuery[T]) ComposeWith(c2 *ContinuousQuery) (*ContinuousQuery, error) {
-//
-//	if !c2.output.IsNil() && in(c.streams, c2.output) {
-//		c2.output = c.output
-//	} else if (!c.output.IsNil() && in(c2.streams, c.output)) || (c.output.IsNil() && !c2.output.IsNil()) {
-//		c.output = c2.output
-//	} else {
-//		return nil, errors.New("output streams don't match")
-//	}
-//
-//	c.addStreams(c2.streams...)
-//	c.addOperations(c2.operators...)
-//
-//	return c, nil
-//}
-
 // ID returns the unique identifier of the query.
 func (c *TypedContinuousQuery[T]) ID() ID {
 	return c.id

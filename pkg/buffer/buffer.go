@@ -275,11 +275,17 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 		s.selectionPolicy.Shift()
 		s.selectionPolicy.UpdateSelection()
 		offset := s.selectionPolicy.NextSelection().Start
-		for i := range offset {
+
+		removeCount := offset
+		if removeCount > len(s.buffer) {
+			removeCount = len(s.buffer)
+		}
+
+		for i := 0; i < removeCount; i++ {
 			s.buffer[i] = nil
 		}
-		s.buffer = s.buffer[offset:]
-		s.selectionPolicy.Offset(offset)
+		s.buffer = s.buffer[removeCount:]
+		s.selectionPolicy.Offset(removeCount)
 
 		return selectedEvents
 	}
