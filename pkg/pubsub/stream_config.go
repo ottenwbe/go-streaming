@@ -25,6 +25,7 @@ type StreamDescription struct {
 	Asynchronous       bool                  `yaml:"asyncStream" json:"asyncStream"`
 	BufferCapacity     int                   `yaml:"bufferCapacity" json:"bufferCapacity"`
 	AutoCleanup        bool                  `yaml:"autoCleanup" json:"autoCleanup"`
+	AutoStart          bool                  `yaml:"autoStart" json:"autoStart"`
 	DefaultSubscribers SubscriberDescription `yaml:"subscribers" json:"subscribers"`
 }
 
@@ -88,6 +89,12 @@ func WithAutoCleanup(autoCleanup bool) StreamOption {
 	}
 }
 
+func WithAutoStart(autoStart bool) StreamOption {
+	return func(s *StreamDescription) {
+		s.AutoStart = autoStart
+	}
+}
+
 func WithDefaultSubscribers(subscribers SubscriberDescription) StreamOption {
 	return func(s *StreamDescription) {
 		s.DefaultSubscribers = subscribers
@@ -102,7 +109,8 @@ func MakeStreamDescription[T any](topic string, options ...StreamOption) StreamD
 // MakeStreamDescriptionByID creates a new StreamDescription using an existing StreamID.
 func MakeStreamDescriptionByID(id StreamID, options ...StreamOption) StreamDescription {
 	d := StreamDescription{
-		ID: id,
+		ID:        id,
+		AutoStart: true,
 	}
 	for _, option := range options {
 		option(&d)
@@ -149,7 +157,9 @@ func StreamDescriptionValidation(d StreamDescription) (StreamDescription, error)
 
 // StreamDescriptionFromJSON parses a StreamDescription from a JSON byte slice.
 func StreamDescriptionFromJSON(b []byte) (StreamDescription, error) {
-	var d = StreamDescription{}
+	var d = StreamDescription{
+		AutoStart: true,
+	}
 	if err := json.Unmarshal(b, &d); err != nil {
 
 		return StreamDescription{}, err
@@ -160,7 +170,9 @@ func StreamDescriptionFromJSON(b []byte) (StreamDescription, error) {
 
 // StreamDescriptionFromYML parses a StreamDescription from a YAML byte slice.
 func StreamDescriptionFromYML(b []byte) (StreamDescription, error) {
-	var d = StreamDescription{}
+	var d = StreamDescription{
+		AutoStart: true,
+	}
 	if err := yaml.Unmarshal(b, &d); err != nil {
 		return StreamDescription{}, err
 	}

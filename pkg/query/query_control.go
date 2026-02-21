@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/ottenwbe/go-streaming/internal/engine"
+	engine2 "github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
@@ -15,24 +15,26 @@ var nilContinuousError = errors.New("continuous error is empty")
 // ContinuousQuery represents a running query that processes streams.
 type ContinuousQuery interface {
 	addStreams(streams ...pubsub.StreamID)
-	addOperations(operators ...engine.OperatorID)
+	addOperations(operators ...engine2.OperatorID)
 	ID() ID
 	close()
-	Run()
+	Run() error
 	Subscribe(callback any, options ...pubsub.SubscriberOption) error
 	out(from pubsub.StreamID)
+	repository() *pubsub.StreamRepository
 }
 
 // TypedContinuousQuery is a typed wrapper around ContinuousQuery that provides a typed output receiver.
 type TypedContinuousQuery[T any] struct {
 	id ID
 
-	operators []engine.OperatorID
+	operators []engine2.OperatorID
 	streams   []pubsub.StreamID
 	outStream pubsub.StreamID
 
 	subscriptions []pubsub.Subscriber[T]
 	closeOnce     sync.Once
+	repo          *pubsub.StreamRepository
 }
 
 // Close stops the query and unsubscribes the output receiver.
@@ -97,6 +99,10 @@ func (c *TypedContinuousQuery[T]) ID() ID {
 	return c.id
 }
 
+func (c *TypedContinuousQuery[T]) repository() *pubsub.StreamRepository {
+	return c.repo
+}
+
 func (c *TypedContinuousQuery[T]) out(o pubsub.StreamID) {
 	c.outStream = o
 }
@@ -106,7 +112,7 @@ func (c *TypedContinuousQuery[T]) Subscribe(
 	options ...pubsub.SubscriberOption,
 ) error {
 	if cb, ok := callback.(func(event events.Event[T])); ok && cb != nil {
-		s, err := pubsub.SubscribeByTopicID(c.outStream, cb, options...)
+		s, err := pubsub.SubscribeByTopicIDOnRepository(c.repo, c.outStream, cb, options...)
 		if err != nil {
 			return err
 		}
@@ -116,55 +122,54 @@ func (c *TypedContinuousQuery[T]) Subscribe(
 	return errors.New("callback cannot be nil and needs to implement func(event events.Event[T])")
 }
 
-func (c *TypedContinuousQuery[T]) Run() {
+func (c *TypedContinuousQuery[T]) Run() error {
+	var err error
+	for _, sid := range c.streams {
+		_ = c.repo.StartStream(sid)
+	}
+
 	for _, oid := range c.operators {
-		op, found := engine.OperatorRepository().Get(oid)
-		if found {
-			op.Start()
+		op, exists := engine2.OperatorRepository().Get(oid)
+		if exists {
+			err = op.Start()
 		}
 	}
+	if err != nil {
+		return err
+	}
+	return QueryRepository().put(c)
 }
 
 func (c *TypedContinuousQuery[T]) close() {
 
 	c.closeOnce.Do(func() {
 		for _, sub := range c.subscriptions {
-			pubsub.Unsubscribe(sub)
+			pubsub.UnsubscribeOnRepository(c.repo, sub)
 		}
 
 		for _, o := range c.operators {
-			engine.RemoveOperator(o)
+			engine2.RemoveOperator(o)
 		}
-		pubsub.TryRemoveStreams(c.streams...)
+		c.repo.TryRemoveStreams(c.streams...)
 
 		QueryRepository().remove(c.id)
 	})
 }
 
-func (c *TypedContinuousQuery[T]) run() error {
-
-	var err error
-	for _, oid := range c.operators {
-		op, exists := engine.OperatorRepository().Get(oid)
-		if exists {
-			err = op.Start()
-		}
+func newContinuousQuery[T any](opts ...QueryOption) ContinuousQuery {
+	options := &queryOptions{
+		repo: pubsub.DefaultStreamRepository(),
+	}
+	for _, opt := range opts {
+		opt(options)
 	}
 
-	if err != nil {
-		return err
-	}
-
-	err = QueryRepository().put(c)
-	return err
-}
-
-func newContinuousQuery[T any]() ContinuousQuery {
 	id := ID(uuid.New())
 	return &TypedContinuousQuery[T]{
 		id:        id,
-		operators: make([]engine.OperatorID, 0),
+		operators: make([]engine2.OperatorID, 0),
 		streams:   []pubsub.StreamID{},
+		repo:      options.repo,
 	}
 }
 
@@ -172,7 +177,7 @@ func (c *TypedContinuousQuery[T]) addStreams(streams ...pubsub.StreamID) {
 	c.streams = append(c.streams, streams...)
 }
 
-func (c *TypedContinuousQuery[T]) addOperations(operators ...engine.OperatorID) {
+func (c *TypedContinuousQuery[T]) addOperations(operators ...engine2.OperatorID) {
 	c.operators = append(c.operators, operators...)
 }
 
@@ -192,7 +197,7 @@ func FromSourceStream[T any](topic string, options ...pubsub.StreamOption) func(
 			return StreamWError{pubsub.NilStreamID(), errors.New("query cannot be nil")}
 		}
 
-		sid, err := pubsub.GetOrAddStream[T](topic, options...)
+		sid, err := pubsub.GetOrAddStreamOnRepository[T](q.repository(), topic, append(options, pubsub.WithAutoStart(false))...)
 		if err != nil {
 			return StreamWError{pubsub.NilStreamID(), err}
 		}
@@ -204,7 +209,7 @@ func FromSourceStream[T any](topic string, options ...pubsub.StreamOption) func(
 }
 
 func Process[T any](
-	operatorCreationFunc func(in []pubsub.StreamID, out []pubsub.StreamID) (engine.OperatorID, error),
+	operatorCreationFunc func(in []pubsub.StreamID, out []pubsub.StreamID) (engine2.OperatorID, error),
 	fromF func(q ContinuousQuery) StreamWError,
 	options ...pubsub.StreamOption,
 ) func(q ContinuousQuery) StreamWError {
@@ -215,7 +220,7 @@ func Process[T any](
 		}
 		from := fromF(q)
 
-		to, err := pubsub.AddOrReplaceStream[T](uuid.New().String(), options...)
+		to, err := pubsub.AddOrReplaceStreamOnRepository[T](q.repository(), uuid.New().String(), append(options, pubsub.WithAutoStart(false))...)
 		if err != nil {
 			return StreamWError{pubsub.NilStreamID(), err}
 		}
@@ -226,6 +231,7 @@ func Process[T any](
 		}
 
 		q.addOperations(operatorEngine)
+		q.addStreams(to)
 
 		return StreamWError{
 			streamID: to,
@@ -236,9 +242,10 @@ func Process[T any](
 
 func Query[T any](
 	fromF func(q ContinuousQuery) StreamWError,
+	opts ...QueryOption,
 ) (q ContinuousQuery, err error) {
 
-	q = newContinuousQuery[T]()
+	q = newContinuousQuery[T](opts...)
 
 	from := fromF(q)
 	if from.error == nil {
@@ -255,4 +262,22 @@ func OnStream[T any](stream StreamWError) StreamWError {
 type StreamWError struct {
 	streamID pubsub.StreamID
 	error    error
+}
+
+type QueryOption func(*queryOptions)
+
+type queryOptions struct {
+	repo *pubsub.StreamRepository
+}
+
+func WithNewRepository() QueryOption {
+	return func(o *queryOptions) {
+		o.repo = pubsub.NewStreamRepository()
+	}
+}
+
+func WithRepository(r *pubsub.StreamRepository) QueryOption {
+	return func(o *queryOptions) {
+		o.repo = r
+	}
 }

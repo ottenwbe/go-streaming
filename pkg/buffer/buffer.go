@@ -361,7 +361,7 @@ func (s *LimitedSimpleAsyncBuffer[T]) AddEvent(event events.Event[T]) error {
 func (s *LimitedSimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	nextEvents := s.SimpleAsyncBuffer.GetAndConsumeNextEvents()
 
-	if nextEvents != nil && len(nextEvents) > 0 {
+	if len(nextEvents) > 0 {
 		s.cond.Broadcast()
 	}
 	return nextEvents
@@ -423,7 +423,7 @@ func (s *LimitedConsumableAsyncBuffer[T]) AddEvent(event events.Event[T]) error 
 func (s *LimitedConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []events.Event[T] {
 	nextEvents := s.ConsumableAsyncBuffer.GetAndConsumeNextEvents()
 
-	if nextEvents != nil && len(nextEvents) > 0 {
+	if len(nextEvents) > 0 {
 		s.cond.Broadcast()
 	}
 	return nextEvents

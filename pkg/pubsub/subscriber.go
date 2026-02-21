@@ -5,7 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ottenwbe/go-streaming/internal/buffer"
+	"github.com/ottenwbe/go-streaming/pkg/buffer"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/selection"
 
@@ -108,6 +108,9 @@ func (r *defaultSubscriber[T]) close() {
 }
 
 func (r *defaultSubscriber[T]) doNotify(event events.Event[T]) error {
+	defer func() {
+		_ = recover()
+	}()
 	if r.active.Load() {
 		r.notify(event)
 	}
@@ -299,17 +302,11 @@ func (m *notificationMap[T]) notify(event events.Event[T]) error {
 
 	var err error
 	for _, notifier := range snapshot {
-		// Wrap in a function to recover from panics if a subscriber is closed concurrently.
-		func() {
-			if event != nil {
-				defer func() { _ = recover() }()
-
-				errNotify := notifier.doNotify(event)
-				if errNotify != nil {
-					err = NotificationError
-				}
+		if event != nil {
+			if errNotify := notifier.doNotify(event); errNotify != nil {
+				err = NotificationError
 			}
-		}()
+		}
 	}
 	m.metrics.incNumEventsOut()
 
