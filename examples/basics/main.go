@@ -5,46 +5,47 @@ import (
 	"time"
 
 	"github.com/ottenwbe/go-streaming/pkg/engine"
+	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"github.com/ottenwbe/go-streaming/pkg/query"
 	"go.uber.org/zap"
 )
 
 var (
-	numEvents = 100000
+	numEvents = 100
 )
 
 func main() {
 	// define the query
-	q, defErr := engine.ContinuousGreater[int]("in", "out", 50)
-	if defErr != nil {
-		zap.S().Error("could not create query", zap.Error(defErr))
-		return
+	q, err := query.Query[int](
+		query.Process[int](
+			engine.ContinuousGreater[int](50),
+			query.FromSourceStream[int]("in", pubsub.WithAsynchronousStream(true)),
+		),
+	)
+	if err != nil {
+		zap.S().Fatal("could not create query", zap.Error(err))
+	}
+
+	// Subscribe to the output
+	err = q.Subscribe(func(e events.Event[int]) {
+		zap.S().Infof("event received %v", e)
+	})
+	if err != nil {
+		zap.S().Fatal("could not subscribe", zap.Error(err))
 	}
 
 	// start the query
-	qs, runErr := query.RunAndSubscribe[int](q, defErr)
-	if len(runErr) > 0 {
-		zap.S().Error("could not run the query", zap.Errors("errors", runErr))
+	if err := q.Run(); err != nil {
+		zap.S().Fatal("could not run the query", zap.Error(err))
 	}
 	// always close your query when no longer needed to free resources
-	defer query.Close(qs)
+	defer query.Close(q)
 
 	publishEvents()
-	receiveProcessedEvents(qs)
 
 	// wait for some seconds to let streams being processed
-	time.Sleep(time.Second * 10)
-}
-
-func receiveProcessedEvents(res *query.TypedContinuousQuery[int]) {
-	go func() {
-		for {
-			// wait until the next event notification arrives
-			e, _ := res.Next()
-			zap.S().Infof("event received %v", e)
-		}
-	}()
+	time.Sleep(time.Second * 2)
 }
 
 func publishEvents() {
@@ -54,6 +55,7 @@ func publishEvents() {
 			if err := pubsub.InstantPublishByTopic[int]("in", rand.Int()%100); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
 			}
+			time.Sleep(10 * time.Millisecond)
 		}
 	}()
 }

@@ -3,14 +3,18 @@ package main
 import (
 	"fmt"
 
+	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
 
 func main() {
+	done := make(chan struct{})
+
 	// 1. Subscribe to a topic
 	sub, _ := pubsub.SubscribeByTopic[int]("my-topic",
-		func(description *pubsub.SubscriberDescription) {
-
+		func(e events.Event[int]) {
+			fmt.Printf("Received: %v\n", e.GetContent())
+			close(done)
 		})
 
 	// 2. Publish to the same topic
@@ -18,8 +22,7 @@ func main() {
 	pub.Publish(42)
 
 	// 3. Consume the event
-	event, _ := sub.Next()
-	fmt.Printf("Received: %v\n", event.GetContent())
+	<-done
 
 	// 4. Cleanup
 	pubsub.UnRegisterPublisher(pub)
