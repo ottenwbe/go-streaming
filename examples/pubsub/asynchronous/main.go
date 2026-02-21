@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
 	"go.uber.org/zap"
@@ -24,8 +25,8 @@ func main() {
 	defer pubsub.TryRemoveStreams(intStreamID)
 
 	// 2. Subscribe to the topic 'Some Integers'
-	startSubscriber("Subscriber 1", intStreamID, &wg, 2*time.Microsecond)
-	startSubscriber("Subscriber 2", intStreamID, &wg, time.Microsecond)
+	startSubscriber("Subscriber 1", intStreamID, 2*time.Microsecond)
+	startSubscriber("Subscriber 2", intStreamID, time.Microsecond)
 
 	// 3. Publish events to the topic 'Some Integers'
 	startPublisher(intStreamID, &wg)
@@ -51,26 +52,14 @@ func startPublisher(streamID pubsub.StreamID, wg *sync.WaitGroup) {
 	})
 }
 
-func startSubscriber(name string, streamID pubsub.StreamID, wg *sync.WaitGroup, delay time.Duration) {
-	subscriber, err := pubsub.SubscribeByTopicID[int](streamID)
+func startSubscriber(name string, streamID pubsub.StreamID, delay time.Duration) {
+	_, err := pubsub.SubscribeByTopicID[int](streamID, func(e events.Event[int]) {
+		zap.S().Infof("Event received by %s: %v", name, e)
+		time.Sleep(delay)
+	})
 	if err != nil {
 		zap.S().Fatalf("Failed to subscribe %s: %v", name, err)
 	}
-
-	wg.Go(func() {
-		// Ensure that we are no longer subscribed to stream with streamID
-		defer unsubscribe(name, streamID, subscriber)
-
-		for range maxEvents {
-			e, more := subscriber.Next()
-			if !more {
-				zap.S().Errorf("error consuming: %s", name)
-				return
-			}
-			zap.S().Infof("Event received by %s: %v", name, e)
-			time.Sleep(delay)
-		}
-	})
 }
 
 func unregister(streamID pubsub.StreamID, publisher pubsub.Publisher[int]) {
