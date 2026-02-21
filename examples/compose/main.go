@@ -3,6 +3,7 @@ package main
 import (
 	"math/rand"
 
+	"github.com/ottenwbe/go-streaming/internal/engine"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"github.com/ottenwbe/go-streaming/pkg/query"
 	"github.com/ottenwbe/go-streaming/pkg/selection"
@@ -34,12 +35,12 @@ func defineContinuousQueries() (*query.ContinuousQuery, *query.ContinuousQuery) 
 	// define the continuous query (or queries)
 	// query 1 continuously sums up the (float64) contents of subsequent 10 events in stream in
 	policy := selection.NewCountingWindowPolicy[float64](10, shift)
-	q1, err := query.ContinuousBatchSum[float64]("in", "out", policy)
+	q1, err := engine.ContinuousBatchSum[float64]("in", "out", policy)
 	if err != nil {
 		zap.S().Error("could not create sum query", zap.Error(err))
 	}
 	// query 2 continuously converts float64 values in stream out to int
-	q2, err := query.ContinuousConvert[float64, int]("out", "fin")
+	q2, err := engine.ContinuousConvert[float64, int]("out", "fin")
 	if err != nil {
 		zap.S().Error("could not create conversion query", zap.Error(err))
 	}

@@ -20,15 +20,21 @@ func TestEngine(t *testing.T) {
 var _ = Describe("OperatorRepository", func() {
 
 	var (
-		oid engine.OperatorID
-		err error
+		sidin, sidout pubsub.StreamID
+		oid           engine.OperatorID
+		err           error
 	)
 
 	BeforeEach(func() {
+
+		sidin, _ = pubsub.GetOrAddStream[int]("in")
+		sidout, _ = pubsub.GetOrAddStream[int]("out")
+
 		d := engine.NewOperatorDescription(engine.PIPELINE_OPERATOR,
-			engine.WithOutput("out"),
+			engine.WithOutput(sidout),
+			engine.WithAutoStart(true),
 			engine.WithInput(engine.InputDescription{
-				Stream: "in",
+				Stream: sidin,
 				InputPolicy: selection.PolicyDescription{
 					Active: true,
 					Type:   selection.CountingWindow,
@@ -61,6 +67,7 @@ var _ = Describe("OperatorRepository", func() {
 
 	AfterEach(func() {
 		engine.RemoveOperator(oid)
+		pubsub.TryRemoveStreams(sidin, sidout)
 	})
 
 	Context("NewOperator", func() {
@@ -113,15 +120,19 @@ var _ = Describe("OperatorRepository", func() {
 
 var _ = Describe("FilterOperatorEngine", func() {
 	var (
-		oid engine.OperatorID
-		err error
+		oid           engine.OperatorID
+		err           error
+		sidin, sidout pubsub.StreamID
 	)
 
 	BeforeEach(func() {
+		sidin, _ = pubsub.GetOrAddStream[int]("in-filter")
+		sidout, _ = pubsub.GetOrAddStream[int]("out-filter")
 		d := engine.NewOperatorDescription(engine.FILTER_OPERATOR,
-			engine.WithOutput("out-filter"),
+			engine.WithOutput(sidout),
+			engine.WithAutoStart(true),
 			engine.WithInput(engine.InputDescription{
-				Stream: "in-filter",
+				Stream: sidin,
 				InputPolicy: selection.PolicyDescription{
 					Type: selection.SelectNext,
 				},
@@ -137,7 +148,7 @@ var _ = Describe("FilterOperatorEngine", func() {
 
 	AfterEach(func() {
 		engine.RemoveOperator(oid)
-		pubsub.ForceRemoveStream(pubsub.MakeStreamID[int]("in-filter"), pubsub.MakeStreamID[int]("out-filter"))
+		pubsub.ForceRemoveStream(sidin, sidout)
 	})
 
 	It("should only pass events that match the predicate", func() {
@@ -177,15 +188,19 @@ var _ = Describe("FilterOperatorEngine", func() {
 
 var _ = Describe("MapOperatorEngine", func() {
 	var (
-		oid engine.OperatorID
-		err error
+		oid           engine.OperatorID
+		err           error
+		sidin, sidout pubsub.StreamID
 	)
 
 	BeforeEach(func() {
+		sidin, _ = pubsub.GetOrAddStream[int]("in-map")
+		sidout, _ = pubsub.GetOrAddStream[int]("out-map")
 		d := engine.NewOperatorDescription(engine.MAP_OPERATOR,
-			engine.WithOutput("out-map"),
+			engine.WithOutput(sidout),
+			engine.WithAutoStart(true),
 			engine.WithInput(engine.InputDescription{
-				Stream: "in-map",
+				Stream: sidin,
 				// InputPolicy is ignored for MapOperator
 			}))
 
@@ -200,7 +215,7 @@ var _ = Describe("MapOperatorEngine", func() {
 
 	AfterEach(func() {
 		engine.RemoveOperator(oid)
-		pubsub.ForceRemoveStream(pubsub.MakeStreamID[int]("in-map"), pubsub.MakeStreamID[int]("out-map"))
+		pubsub.ForceRemoveStream(sidin, sidout)
 	})
 
 	It("should map events 1-to-1", func() {

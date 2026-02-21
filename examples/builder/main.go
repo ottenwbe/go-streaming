@@ -3,6 +3,7 @@ package main
 import (
 	"math/rand"
 
+	"github.com/ottenwbe/go-streaming/internal/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"github.com/ottenwbe/go-streaming/pkg/query"
@@ -21,7 +22,7 @@ func main() {
 	policy := selection.NewCountingWindowPolicy[float64](10, shift)
 	q, err := query.NewBuilder().
 		Stream(query.S[float64]("in", pubsub.WithAsynchronousStream(true))).
-		Query(query.ContinuousBatchSum("in", "out", policy)).
+		Query(engine.ContinuousBatchSum("in", "out", policy)).
 		Build()
 
 	// start the continuous query

@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/ottenwbe/go-streaming/internal/engine"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"github.com/ottenwbe/go-streaming/pkg/query"
 	"go.uber.org/zap"
@@ -15,7 +16,7 @@ var (
 
 func main() {
 	// define the query
-	q, defErr := query.ContinuousGreater[int]("in", "out", 50)
+	q, defErr := engine.ContinuousGreater[int]("in", "out", 50)
 	if defErr != nil {
 		zap.S().Error("could not create query", zap.Error(defErr))
 		return

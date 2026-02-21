@@ -7,9 +7,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 type OperatorID uuid.UUID
+
+func (o OperatorID) String() string {
+	return o.String()
+}
 
 func NewOperatorID() OperatorID {
 	return OperatorID(uuid.New())
@@ -23,6 +28,8 @@ type OperatorEngine interface {
 	ID() OperatorID
 	Start() error
 	Stop() error
+	InStream(from pubsub.StreamID, description selection.PolicyDescription)
+	OutStream(to pubsub.StreamID)
 }
 
 type TypedOperatorExecutor[TIn any] interface {
@@ -41,6 +48,17 @@ func (o *baseOperatorEngine[TIN, TOUT]) ID() OperatorID {
 	return o.config.ID
 }
 
+func (o *baseOperatorEngine[TIN, TOUT]) InStream(in pubsub.StreamID, p selection.PolicyDescription) {
+	o.config.Inputs = append(o.config.Inputs, InputDescription{
+		in,
+		p,
+	})
+}
+
+func (o *baseOperatorEngine[TIN, TOUT]) OutStream(to pubsub.StreamID) {
+	o.config.Outputs = append(o.config.Outputs, to)
+}
+
 func (o *baseOperatorEngine[TIN, TOUT]) start(processFunc func(in ...events.Event[TIN])) error {
 	o.active.Store(true)
 
@@ -49,15 +67,16 @@ func (o *baseOperatorEngine[TIN, TOUT]) start(processFunc func(in ...events.Even
 	policy := o.config.Inputs[0].InputPolicy
 
 	var err error
-	o.Output, err = pubsub.RegisterPublisherByTopic[TOUT](outID)
+	o.Output, err = pubsub.RegisterPublisher[TOUT](outID)
 	if err != nil {
 		return err
 	}
-	o.Input, err = pubsub.SubscribeBatchByTopic[TIN](
+	o.Input, err = pubsub.SubscribeBatchByTopicID[TIN](
 		inID,
 		processFunc,
 		pubsub.SubscriberIsSync(false),
 		pubsub.SubscriberWithSelectionPolicy(policy))
+
 	return err
 }
 
@@ -114,12 +133,12 @@ func (o *MapOperatorEngine[TIN, TOUT]) Start() error {
 	inID := o.config.Inputs[0].Stream
 
 	var err error
-	o.Output, err = pubsub.RegisterPublisherByTopic[TOUT](outID)
+	o.Output, err = pubsub.RegisterPublisher[TOUT](outID)
 	if err != nil {
 		return err
 	}
 
-	o.Input, err = pubsub.SubscribeByTopic[TIN](
+	o.Input, err = pubsub.SubscribeByTopicID[TIN](
 		inID,
 		o.ProcessSingleEvent,
 		pubsub.SubscriberIsSync(false))

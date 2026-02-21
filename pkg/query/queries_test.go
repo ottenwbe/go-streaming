@@ -1,207 +1,55 @@
 package query_test
 
 import (
+	"sync/atomic"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/ottenwbe/go-streaming/internal/engine"
+	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"github.com/ottenwbe/go-streaming/pkg/query"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
-var _ = Describe("Query Builder", func() {
+var _ = Describe("Continuous Query", func() {
 
-	Context("Build", func() {
-		It("creates a successful query", func() {
-			b := query.NewBuilder().Stream(query.S[int]("builder1", pubsub.WithAsynchronousStream(true))).Query(query.ContinuousBatchSum[int]("builder1", "builder2", selection.NewCountingWindowPolicy[int](10, 10)))
-			q, ok := b.Build()
+	var (
+		q     query.ContinuousQuery
+		err   error
+		count atomic.Int32
+	)
 
-			Expect(ok).To(BeNil())
-			Expect(q).ToNot(BeNil())
-		})
-	})
-})
-
-var _ = Describe("Add Operator1", func() {
-
-	Context("execute the operator", func() {
-		It("should correctly perform the operation on pubsub", func() {
-
-			c, err1 := query.ContinuousAdd[int]("test-add-in1", "test-add-in2", "test-add-out")
-			qs, _ := query.RunAndSubscribe[int](c, err1)
-			defer query.Close(qs)
-
-			event := 8
-			event2 := 3
-
-			streamAID := pubsub.MakeStreamID[int]("test-add-in1")
-			streamBID := pubsub.MakeStreamID[int]("test-add-in2")
-
-			publisherA, _ := pubsub.RegisterPublisher[int](streamAID)
-			publisherB, _ := pubsub.RegisterPublisher[int](streamBID)
-
-			publisherA.Publish(event)
-			publisherB.Publish(event2)
-
-			result, _ := qs.Next()
-
-			r := result[0].GetContent()
-
-			Expect(r).To(Equal(11))
-		})
-	})
-})
-
-var _ = Describe("Convert Operator1", func() {
-	Context("convert", func() {
-		It("should change the type", func() {
-
-			c, err1 := query.ContinuousConvert[int, float32]("convert-test-in", "convert-test-out")
-			qs, _ := query.RunAndSubscribe[float32](c, err1)
-			defer query.Close(qs)
-
-			event := 8
-
-			streamInID := pubsub.MakeStreamID[int]("convert-test-in")
-			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
-
-			publisher.Publish(event)
-			result, _ := qs.Next()
-
-			r := result[0].GetContent()
-
-			Expect(r).To(Equal(float32(8.0)))
-		})
-	})
-})
-
-var _ = Describe("Sum Operator1", func() {
-	Context("when executed", func() {
-		It("should sum all values over a window", func() {
-
-			selection := selection.NewCountingWindowPolicy[int](2, 2)
-
-			qs, _ := query.RunAndSubscribe[int](query.ContinuousBatchSum[int]("int values", "sum values", selection))
-			defer query.Close(qs)
-
-			event := 10
-			event1 := 10
-			event2 := 15
-			event3 := 15
-
-			streamInID := pubsub.MakeStreamID[int]("int values")
-			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
-
-			publisher.Publish(event)
-			publisher.Publish(event1)
-			publisher.Publish(event2)
-			publisher.Publish(event3)
-
-			result1, _ := qs.Next()
-			result2, _ := qs.Next()
-
-			r1 := result1[0].GetContent()
-			r2 := result2[0].GetContent()
-
-			Expect(r1).To(Equal(20))
-			Expect(r2).To(Equal(30))
-		})
-	})
-})
-
-var _ = Describe("Count Operator1", func() {
-	Context("when executed", func() {
-		It("should sum all values over a window", func() {
-
-			selection := selection.NewCountingWindowPolicy[float32](2, 2)
-			qs, _ := query.RunAndSubscribe[int](query.ContinuousBatchCount[float32, int]("countable floats", "counted floats", selection))
-			defer query.Close(qs)
-
-			var (
-				event  float32 = 1.0
-				event1 float32 = 1.1
-				event2 float32 = 1.2
-				event3 float32 = 1.3
+	BeforeEach(func() {
+		count = atomic.Int32{}
+		q, err =
+			query.Query[int](
+				query.Process[int](
+					engine.ContinuousSmaller[int](5),
+					query.FromSourceStream[int]("test"),
+				),
 			)
-
-			streamInID := pubsub.MakeStreamID[float32]("countable floats")
-			publisher, _ := pubsub.RegisterPublisher[float32](streamInID)
-			publisher.Publish(event)
-			publisher.Publish(event1)
-			publisher.Publish(event2)
-			publisher.Publish(event3)
-
-			result1, _ := qs.Next()
-			result2, _ := qs.Next()
-
-			r1 := result1[0].GetContent()
-			r2 := result2[0].GetContent()
-
-			Expect(r1).To(Equal(2))
-			Expect(r2).To(Equal(2))
-		})
+		Expect(err).To(BeNil())
+		err = q.Subscribe(
+			func(event events.Event[int]) {
+				count.Add(1)
+			})
+		Expect(err).To(BeNil())
+		q.Run()
 	})
-})
 
-var _ = Describe("Smaller OperatorControl", func() {
-	Context("when executed", func() {
-		It("should remove large events", func() {
-
-			qs, _ := query.RunAndSubscribe[int](query.ContinuousSmaller[int]("q-s-1", "res-s-1", 11))
-			defer query.Close(qs)
-
-			streamInID := pubsub.MakeStreamID[int]("q-s-1")
-
-			event := 9
-			event1 := 10
-			event2 := 15
-			event3 := 35
-
-			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
-
-			publisher.Publish(event)
-			publisher.Publish(event1)
-			publisher.Publish(event2)
-			publisher.Publish(event3)
-
-			result1, _ := qs.Next()
-			result2, _ := qs.Next()
-
-			r1 := result1[0].GetContent()
-			r2 := result2[0].GetContent()
-
-			Expect(r1).To(Equal(9))
-			Expect(r2).To(Equal(10))
-		})
+	AfterEach(func() {
+		query.Close(q)
 	})
-})
 
-var _ = Describe("Greater OperatorControl", func() {
-	Context("when executed", func() {
-		It("should remove small events", func() {
+	Context("Query filtering all events < 5", func() {
+		It("sorts out events >= 5", func() {
+			pubsub.InstantPublishByTopic("test", 2)
+			pubsub.InstantPublishByTopic("test", 12)
+			pubsub.InstantPublishByTopic("test", 5)
+			pubsub.InstantPublishByTopic("test", 29)
+			pubsub.InstantPublishByTopic("test", 4)
 
-			qs, _ := query.RunAndSubscribe[int](query.ContinuousGreater("test-greater-11", "test-greater-11-out", 11))
-			defer query.Close(qs)
-
-			event := 10
-			event1 := 10
-			event2 := 15
-			event3 := 35
-
-			streamInID := pubsub.MakeStreamID[int]("test-greater-11")
-			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
-			publisher.Publish(event)
-			publisher.Publish(event1)
-			publisher.Publish(event2)
-			publisher.Publish(event3)
-
-			result1, _ := qs.Next()
-			result2, _ := qs.Next()
-
-			r1 := result1[0].GetContent()
-			r2 := result2[0].GetContent()
-
-			Expect(r1).To(Equal(15))
-			Expect(r2).To(Equal(35))
+			Eventually(count.Load).To(Equal(int32(2)))
 		})
 	})
 })

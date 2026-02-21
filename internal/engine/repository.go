@@ -83,10 +83,15 @@ func NewOperator[TIn, Tout any](operation any, d *OperatorDescription) (Operator
 		return NilOperatorID(), fmt.Errorf("%w: %s", ErrUnknownOperatorType, d.Type)
 	}
 
-	if err := OperatorRepository().put(o); err != nil {
+	err := OperatorRepository().put(o)
+	if err != nil {
 		return NilOperatorID(), err
 	}
-	return o.ID(), o.Start()
+
+	if d.AutoStart {
+		err = o.Start()
+	}
+	return o.ID(), err
 }
 
 func RemoveOperator(oid OperatorID) {
