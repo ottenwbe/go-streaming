@@ -3,7 +3,7 @@ package buffer_test
 import (
 	"sync"
 
-	"github.com/ottenwbe/go-streaming/internal/buffer"
+	"github.com/ottenwbe/go-streaming/pkg/buffer"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/selection"
 
@@ -255,8 +255,7 @@ var _ = Describe("Buffer", func() {
 				go func() {
 					defer GinkgoRecover()
 					res := buf.GetAndConsumeNextEvents()
-					Expect(res).To(HaveLen(1))
-					Expect(res[0]).To(BeNil())
+					Expect(res).To(BeNil())
 					close(done)
 				}()
 

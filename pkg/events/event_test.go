@@ -9,7 +9,7 @@ import (
 	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
-var _ = Describe("PubSub", func() {
+var _ = Describe("Event", func() {
 
 	Context("Temporal events", func() {
 		It("can be created and values can be read afterwards", func() {
@@ -62,7 +62,7 @@ var _ = Describe("PubSub", func() {
 			}
 			e3 := events.NewEventM[string]("", tMeta3)
 
-			tm := events.NewEventFromOthers[string]("", e2, e3).GetStamp()
+			tm := events.NewEventFromOthers[string]("", events.GetTimeStamps(e2, e3)...).GetStamp()
 
 			Expect(tm.EndTime.After(tm.StartTime)).To(BeTrue())
 			Expect(tm.EndTime).To(Equal(s2.EndTime))
@@ -84,7 +84,7 @@ var _ = Describe("PubSub", func() {
 			}
 			e3 := events.NewEventM[string]("", tMeta3)
 
-			tm := events.NewEventFromOthersM[string]("", tMeta1, e2, e3).GetStamp()
+			tm := events.NewEventFromOthersM[string]("", tMeta1, events.GetTimeStamps(e2, e3)...).GetStamp()
 
 			Expect(tm.EndTime.After(tm.StartTime)).To(BeTrue())
 			Expect(tm.EndTime).To(Equal(s2.EndTime))

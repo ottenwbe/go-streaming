@@ -1,89 +1,70 @@
-# Go-Stream-Processing
+# Go Streaming Library
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/ottenwbe/go-streaming/blob/main/LICENSE)
 [![Go](https://github.com/ottenwbe/go-streaming/actions/workflows/go.yml/badge.svg)](https://github.com/ottenwbe/go-streaming/actions/workflows/go.yml)
 
-This project is created as a playground to understand concurrency in go. 
-That said the idea is to build a simple event streaming playground.
-The processing engine is mainly designed for flexibility and extendability to test (GoLang) features.
-It provides a lightweight, in-memory Pub/Sub system and a Continuous Query engine. Hence, also no specific language like CQL is supported.
+This is a basic event streaming and processing library.
+The processing engine is mainly designed for flexibility and extendability  .
+It provides a lightweight, generic, in-memory, type-safe streaming and event processing library for Go.
+
+
+## Disclaimer
+This project's main purpose was to understand concurrency in go by the authors; channels, mutexes, etc, not the functionality of the stream processing system.
+Hence, also no specific language like CQL is supported and optimizations are not in focus.
 
 ## Features
 
-*   **Type-Safe Pub/Sub**: Generic implementation allowing streams of specific types (e.g., `Stream[int]`, `Stream[string]`).
-*   **Concurrency Models**: Supports both synchronous and asynchronous (buffered) stream processing.
-*   **Continuous Queries**: Build complex processing pipelines using a builder pattern.
-*   **Windowing**: Built-in support for:
-    *   **Counting Windows**: Aggregate over the last *N* events.
-    *   **Temporal Windows**: Aggregate over time durations (e.g., last 5 minutes).
-*   **Operators**: Standard operators like Sum, Count, etc.
+- **Type-Safe Pub/Sub**: Leverages Go generics for type-safe event streams.
+- **Continuous Queries**: Functional DSL for building stream processing pipelines.
+- **Backpressure & Buffering**: Built-in support for buffered streams and flow control.
+- **Windowing**: Support for time-based and count-based windows (via selection policies).
 
-## Pub/Sub System
+## Limitations
 
-The core of this library is a generic Pub/Sub system. It allows you to create streams that carry specific data types (e.g., `int`, `string`, `structs`).
-Subscribers will get notified about new events published to the stream. Publishers can send events to dedicated streams.
+- **Operator Support**: The primary supported operator types are the `PIPELINE_OPERATOR`, `FILTER` and `MAP` for batch processing. Other  *Standard Operators*: The set of standard, built-in operators is minimal and will need to be expanded for more complex use cases.
+- **Joins and Multi-Stream Windows**: The current DSL and engine do not support operators with multiple input streams (e.g., joins) or windowing across them.
+- **Builder API**: The Query creation using a fluent builder pattern for query construction is experimental.
 
-### Minimal Example
+## Usage
 
-```go
-package main
-
-import (
-	"fmt"
-
-	"github.com/ottenwbe/go-streaming/pkg/events"
-	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-)
-
-func main() {
-	// 1. Subscribe to a topic
-	sub, _ := pubsub.SubscribeByTopic[int]("my-topic")
-
-	// 2. Publish to the same topic
-	pub, _ := pubsub.RegisterPublisherByTopic[int]("my-topic")
-	pub.Publish(events.NewEvent(42))
-
-	// 3. Consume the event
-	event, _ := sub.Next()
-	fmt.Printf("Received: %v\n", event.GetContent())
-
-	// 4. Cleanup
-	pubsub.UnRegisterPublisher(pub)
-	pubsub.Unsubscribe(sub)
-}
-```
-
-### Stream Descriptions
-
-Streams are configured using a `StreamDescription`. You can customize the behavior of the stream, e.g. regarding concurrency and buffering. 
+### Pub/Sub
 
 ```go
-// Create a simple synchronous stream for integers
-desc := pubsub.MakeStreamDescription[int]("my-topic")
+// Subscribe to a topic
+sub, err := pubsub.SubscribeByTopic[int]("my-topic", func(e events.Event[int]) {
+    fmt.Println("Received:", e.GetContent())
+})
 
-// Create an asynchronous stream with specific options
-descAsync := pubsub.MakeStreamDescription[string]("my-async-topic",
-    pubsub.WithAsyncStream(true),       // Decouple publishers from the stream
-    pubsub.WithAsyncReceiver(true),     // Decouple subscribers from the stream
-    pubsub.WithBufferCapacity(100),     // Set buffer size to 100 events
-)
+// Publish to a topic
+err := pubsub.InstantPublishByTopic[int]("my-topic", 42)
 ```
 
-**Configuration Options:**
+### Continuous Queries
 
-*   **`WithAsyncStream(bool)`**: If `true`, publishers write to an input channel, and the stream processes events in a background goroutine. Default is `false` (synchronous).
-*   **`WithAsyncReceiver(bool)`**: If `true`, the subscriber has its own buffer. The stream dispatches to the buffer and moves on immediately. Default is `false` (synchronous dispatch).
-*   **`WithBufferCapacity(int)`**: Sets the size of the internal buffer for async streams or receivers. If set to a value > 0, **backpressure** is applied (the writer blocks when full). If 0 (default), the buffer is unbounded.
+Build processing pipelines using the functional API:
+
+```go
+q, err := query.Query[int](
+    query.Process[int](
+        engine.ContinuousSmaller[int](50), // Example operator
+        query.FromSourceStream[int]("source-topic"),
+    ),
+)
+
+q.Subscribe(func(e events.Event[int]) {
+    // Handle processed output
+})
+
+q.Run()
+```
+
+## Examples
+
+See our examples folder for more details.
 
 
+## Packages
 
-## Quick Start
-
-Check out the examples in the example section
-
-## Development
-
-Tests can be executed as follows
-
-````
-ginkgo -cover -v  ./... 
-````
+- `pubsub`: Core messaging infrastructure.
+- `query`: Query construction and lifecycle management.
+- `engine`: Stream processing operators.
+- `buffer`: Event buffering implementations.

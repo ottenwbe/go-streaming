@@ -1,206 +1,129 @@
 package query_test
 
 import (
+	"errors"
+	"sync/atomic"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	engine2 "github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"github.com/ottenwbe/go-streaming/pkg/query"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
-var _ = Describe("Query Builder", func() {
+var _ = Describe("Continuous Query", func() {
 
-	Context("Build", func() {
-		It("creates a successful query", func() {
-			b := query.NewBuilder().Stream(query.S[int]("builder1", pubsub.WithAsyncStream(true))).Query(query.ContinuousBatchSum[int]("builder1", "builder2", selection.NewCountingWindowPolicy[int](10, 10)))
-			q, ok := b.Build()
+	var (
+		q     query.ContinuousQuery
+		err   error
+		count atomic.Int32
+	)
 
-			Expect(ok).To(BeNil())
-			Expect(q).ToNot(BeNil())
+	BeforeEach(func() {
+		count = atomic.Int32{}
+		q, err =
+			query.Query[int](
+				query.Process[int](
+					engine2.ContinuousSmaller[int](5),
+					query.FromSourceStream[int]("test"),
+				),
+			)
+		Expect(err).To(BeNil())
+		err = q.Subscribe(
+			func(event events.Event[int]) {
+				count.Add(1)
+			})
+		Expect(err).To(BeNil())
+		err = q.Run()
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		query.Close(q)
+	})
+
+	Context("Query filtering all events < 5", func() {
+		It("sorts out events >= 5", func() {
+			pubsub.InstantPublishByTopic("test", 2)
+			pubsub.InstantPublishByTopic("test", 12)
+			pubsub.InstantPublishByTopic("test", 5)
+			pubsub.InstantPublishByTopic("test", 29)
+			pubsub.InstantPublishByTopic("test", 4)
+
+			Eventually(count.Load).To(Equal(int32(2)))
 		})
 	})
-})
 
-var _ = Describe("Add Operator1", func() {
+	Describe("Query Options & Isolation", func() {
+		It("supports isolated repositories via WithRepository", func() {
+			repo1 := pubsub.NewStreamRepository()
+			repo2 := pubsub.NewStreamRepository()
+			topic := "isolated-topic"
 
-	Context("execute the operator", func() {
-		It("should correctly perform the operation on pubsub", func() {
+			// Create two queries on different repositories listening to the same topic name
+			q1, err1 := query.Query[int](
+				query.FromSourceStream[int](topic),
+				query.WithRepository(repo1),
+			)
+			Expect(err1).To(BeNil())
+			defer query.Close(q1)
 
-			c, err1 := query.ContinuousAdd[int]("test-add-in1", "test-add-in2", "test-add-out")
-			qs, _ := query.RunAndSubscribe[int](c, err1)
-			defer query.Close(qs)
+			q2, err2 := query.Query[int](
+				query.FromSourceStream[int](topic),
+				query.WithRepository(repo2),
+			)
+			Expect(err2).To(BeNil())
+			defer query.Close(q2)
 
-			event := events.NewEvent(8)
-			event2 := events.NewEvent(3)
+			// Subscribe to both
+			var received1, received2 atomic.Int32
+			_ = q1.Subscribe(func(e events.Event[int]) { received1.Add(1) })
+			_ = q2.Subscribe(func(e events.Event[int]) { received2.Add(1) })
 
-			streamAID := pubsub.MakeStreamID[int]("test-add-in1")
-			streamBID := pubsub.MakeStreamID[int]("test-add-in2")
+			err := q1.Run()
+			Expect(err).To(BeNil())
+			err = q2.Run()
+			Expect(err).To(BeNil())
 
-			publisherA, _ := pubsub.RegisterPublisher[int](streamAID)
-			publisherB, _ := pubsub.RegisterPublisher[int](streamBID)
+			// Publish to repo1 only
+			err = pubsub.InstantPublishByTopicOnRepository(repo1, topic, 10)
+			Expect(err).To(BeNil())
 
-			publisherA.Publish(event)
-			publisherB.Publish(event2)
+			// Verify isolation
+			Eventually(received1.Load).Should(Equal(int32(1)))
+			Consistently(received2.Load).Should(Equal(int32(0)))
+		})
 
-			result, _ := qs.Next()
+		It("WithNewRepository creates a private repository hidden from default", func() {
+			topic := "private-topic"
+			q, err := query.Query[int](
+				query.FromSourceStream[int](topic),
+				query.WithNewRepository(),
+			)
+			Expect(err).To(BeNil())
+			defer query.Close(q)
 
-			r := result[0].GetContent()
-
-			Expect(r).To(Equal(11))
+			// The default repository should NOT have this stream
+			_, err = pubsub.GetDescription(pubsub.MakeStreamID[int](topic))
+			Expect(err).To(Equal(pubsub.StreamNotFoundError))
 		})
 	})
-})
 
-var _ = Describe("Convert Operator1", func() {
-	Context("convert", func() {
-		It("should change the type", func() {
+	Describe("Error Handling", func() {
+		It("Process propagates operator creation errors", func() {
+			errOp := func(in []pubsub.StreamID, out []pubsub.StreamID) (engine2.OperatorID, error) {
+				return engine2.OperatorID{}, errors.New("op failed")
+			}
 
-			c, err1 := query.ContinuousConvert[int, float32]("convert-test-in", "convert-test-out")
-			qs, _ := query.RunAndSubscribe[float32](c, err1)
-			defer query.Close(qs)
-
-			event := events.NewEvent(8)
-
-			streamInID := pubsub.MakeStreamID[int]("convert-test-in")
-			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
-
-			publisher.Publish(event)
-			result, _ := qs.Next()
-
-			r := result[0].GetContent()
-
-			Expect(r).To(Equal(float32(8.0)))
-		})
-	})
-})
-
-var _ = Describe("Sum Operator1", func() {
-	Context("when executed", func() {
-		It("should sum all values over a window", func() {
-
-			selection := selection.NewCountingWindowPolicy[int](2, 2)
-
-			qs, _ := query.RunAndSubscribe[int](query.ContinuousBatchSum[int]("int values", "sum values", selection))
-			defer query.Close(qs)
-
-			event := events.NewEvent(10)
-			event1 := events.NewEvent(10)
-			event2 := events.NewEvent(15)
-			event3 := events.NewEvent(15)
-
-			streamInID := pubsub.MakeStreamID[int]("int values")
-			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
-
-			publisher.Publish(event)
-			publisher.Publish(event1)
-			publisher.Publish(event2)
-			publisher.Publish(event3)
-
-			result1, _ := qs.Next()
-			result2, _ := qs.Next()
-
-			r1 := result1[0].GetContent()
-			r2 := result2[0].GetContent()
-
-			Expect(r1).To(Equal(20))
-			Expect(r2).To(Equal(30))
-		})
-	})
-})
-
-var _ = Describe("Count Operator1", func() {
-	Context("when executed", func() {
-		It("should sum all values over a window", func() {
-
-			selection := selection.NewCountingWindowPolicy[float32](2, 2)
-			qs, _ := query.RunAndSubscribe[int](query.ContinuousBatchCount[float32, int]("countable floats", "counted floats", selection))
-			defer query.Close(qs)
-
-			event := events.NewEvent[float32](1.0)
-			event1 := events.NewEvent[float32](1.1)
-			event2 := events.NewEvent[float32](1.2)
-			event3 := events.NewEvent[float32](1.3)
-
-			streamInID := pubsub.MakeStreamID[float32]("countable floats")
-			publisher, _ := pubsub.RegisterPublisher[float32](streamInID)
-			publisher.Publish(event)
-			publisher.Publish(event1)
-			publisher.Publish(event2)
-			publisher.Publish(event3)
-
-			result1, _ := qs.Next()
-			result2, _ := qs.Next()
-
-			r1 := result1[0].GetContent()
-			r2 := result2[0].GetContent()
-
-			Expect(r1).To(Equal(2))
-			Expect(r2).To(Equal(2))
-		})
-	})
-})
-
-var _ = Describe("Smaller OperatorControl", func() {
-	Context("when executed", func() {
-		It("should remove large events", func() {
-
-			qs, _ := query.RunAndSubscribe[int](query.ContinuousSmaller[int]("q-s-1", "res-s-1", 11))
-			defer query.Close(qs)
-
-			streamInID := pubsub.MakeStreamID[int]("q-s-1")
-
-			event := events.NewEvent(9)
-			event1 := events.NewEvent(10)
-			event2 := events.NewEvent(15)
-			event3 := events.NewEvent(35)
-
-			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
-
-			publisher.Publish(event)
-			publisher.Publish(event1)
-			publisher.Publish(event2)
-			publisher.Publish(event3)
-
-			result1, _ := qs.Next()
-			result2, _ := qs.Next()
-
-			r1 := result1[0].GetContent()
-			r2 := result2[0].GetContent()
-
-			Expect(r1).To(Equal(9))
-			Expect(r2).To(Equal(10))
-		})
-	})
-})
-
-var _ = Describe("Greater OperatorControl", func() {
-	Context("when executed", func() {
-		It("should remove small events", func() {
-
-			qs, _ := query.RunAndSubscribe[int](query.ContinuousGreater("test-greater-11", "test-greater-11-out", 11))
-			defer query.Close(qs)
-
-			event := events.NewEvent(10)
-			event1 := events.NewEvent(10)
-			event2 := events.NewEvent(15)
-			event3 := events.NewEvent(35)
-
-			streamInID := pubsub.MakeStreamID[int]("test-greater-11")
-			publisher, _ := pubsub.RegisterPublisher[int](streamInID)
-			publisher.Publish(event)
-			publisher.Publish(event1)
-			publisher.Publish(event2)
-			publisher.Publish(event3)
-
-			result1, _ := qs.Next()
-			result2, _ := qs.Next()
-
-			r1 := result1[0].GetContent()
-			r2 := result2[0].GetContent()
-
-			Expect(r1).To(Equal(15))
-			Expect(r2).To(Equal(35))
+			_, err := query.Query[int](
+				query.Process[int](
+					errOp,
+					query.FromSourceStream[int]("topic"),
+				),
+			)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("op failed"))
 		})
 	})
 })

@@ -3,7 +3,6 @@ package main
 import (
 	"time"
 
-	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
 	"go.uber.org/zap"
@@ -16,8 +15,7 @@ func main() {
 		err       error
 	)
 
-	streamConfig := pubsub.MakeStreamDescription[int]("int stream")
-	if intStream, err = pubsub.AddOrReplaceStreamFromDescription[int](streamConfig); err != nil {
+	if intStream, err = pubsub.AddOrReplaceStream[int]("int stream"); err != nil {
 		zap.S().Errorf("intStream could not be created: %v", err)
 	}
 
@@ -36,7 +34,7 @@ func publisher(intStream pubsub.StreamID) {
 
 	for i := 0; i < 1000; i++ {
 		zap.S().Infof("Now sending: %v", i)
-		publisher.Publish(events.NewEvent(i))
+		publisher.Publish(i)
 	}
 }
 

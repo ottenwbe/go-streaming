@@ -2,51 +2,63 @@ package main
 
 import (
 	"math/rand"
+	"time"
 
+	"github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"github.com/ottenwbe/go-streaming/pkg/query"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
-
 	"go.uber.org/zap"
 )
 
 var (
-	numEvents = 100000
-	shift     = 10
+	numEvents = 100
 )
 
 func main() {
-
-	policy := selection.NewCountingWindowPolicy[float64](10, shift)
-	q, err := query.NewBuilder().
-		Stream(query.S[float64]("in", pubsub.WithAsyncStream(true))).
-		Query(query.ContinuousBatchSum("in", "out", policy)).
-		Build()
-
-	// start the continuous query
-	qs, _ := query.RunAndSubscribe[float64](q, err...)
-	// always close your query when no longer needed to free resources
-	defer query.Close(qs)
-
-	publishEvents()
-	waitForProcessedEvents(qs)
-}
-
-func waitForProcessedEvents(res *query.TypedContinuousQuery[float64]) {
-	for i := 0; i < numEvents/shift; i++ {
-		if e, more := res.Next(); more {
-			zap.S().Infof("event received %v", e[0])
-		}
+	// Define the query using the functional API
+	// This constructs a pipeline: Source("in") -> GreaterThan(0.5) -> Output
+	q, err := query.Query[float64](
+		query.Process[float64](
+			engine.ContinuousGreater[float64](
+				0.5,
+			),
+			query.FromSourceStream[float64]("in", pubsub.WithAsynchronousStream(true)),
+		),
+	)
+	if err != nil {
+		zap.S().Fatal(err)
 	}
+
+	// Subscribe to the query output
+	err = q.Subscribe(func(e events.Event[float64]) {
+		zap.S().Infof("event received: %v", e.GetContent())
+	})
+	if err != nil {
+		zap.S().Fatal(err)
+	}
+
+	// Start the query execution
+	if err := q.Run(); err != nil {
+		zap.S().Fatal(err)
+	}
+	defer query.Close(q)
+
+	// Publish events to the input stream
+	publishEvents()
+
+	// Keep the application running to process events
+	time.Sleep(2 * time.Second)
 }
 
 func publishEvents() {
 	go func() {
 		for i := 0; i < numEvents; i++ {
-			if err := pubsub.InstantPublishByTopic("in", events.NewEvent(rand.Float64())); err != nil {
+			// Publish raw float64 values; the system wraps them in Events
+			if err := pubsub.InstantPublishByTopic("in", rand.Float64()); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
 			}
+			time.Sleep(10 * time.Millisecond)
 		}
 	}()
 }

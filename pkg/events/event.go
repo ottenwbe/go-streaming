@@ -39,7 +39,7 @@ func NewEvent[TContent any](content TContent) Event[TContent] {
 	return newStampedEvent[TContent](content, nil)
 }
 
-func NewEventFromOthers[TContent any](content TContent, others ...Event[TContent]) Event[TContent] {
+func NewEventFromOthers[TContent any](content TContent, others ...TimeStamp) Event[TContent] {
 	return newStampedEventFromOthers[TContent](content, nil, others...)
 }
 
@@ -47,7 +47,7 @@ func NewEventM[TContent any](content TContent, meta StampMeta) Event[TContent] {
 	return newStampedEvent[TContent](content, meta)
 }
 
-func NewEventFromOthersM[TContent any](content TContent, meta StampMeta, others ...Event[TContent]) Event[TContent] {
+func NewEventFromOthersM[TContent any](content TContent, meta StampMeta, others ...TimeStamp) Event[TContent] {
 	return newStampedEventFromOthers[TContent](content, meta, others...)
 }
 
@@ -72,16 +72,21 @@ func newStampedEvent[TContent any](
 	}
 }
 
+func GetTimeStamps[T any](others ...Event[T]) []TimeStamp {
+	otherStamps := make([]TimeStamp, 0)
+	for _, other := range others {
+		if other != nil {
+			otherStamps = append(otherStamps, other.GetStamp())
+		}
+	}
+	return otherStamps
+}
+
 func newStampedEventFromOthers[TContent any](
 	content TContent,
 	meta StampMeta,
-	others ...Event[TContent],
+	otherStamps ...TimeStamp,
 ) *TemporalEvent[TContent] {
-
-	otherStamps := make([]TimeStamp, 0)
-	for _, other := range others {
-		otherStamps = append(otherStamps, other.GetStamp())
-	}
 
 	return &TemporalEvent[TContent]{
 		Stamp:   createStampBasedOnOthers(meta, otherStamps...),

@@ -14,7 +14,7 @@ var (
 
 // SubscriberDescription details the subscriber configurations
 type SubscriberDescription struct {
-	AsyncReceiver         bool                        `yaml:"asyncReceiver" json:"asyncReceiver"`
+	Synchronous           bool                        `yaml:"synchronous" json:"synchronous"`
 	BufferCapacity        int                         `yaml:"bufferCapacity" json:"bufferCapacity"`
 	BufferPolicySelection selection.PolicyDescription `yaml:"selectionPolicy" json:"selectionPolicy"`
 }
@@ -22,29 +22,30 @@ type SubscriberDescription struct {
 // StreamDescription details the stream configurations
 type StreamDescription struct {
 	ID                 StreamID              `yaml:"id" json:"id"`
-	AsyncStream        bool                  `yaml:"asyncStream" json:"asyncStream"`
+	Asynchronous       bool                  `yaml:"asyncStream" json:"asyncStream"`
 	BufferCapacity     int                   `yaml:"bufferCapacity" json:"bufferCapacity"`
 	AutoCleanup        bool                  `yaml:"autoCleanup" json:"autoCleanup"`
+	AutoStart          bool                  `yaml:"autoStart" json:"autoStart"`
 	DefaultSubscribers SubscriberDescription `yaml:"subscribers" json:"subscribers"`
 }
 
 // SubscriberOption allows to configure the subscription
 type SubscriberOption func(*SubscriberDescription)
 
-// WithSubscriberSelectionPolicy allows to provide a selection policy for the subscriber
-func WithSubscriberSelectionPolicy(p selection.PolicyDescription) SubscriberOption {
+// SubscriberWithSelectionPolicy allows to provide a selection policy for the subscriber
+func SubscriberWithSelectionPolicy(p selection.PolicyDescription) SubscriberOption {
 	return func(s *SubscriberDescription) {
 		s.BufferPolicySelection = p
 	}
 }
 
-func WithSubscriberAsync(asyncReceiver bool) SubscriberOption {
+func SubscriberIsSync(synchronous bool) SubscriberOption {
 	return func(s *SubscriberDescription) {
-		s.AsyncReceiver = asyncReceiver
+		s.Synchronous = synchronous
 	}
 }
 
-func WithSubscriberBufferCapacity(capacity int) SubscriberOption {
+func SubscriberWithBufferCapacity(capacity int) SubscriberOption {
 	return func(s *SubscriberDescription) {
 		s.BufferCapacity = capacity
 	}
@@ -52,9 +53,27 @@ func WithSubscriberBufferCapacity(capacity int) SubscriberOption {
 
 type StreamOption func(*StreamDescription)
 
-func WithAsyncStream(async bool) StreamOption {
+func WithSubscriberSelectionPolicy(p selection.PolicyDescription) StreamOption {
 	return func(s *StreamDescription) {
-		s.AsyncStream = async
+		s.DefaultSubscribers.BufferPolicySelection = p
+	}
+}
+
+func WithSubscriberSync(synchronous bool) StreamOption {
+	return func(s *StreamDescription) {
+		s.DefaultSubscribers.Synchronous = synchronous
+	}
+}
+
+func WithSubscriberBufferCapacity(capacity int) StreamOption {
+	return func(s *StreamDescription) {
+		s.DefaultSubscribers.BufferCapacity = capacity
+	}
+}
+
+func WithAsynchronousStream(async bool) StreamOption {
+	return func(s *StreamDescription) {
+		s.Asynchronous = async
 	}
 }
 
@@ -67,6 +86,12 @@ func WithBufferCapacity(capacity int) StreamOption {
 func WithAutoCleanup(autoCleanup bool) StreamOption {
 	return func(s *StreamDescription) {
 		s.AutoCleanup = autoCleanup
+	}
+}
+
+func WithAutoStart(autoStart bool) StreamOption {
+	return func(s *StreamDescription) {
+		s.AutoStart = autoStart
 	}
 }
 
@@ -84,7 +109,8 @@ func MakeStreamDescription[T any](topic string, options ...StreamOption) StreamD
 // MakeStreamDescriptionByID creates a new StreamDescription using an existing StreamID.
 func MakeStreamDescriptionByID(id StreamID, options ...StreamOption) StreamDescription {
 	d := StreamDescription{
-		ID: id,
+		ID:        id,
+		AutoStart: true,
 	}
 	for _, option := range options {
 		option(&d)
@@ -131,7 +157,9 @@ func StreamDescriptionValidation(d StreamDescription) (StreamDescription, error)
 
 // StreamDescriptionFromJSON parses a StreamDescription from a JSON byte slice.
 func StreamDescriptionFromJSON(b []byte) (StreamDescription, error) {
-	var d = StreamDescription{}
+	var d = StreamDescription{
+		AutoStart: true,
+	}
 	if err := json.Unmarshal(b, &d); err != nil {
 
 		return StreamDescription{}, err
@@ -142,7 +170,9 @@ func StreamDescriptionFromJSON(b []byte) (StreamDescription, error) {
 
 // StreamDescriptionFromYML parses a StreamDescription from a YAML byte slice.
 func StreamDescriptionFromYML(b []byte) (StreamDescription, error) {
-	var d = StreamDescription{}
+	var d = StreamDescription{
+		AutoStart: true,
+	}
 	if err := yaml.Unmarshal(b, &d); err != nil {
 		return StreamDescription{}, err
 	}
