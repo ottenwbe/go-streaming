@@ -1,8 +1,11 @@
 package pubsub_test
 
 import (
+	"sync/atomic"
+
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -130,6 +133,38 @@ var _ = Describe("PubSub", func() {
 			Expect(err1).To(BeNil())
 			Expect(err2).To(BeNil())
 			Expect(r1.Asynchronous).To(BeTrue())
+		})
+
+		It("preserves events during migration from sync to async", func() {
+			topic := "migration-test"
+			var receivedCount atomic.Int32
+			done := make(chan struct{})
+
+			// 1. Create a synchronous stream
+			sID, _ := pubsub.AddOrReplaceStreamOnRepository[int](repo, topic, pubsub.WithSubscriberSync(true))
+			repo.StartStream(sID)
+
+			// 2. Subscribe
+			sub, _ := pubsub.SubscribeByTopicOnRepository[int](repo, topic, func(e events.Event[int]) {
+				receivedCount.Add(1)
+				if receivedCount.Load() == 10 {
+					close(done)
+				}
+			})
+			defer pubsub.UnsubscribeOnRepository(repo, sub)
+
+			// 3. Start publishing
+			go func() {
+				for i := 1; i <= 10; i++ {
+					pubsub.InstantPublishByTopicOnRepository(repo, topic, i)
+					if i == 5 {
+						// 4. Migrate the stream mid-flight
+						pubsub.AddOrReplaceStreamOnRepository[int](repo, topic, pubsub.WithAsynchronousStream(true))
+					}
+				}
+			}()
+
+			Eventually(done).Should(BeClosed())
 		})
 	})
 
@@ -359,6 +394,23 @@ var _ = Describe("PubSub", func() {
 			Expect(e).To(BeNil())
 			Expect(rec).NotTo(BeNil())
 			pubsub.Unsubscribe(rec)
+		})
+	})
+
+	Describe("SubscribeBatchByTopic", func() {
+		It("receives events in batches based on policy", func() {
+			topic := "batch-topic"
+			desc := selection.PolicyDescription{Type: selection.CountingWindow, Size: 2, Slide: 2}
+
+			sub, err := pubsub.SubscribeBatchByTopicOnRepository[int](repo, topic, func(events ...events.Event[int]) {
+				Expect(len(events)).To(Equal(2))
+			}, pubsub.SubscriberWithSelectionPolicy(desc))
+			Expect(err).To(BeNil())
+			defer pubsub.UnsubscribeOnRepository(repo, sub)
+
+			// Publish 2 events
+			pubsub.InstantPublishByTopicOnRepository(repo, topic, 1)
+			pubsub.InstantPublishByTopicOnRepository(repo, topic, 2)
 		})
 	})
 

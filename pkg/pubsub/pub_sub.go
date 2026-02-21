@@ -130,7 +130,11 @@ func SubscribeByTopicOnRepository[T any](r *StreamRepository, topic string, call
 
 // SubscribeBatchByTopic to get a stream for this topic with type T returning a batch subscriber
 func SubscribeBatchByTopic[T any](topic string, callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
-	return SubscribeBatchByTopicIDOnRepository[T](defaultStreamRepository, MakeStreamID[T](topic), callback, opts...)
+	return SubscribeBatchByTopicOnRepository[T](defaultStreamRepository, topic, callback, opts...)
+}
+
+func SubscribeBatchByTopicOnRepository[T any](r *StreamRepository, topic string, callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+	return SubscribeBatchByTopicIDOnRepository[T](r, MakeStreamID[T](topic), callback, opts...)
 }
 
 // SubscribeByTopicID to a stream by the stream's id
