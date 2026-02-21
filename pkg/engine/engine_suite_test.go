@@ -6,7 +6,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	engine2 "github.com/ottenwbe/go-streaming/pkg/engine"
+	"github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"github.com/ottenwbe/go-streaming/pkg/selection"
@@ -21,7 +21,7 @@ var _ = Describe("OperatorRepository", func() {
 
 	var (
 		sidin, sidout pubsub.StreamID
-		oid           engine2.OperatorID
+		oid           engine.OperatorID
 		err           error
 	)
 
@@ -30,10 +30,10 @@ var _ = Describe("OperatorRepository", func() {
 		sidin, _ = pubsub.GetOrAddStream[int]("in")
 		sidout, _ = pubsub.GetOrAddStream[int]("out")
 
-		d := engine2.NewOperatorDescription(engine2.PIPELINE_OPERATOR,
-			engine2.WithOutput(sidout),
-			engine2.WithAutoStart(true),
-			engine2.WithInput(engine2.InputDescription{
+		d := engine.NewOperatorDescription(engine.PIPELINE_OPERATOR,
+			engine.WithOutput(sidout),
+			engine.WithAutoStart(true),
+			engine.WithInput(engine.InputDescription{
 				Stream: sidin,
 				InputPolicy: selection.PolicyDescription{
 					Active: true,
@@ -58,7 +58,7 @@ var _ = Describe("OperatorRepository", func() {
 			return []int{s}
 		}
 
-		oid, err = engine2.NewOperator[int, int](
+		oid, err = engine.NewOperator[int, int](
 			sum,
 			d,
 		)
@@ -66,22 +66,22 @@ var _ = Describe("OperatorRepository", func() {
 	})
 
 	AfterEach(func() {
-		engine2.RemoveOperator(oid)
+		engine.RemoveOperator(oid)
 		pubsub.TryRemoveStreams(sidin, sidout)
 	})
 
 	Context("NewOperator", func() {
 		It("adds new operators to the map and it can be retrieved", func() {
-			operator, ok := engine2.OperatorRepository().Get(oid)
+			operator, ok := engine.OperatorRepository().Get(oid)
 			Expect(ok).To(BeTrue())
 			Expect(operator).To(Not(BeNil()))
 		})
 	})
 	Context("RemoveOperator", func() {
 		It("ensures that an operator is no longer managed by a repository", func() {
-			engine2.RemoveOperator(oid)
+			engine.RemoveOperator(oid)
 
-			operator, ok := engine2.OperatorRepository().Get(oid)
+			operator, ok := engine.OperatorRepository().Get(oid)
 			Expect(ok).To(BeFalse())
 			Expect(operator).To(BeNil())
 		})
@@ -120,7 +120,7 @@ var _ = Describe("OperatorRepository", func() {
 
 var _ = Describe("FilterOperatorEngine", func() {
 	var (
-		oid           engine2.OperatorID
+		oid           engine.OperatorID
 		err           error
 		sidin, sidout pubsub.StreamID
 	)
@@ -128,10 +128,10 @@ var _ = Describe("FilterOperatorEngine", func() {
 	BeforeEach(func() {
 		sidin, _ = pubsub.GetOrAddStream[int]("in-filter")
 		sidout, _ = pubsub.GetOrAddStream[int]("out-filter")
-		d := engine2.NewOperatorDescription(engine2.FILTER_OPERATOR,
-			engine2.WithOutput(sidout),
-			engine2.WithAutoStart(true),
-			engine2.WithInput(engine2.InputDescription{
+		d := engine.NewOperatorDescription(engine.FILTER_OPERATOR,
+			engine.WithOutput(sidout),
+			engine.WithAutoStart(true),
+			engine.WithInput(engine.InputDescription{
 				Stream: sidin,
 				InputPolicy: selection.PolicyDescription{
 					Type: selection.SelectNext,
@@ -142,12 +142,12 @@ var _ = Describe("FilterOperatorEngine", func() {
 			return event.GetContent()%2 == 0
 		}
 
-		oid, err = engine2.NewOperator[int, int](isEven, d)
+		oid, err = engine.NewOperator[int, int](isEven, d)
 		Expect(err).To(BeNil())
 	})
 
 	AfterEach(func() {
-		engine2.RemoveOperator(oid)
+		engine.RemoveOperator(oid)
 		pubsub.ForceRemoveStream(sidin, sidout)
 	})
 
@@ -188,7 +188,7 @@ var _ = Describe("FilterOperatorEngine", func() {
 
 var _ = Describe("MapOperatorEngine", func() {
 	var (
-		oid           engine2.OperatorID
+		oid           engine.OperatorID
 		err           error
 		sidin, sidout pubsub.StreamID
 	)
@@ -196,10 +196,10 @@ var _ = Describe("MapOperatorEngine", func() {
 	BeforeEach(func() {
 		sidin, _ = pubsub.GetOrAddStream[int]("in-map")
 		sidout, _ = pubsub.GetOrAddStream[int]("out-map")
-		d := engine2.NewOperatorDescription(engine2.MAP_OPERATOR,
-			engine2.WithOutput(sidout),
-			engine2.WithAutoStart(true),
-			engine2.WithInput(engine2.InputDescription{
+		d := engine.NewOperatorDescription(engine.MAP_OPERATOR,
+			engine.WithOutput(sidout),
+			engine.WithAutoStart(true),
+			engine.WithInput(engine.InputDescription{
 				Stream: sidin,
 				// InputPolicy is ignored for MapOperator
 			}))
@@ -209,12 +209,12 @@ var _ = Describe("MapOperatorEngine", func() {
 			return event.GetContent() * 2
 		}
 
-		oid, err = engine2.NewOperator[int, int](double, d)
+		oid, err = engine.NewOperator[int, int](double, d)
 		Expect(err).To(BeNil())
 	})
 
 	AfterEach(func() {
-		engine2.RemoveOperator(oid)
+		engine.RemoveOperator(oid)
 		pubsub.ForceRemoveStream(sidin, sidout)
 	})
 
@@ -247,5 +247,60 @@ var _ = Describe("MapOperatorEngine", func() {
 
 		Expect(capturedEvents[0].GetContent()).To(Equal(20))
 		Expect(capturedEvents[1].GetContent()).To(Equal(40))
+	})
+})
+
+var _ = Describe("FanOutOperatorEngine", func() {
+	var (
+		oid              engine.OperatorID
+		err              error
+		sidin            pubsub.StreamID
+		sidout1, sidout2 pubsub.StreamID
+	)
+
+	BeforeEach(func() {
+		sidin, _ = pubsub.GetOrAddStream[int]("in-fanout")
+		sidout1, _ = pubsub.GetOrAddStream[int]("out-fanout-1")
+		sidout2, _ = pubsub.GetOrAddStream[int]("out-fanout-2")
+		d := engine.NewOperatorDescription(engine.FANOUT_OPERATOR,
+			engine.WithOutput(sidout1, sidout2),
+			engine.WithAutoStart(true),
+			engine.WithInput(engine.InputDescription{
+				Stream: sidin,
+			}))
+
+		oid, err = engine.NewOperator[int, int](nil, d)
+		Expect(err).To(BeNil())
+	})
+
+	AfterEach(func() {
+		engine.RemoveOperator(oid)
+		pubsub.ForceRemoveStream(sidin, sidout1, sidout2)
+	})
+
+	It("should broadcast events to all outputs", func() {
+		var (
+			received1, received2 int
+			wg                   sync.WaitGroup
+		)
+		wg.Add(2)
+
+		sub1, _ := pubsub.SubscribeByTopic[int]("out-fanout-1", func(event events.Event[int]) {
+			received1 = event.GetContent()
+			wg.Done()
+		})
+		sub2, _ := pubsub.SubscribeByTopic[int]("out-fanout-2", func(event events.Event[int]) {
+			received2 = event.GetContent()
+			wg.Done()
+		})
+		defer pubsub.Unsubscribe(sub1)
+		defer pubsub.Unsubscribe(sub2)
+
+		pubsub.InstantPublishByTopic[int]("in-fanout", 42)
+
+		wg.Wait()
+
+		Expect(received1).To(Equal(42))
+		Expect(received2).To(Equal(42))
 	})
 })

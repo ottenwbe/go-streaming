@@ -157,3 +157,75 @@ func (o *MapOperatorEngine[TIN, TOUT]) Process(in ...events.Event[TIN]) {
 		o.ProcessSingleEvent(event)
 	}
 }
+
+type FanOutOperatorEngine[T any] struct {
+	config  *OperatorDescription
+	active  atomic.Bool
+	Outputs []pubsub.Publisher[T]
+	Input   pubsub.Subscriber[T]
+}
+
+func (o *FanOutOperatorEngine[T]) ID() OperatorID {
+	return o.config.ID
+}
+
+func (o *FanOutOperatorEngine[T]) InStream(in pubsub.StreamID, p selection.PolicyDescription) {
+	o.config.Inputs = append(o.config.Inputs, InputDescription{
+		Stream:      in,
+		InputPolicy: p,
+	})
+}
+
+func (o *FanOutOperatorEngine[T]) OutStream(to pubsub.StreamID) {
+	o.config.Outputs = append(o.config.Outputs, to)
+}
+
+func (o *FanOutOperatorEngine[T]) Start() error {
+	o.active.Store(true)
+
+	inID := o.config.Inputs[0].Stream
+	policy := o.config.Inputs[0].InputPolicy
+
+	o.Outputs = make([]pubsub.Publisher[T], 0, len(o.config.Outputs))
+	for _, outID := range o.config.Outputs {
+		pub, err := pubsub.RegisterPublisher[T](outID)
+		if err != nil {
+			return err
+		}
+		o.Outputs = append(o.Outputs, pub)
+	}
+
+	var err error
+	o.Input, err = pubsub.SubscribeBatchByTopicID[T](
+		inID,
+		o.Process,
+		pubsub.SubscriberIsSync(false),
+		pubsub.SubscriberWithSelectionPolicy(policy))
+
+	return err
+}
+
+func (o *FanOutOperatorEngine[T]) Stop() error {
+	o.active.Store(false)
+	err := pubsub.Unsubscribe(o.Input)
+	var errs []error
+	if err != nil {
+		errs = append(errs, err)
+	}
+	for _, pub := range o.Outputs {
+		if e := pubsub.UnRegisterPublisher(pub); e != nil {
+			errs = append(errs, e)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (o *FanOutOperatorEngine[T]) Process(events ...events.Event[T]) {
+	for _, event := range events {
+		if event != nil {
+			for _, pub := range o.Outputs {
+				_ = pub.PublishComplex(event)
+			}
+		}
+	}
+}

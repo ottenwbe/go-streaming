@@ -108,3 +108,15 @@ func ContinuousConvert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubs
 		return NewOperator[TIn, TOut](convert, config)
 	}
 }
+
+// ContinuousFanOut creates a query that broadcasts events to multiple output streams.
+func ContinuousFanOut[T any]() func(in []pubsub.StreamID, out []pubsub.StreamID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID) (OperatorID, error) {
+		config := NewOperatorDescription(
+			FANOUT_OPERATOR,
+			WithInput(InputDescriptions(in, selection.PolicyDescription{})...),
+			WithOutput(out...),
+		)
+		return NewOperator[T, T](nil, config)
+	}
+}

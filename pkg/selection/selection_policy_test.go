@@ -263,4 +263,79 @@ var _ = Describe("Policy", func() {
 			})
 		})
 	})
+	Describe("PolicyDescription", func() {
+		It("can create a CountingWindowPolicy", func() {
+			desc := selection.PolicyDescription{
+				Type:  selection.CountingWindow,
+				Size:  5,
+				Slide: 1,
+			}
+			p, err := selection.NewPolicyFromDescription[int](desc)
+			Expect(err).To(BeNil())
+			Expect(p).NotTo(BeNil())
+		})
+		It("can create a SelectNextPolicy", func() {
+			desc := selection.PolicyDescription{
+				Type: selection.SelectNext,
+			}
+			p, err := selection.NewPolicyFromDescription[int](desc)
+			Expect(err).To(BeNil())
+			Expect(p).NotTo(BeNil())
+		})
+		It("can create a TemporalWindowPolicy", func() {
+			desc := selection.PolicyDescription{
+				Type:         selection.TemporalWindow,
+				WindowStart:  time.Now(),
+				WindowLength: time.Minute,
+				WindowShift:  time.Minute,
+			}
+			p, err := selection.NewPolicyFromDescription[int](desc)
+			Expect(err).To(BeNil())
+			Expect(p).NotTo(BeNil())
+		})
+		It("can be parsed from JSON", func() {
+			jsonStr := `{"active":true,"type":"counting","size":5,"slide":1}`
+			desc, err := selection.PolicyDescriptionFromJSON([]byte(jsonStr))
+			Expect(err).To(BeNil())
+			Expect(desc.Type).To(Equal(selection.CountingWindow))
+			Expect(desc.Size).To(Equal(5))
+			Expect(desc.Slide).To(Equal(1))
+		})
+		It("can be parsed from YAML", func() {
+			ymlStr := `
+active: true
+type: counting
+size: 5
+slide: 1
+`
+			desc, err := selection.PolicyDescriptionFromYML([]byte(ymlStr))
+			Expect(err).To(BeNil())
+			Expect(desc.Type).To(Equal(selection.CountingWindow))
+			Expect(desc.Size).To(Equal(5))
+			Expect(desc.Slide).To(Equal(1))
+		})
+		It("can be marshalled to JSON", func() {
+			desc := selection.PolicyDescription{Type: selection.CountingWindow, Size: 5, Slide: 1}
+			jsonBytes, err := desc.ToJSON()
+			Expect(err).To(BeNil())
+			Expect(string(jsonBytes)).To(ContainSubstring(`"type":"counting"`))
+		})
+		It("can be marshalled to YAML", func() {
+			desc := selection.PolicyDescription{Type: selection.CountingWindow, Size: 5, Slide: 1}
+			ymlBytes, err := desc.ToYML()
+			Expect(err).To(BeNil())
+			Expect(string(ymlBytes)).To(ContainSubstring("type: counting"))
+		})
+		It("returns error for invalid JSON", func() {
+			_, err := selection.PolicyDescriptionFromJSON([]byte(`{invalid-json`))
+			Expect(err).To(HaveOccurred())
+		})
+		It("returns error for unknown policy type", func() {
+			jsonStr := `{"type":"unknown_type"}`
+			desc, err := selection.PolicyDescriptionFromJSON([]byte(jsonStr))
+			Expect(err).To(BeNil())
+			_, err = selection.NewPolicyFromDescription[int](desc)
+			Expect(err).To(HaveOccurred())
+		})
+	})
 })
