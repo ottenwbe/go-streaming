@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	ErrEmptyPublisherFanIn = errors.New("empty Publisher cannot publishSource events")
+	ErrEmptyPublisherFanIn = errors.New("empty publisher cannot publish events")
 )
 
 // PublisherID uniquely identifies a publisher.
@@ -23,10 +23,10 @@ func (p PublisherID) String() string {
 type (
 	// Publisher routes events to a stream
 	Publisher[T any] interface {
-		// Publish an event to a stream with a given StreamID
-		Publish(eventBody T) error
-		// PublishComplex event to the stream
-		PublishComplex(event events.Event[T]) error
+		// PublishContent an event to a stream with a given StreamID
+		PublishContent(eventBody T) error
+		// PublishEvent to the stream
+		PublishEvent(event events.Event[T]) error
 		// ID that identifies this publisher
 		ID() PublisherID
 		// StreamID of the stream that an event of this publisher is published to
@@ -43,8 +43,7 @@ type (
 
 type (
 	publisherFanIn[T any] interface {
-		publishSource(content T) error
-		publishComplex(event events.Event[T]) error
+		publish(event events.Event[T]) error
 	}
 	publisherManager[T any] interface {
 		publishers() []Publisher[T]
@@ -117,10 +116,7 @@ func (p *defaultPublisherManager[T]) len() int {
 	return len(p.publisherArr)
 }
 
-func (e emptyPublisherFanIn[T]) publishSource(T) error {
-	return ErrEmptyPublisherFanIn
-}
-func (e emptyPublisherFanIn[T]) publishComplex(event events.Event[T]) error {
+func (e emptyPublisherFanIn[T]) publish(event events.Event[T]) error {
 	return ErrEmptyPublisherFanIn
 }
 
@@ -145,12 +141,12 @@ func (p *defaultPublisher[T]) StreamID() StreamID {
 func (p *defaultPublisher[T]) ID() PublisherID {
 	return p.id
 }
-func (p *defaultPublisher[T]) Publish(eventBody T) error {
-	return p.fanIn.publishSource(eventBody)
+func (p *defaultPublisher[T]) PublishContent(eventBody T) error {
+	return p.fanIn.publish(events.NewEvent(eventBody))
 }
 func (p *defaultPublisher[T]) setFanin(fanIn publisherFanIn[T]) {
 	p.fanIn = fanIn
 }
-func (p *defaultPublisher[T]) PublishComplex(event events.Event[T]) error {
-	return p.fanIn.publishComplex(event)
+func (p *defaultPublisher[T]) PublishEvent(event events.Event[T]) error {
+	return p.fanIn.publish(event)
 }

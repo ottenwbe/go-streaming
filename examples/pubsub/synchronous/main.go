@@ -29,7 +29,7 @@ func main() {
 	startSubscriber("Subscriber 1", intStreamID, 2*time.Microsecond)
 	startSubscriber("Subscriber 2", intStreamID, time.Microsecond)
 
-	// 3. Publish events to the topic 'Some Integers'
+	// 3. PublishContent events to the topic 'Some Integers'
 	startPublisher(intStreamID, &wg)
 
 	// 4. Wait for publishers and subscribers to send and receive all events
@@ -48,7 +48,7 @@ func startPublisher(streamID pubsub.StreamID, wg *sync.WaitGroup) {
 
 		for i := 0; i < maxEvents; i++ {
 			zap.S().Infof("Now sending: %v", i)
-			publisher.Publish(i)
+			publisher.PublishContent(i)
 		}
 
 	})

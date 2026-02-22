@@ -120,21 +120,7 @@ func (b *baseStream[T]) migrateStream(description StreamDescription) {
 	b.streamCoordinator.run()
 }
 
-func (b *baseStream[T]) publishSource(content T) error {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
-	for !b.started {
-		b.cond.Wait()
-	}
-
-	event := events.NewEvent(content)
-
-	b.metrics.incNumEventsIn()
-	return b.streamCoordinator.publish(event)
-}
-
-func (b *baseStream[T]) publishComplex(event events.Event[T]) error {
+func (b *baseStream[T]) publish(event events.Event[T]) error {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 

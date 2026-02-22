@@ -44,7 +44,7 @@ func main() {
 	}
 	defer query.Close(q)
 
-	// Publish events to the input stream
+	// PublishContent events to the input stream
 	publishEvents()
 
 	// Keep the application running to process events
@@ -54,7 +54,7 @@ func main() {
 func publishEvents() {
 	go func() {
 		for i := 0; i < numEvents; i++ {
-			// Publish raw float64 values; the system wraps them in Events
+			// PublishContent raw float64 values; the system wraps them in Events
 			if err := pubsub.InstantPublishByTopic("in", rand.Float64()); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
 			}

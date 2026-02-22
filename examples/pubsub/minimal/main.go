@@ -17,9 +17,9 @@ func main() {
 			close(done)
 		})
 
-	// 2. Publish to the same topic
+	// 2. PublishContent to the same topic
 	pub, _ := pubsub.RegisterPublisherByTopic[int]("my-topic")
-	pub.Publish(42)
+	pub.PublishContent(42)
 
 	// 3. Consume the event
 	<-done

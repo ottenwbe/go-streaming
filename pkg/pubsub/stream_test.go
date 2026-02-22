@@ -66,7 +66,7 @@ var _ = Describe("Stream", func() {
 				p, _ := pubsub.RegisterPublisher[string](streamID)
 				defer pubsub.UnRegisterPublisher[string](p)
 
-				p.Publish(content)
+				p.PublishContent(content)
 				<-done
 
 				Expect(eventResult.GetContent()).To(Equal(content))
@@ -143,7 +143,7 @@ var _ = Describe("Stream", func() {
 
 				wg.Go(func() {
 					for i := range numE {
-						p.Publish(fmt.Sprintf("a%v", i))
+						p.PublishContent(fmt.Sprintf("a%v", i))
 
 					}
 				})
@@ -181,9 +181,9 @@ var _ = Describe("Stream", func() {
 				publisher, _ := pubsub.RegisterPublisher[string](streamID)
 				defer pubsub.UnRegisterPublisher[string](publisher)
 
-				publisher.Publish(content1)
-				publisher.Publish(content2)
-				publisher.Publish(content3)
+				publisher.PublishContent(content1)
+				publisher.PublishContent(content2)
+				publisher.PublishContent(content3)
 
 				<-done
 
@@ -232,7 +232,7 @@ var _ = Describe("Stream", func() {
 			wg.Go(func() {
 				defer GinkgoRecover()
 				for range maxRange {
-					pub.Publish("test")
+					pub.PublishContent("test")
 				}
 			})
 

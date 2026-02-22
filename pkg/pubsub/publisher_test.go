@@ -33,11 +33,7 @@ func (m *mockStream[T]) migrateStream(stream)                  {}
 func (m *mockStream[T]) addPublisher(pub *defaultPublisher[T]) {}
 func (m *mockStream[T]) lock()                                 {}
 func (m *mockStream[T]) unlock()                               {}
-func (m *mockStream[T]) publishSource(content T) error {
-	m.publishedEvents = append(m.publishedEvents, events.NewEvent(content))
-	return nil
-}
-func (m *mockStream[T]) publishComplex(e events.Event[T]) error {
+func (m *mockStream[T]) publish(e events.Event[T]) error {
 	m.publishedEvents = append(m.publishedEvents, e)
 	return nil
 }
@@ -96,7 +92,7 @@ var _ = Describe("Publisher", func() {
 		})
 
 		It("should publishSource events", func() {
-			pub.Publish("hello world")
+			pub.PublishContent("hello world")
 			Eventually(func() []events.Event[string] {
 				evs := mockS.publishedEvents
 				if len(evs) > 0 {
@@ -111,13 +107,8 @@ var _ = Describe("Publisher", func() {
 	Describe("emptyPublisherFanIn", func() {
 		var empty emptyPublisherFanIn[string]
 
-		It("should do nothing on publishSource", func() {
-			err := empty.publishSource("test")
-			Expect(err).To(Equal(ErrEmptyPublisherFanIn))
-		})
-
 		It("should do nothing on publishComplex", func() {
-			err := empty.publishSource("test")
+			err := empty.publish(events.NewEvent("test"))
 			Expect(err).To(Equal(ErrEmptyPublisherFanIn))
 		})
 	})

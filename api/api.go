@@ -81,7 +81,7 @@ package api
 //
 //		publisher, _ := pubsub.RegisterPublisher[map[string]interface{}](pubsub.MakeStreamID[map[string]interface{}](name))
 //		defer pubsub.UnRegisterPublisher(publisher)
-//		publisher.Publish(e)
+//		publisher.PublishContent(e)
 //
 //		c.Status(http.StatusCreated)
 //	})

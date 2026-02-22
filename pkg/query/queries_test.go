@@ -105,7 +105,7 @@ var _ = Describe("Continuous Query", func() {
 			err = q2.Run()
 			Expect(err).To(BeNil())
 
-			// Publish to repo1 only
+			// PublishContent to repo1 only
 			err = pubsub.InstantPublishByTopicOnRepository(repo1, topic, 10)
 			Expect(err).To(BeNil())
 

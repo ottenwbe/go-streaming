@@ -254,7 +254,7 @@ var _ = Describe("PubSub", func() {
 		})
 	})
 
-	Describe("Publish", func() {
+	Describe("PublishContent", func() {
 		It("allows to send and receive events via the pub sub system", func() {
 			var topic = "test-send-rec-1"
 
@@ -273,7 +273,7 @@ var _ = Describe("PubSub", func() {
 
 			go func() {
 				publisher, _ := pubsub.RegisterPublisherOnRepository[string](repo, id)
-				publisher.Publish(event)
+				publisher.PublishContent(event)
 			}()
 
 			Eventually(done).Should(BeClosed())
@@ -408,7 +408,7 @@ var _ = Describe("PubSub", func() {
 			Expect(err).To(BeNil())
 			defer pubsub.UnsubscribeOnRepository(repo, sub)
 
-			// Publish 2 events
+			// PublishContent 2 events
 			pubsub.InstantPublishByTopicOnRepository(repo, topic, 1)
 			pubsub.InstantPublishByTopicOnRepository(repo, topic, 2)
 		})
@@ -432,7 +432,7 @@ var _ = Describe("PubSub", func() {
 
 			Expect(err).To(BeNil())
 
-			pub.Publish(1)
+			pub.PublishContent(1)
 
 			m, err := repo.Metrics(id)
 			Expect(err).To(BeNil())

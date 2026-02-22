@@ -223,7 +223,7 @@ func InstantPublishByTopicOnRepository[T any](b *StreamRepository, topic string,
 		return err
 	}
 
-	return publisher.Publish(eventBody)
+	return publisher.PublishContent(eventBody)
 }
 
 // RegisterPublisherByTopic creates and registers a new publisher for the stream identified by the given topic.

@@ -35,7 +35,7 @@ func publisher(intStream pubsub.StreamID) {
 
 	for i := 0; i < 1000; i++ {
 		zap.S().Infof("Now sending: %v", i)
-		publisher.Publish(i)
+		publisher.PublishContent(i)
 	}
 }
 
