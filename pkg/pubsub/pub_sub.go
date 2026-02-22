@@ -75,7 +75,7 @@ func AddOrReplaceStreamOnRepository[T any](b *StreamRepository, topic string, op
 
 // ForceRemoveStream forces removal of streams by their id, ensuring all resources are closed.
 // The streams will be removed from the central pub sub system.
-// BE CAREFUL USING THIS: when active subscribers publishers exist, the code might panic.
+// BE CAREFUL USING THIS: when active subscribers publishersMap exist, the code might panic.
 // In most cases TryRemoveStream is the safer and better choice.
 func ForceRemoveStream(streamIDs ...StreamID) {
 	defaultStreamRepository.ForceRemoveStream(streamIDs...)
@@ -93,7 +93,7 @@ func (r *StreamRepository) ForceRemoveStream(streamIDs ...StreamID) {
 }
 
 // TryRemoveStreams attempts to remove the provided streams from the pub sub system.
-// A stream is only removed if it has no active publishers or subscribers.
+// A stream is only removed if it has no active publishersMap or subscribers.
 func TryRemoveStreams(streamIDs ...StreamID) {
 	defaultStreamRepository.TryRemoveStreams(streamIDs...)
 }
@@ -223,7 +223,7 @@ func InstantPublishByTopicOnRepository[T any](b *StreamRepository, topic string,
 		return err
 	}
 
-	return publisher.PublishContent(eventBody)
+	return publisher.Publish(events.NewEvent(eventBody))
 }
 
 // RegisterPublisherByTopic creates and registers a new publisher for the stream identified by the given topic.
@@ -306,7 +306,7 @@ func (r *StreamRepository) GetDescription(id StreamID) (StreamDescription, error
 //	defer b.mutex.RUnlock()
 //
 //	if s, err := b.getAndConvertStreamByID(id); err != nil {
-//		return s.publishers(), s.subscribers(), nil
+//		return s.publishersMap(), s.subscribers(), nil
 //	}
 //
 //	return nil, nil, StreamNotFoundError
@@ -374,10 +374,6 @@ func getOrAddStreamByID[T any](b *StreamRepository, id StreamID) (typedStream[T]
 	}
 	if !errors.Is(err, ErrStreamNotFound) {
 		return nil, err
-	}
-
-	if s, err := getAndConvertStreamByID[T](b, id); err == nil {
-		return s, nil
 	}
 
 	desc := MakeStreamDescriptionByID(id, WithAutoCleanup(true))

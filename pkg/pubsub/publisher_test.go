@@ -91,8 +91,8 @@ var _ = Describe("Publisher", func() {
 			Expect(pub.StreamID()).To(Equal(streamID))
 		})
 
-		It("should publishSource events", func() {
-			pub.PublishContent("hello world")
+		It("should publish events", func() {
+			pub.Publish(events.NewEvent("hello world"))
 			Eventually(func() []events.Event[string] {
 				evs := mockS.publishedEvents
 				if len(evs) > 0 {
@@ -107,7 +107,7 @@ var _ = Describe("Publisher", func() {
 	Describe("emptyPublisherFanIn", func() {
 		var empty emptyPublisherFanIn[string]
 
-		It("should do nothing on publishComplex", func() {
+		It("should do nothing on publish", func() {
 			err := empty.publish(events.NewEvent("test"))
 			Expect(err).To(Equal(ErrEmptyPublisherFanIn))
 		})

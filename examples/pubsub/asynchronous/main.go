@@ -47,7 +47,7 @@ func startPublisher(streamID pubsub.StreamID, wg *sync.WaitGroup) {
 
 		for i := 0; i < maxEvents; i++ {
 			zap.S().Infof("Now sending: %v", i)
-			_ = publisher.PublishContent(i)
+			_ = publisher.Publish(events.NewEvent(i))
 		}
 	})
 }

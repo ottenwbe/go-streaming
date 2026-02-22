@@ -215,13 +215,7 @@ func (m *notificationMap[T]) newSubscriber(streamID StreamID, callback func(even
 	// subscribe
 	var rec Subscriber[T]
 	if !description.Synchronous {
-		var buf buffer.Buffer[T]
-		if description.BufferCapacity > 0 {
-			buf = buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
-		} else {
-			buf = buffer.NewSimpleAsyncBuffer[T]()
-		}
-		rec = newBufferedSubscriber[T](streamID, buf, callback, nil)
+		rec = newBufferedSubscriber[T](streamID, newBufferForSubscriber[T](description, nil), callback, nil)
 	} else {
 		rec = newDefaultSubscriber[T](streamID, callback)
 	}
@@ -246,32 +240,37 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 	}
 
 	var rec Subscriber[T]
+	var buf buffer.Buffer[T]
+
 	if description.BufferPolicySelection.Active {
 		p, err := selection.NewPolicyFromDescription[T](description.BufferPolicySelection)
 		if err != nil {
 			return nil, err
 		}
-		var buf buffer.Buffer[T]
-		if description.BufferCapacity > 0 {
-			buf = buffer.NewLimitedConsumableAsyncBuffer[T](p, description.BufferCapacity)
-		} else {
-			buf = buffer.NewConsumableAsyncBuffer[T](p)
-		}
-		rec = newBufferedSubscriber[T](streamID, buf, nil, callback)
+		buf = newBufferForSubscriber[T](description, p)
 	} else {
 		// Default batch subscriber (no policy, just buffering)
-		var buf buffer.Buffer[T]
-		if description.BufferCapacity > 0 {
-			buf = buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
-		} else {
-			buf = buffer.NewSimpleAsyncBuffer[T]()
-		}
-		rec = newBufferedSubscriber[T](streamID, buf, nil, callback)
+		buf = newBufferForSubscriber[T](description, nil)
 	}
+	rec = newBufferedSubscriber[T](streamID, buf, nil, callback)
 
 	m.receiver[rec.ID()] = rec
 
 	return rec, nil
+}
+
+func newBufferForSubscriber[T any](description SubscriberDescription, p selection.Policy[T]) buffer.Buffer[T] {
+	if p != nil { // policy based
+		if description.BufferCapacity > 0 {
+			return buffer.NewLimitedConsumableAsyncBuffer[T](p, description.BufferCapacity)
+		}
+		return buffer.NewConsumableAsyncBuffer[T](p)
+	}
+	// simple buffer
+	if description.BufferCapacity > 0 {
+		return buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
+	}
+	return buffer.NewSimpleAsyncBuffer[T]()
 }
 
 func (m *notificationMap[T]) close() error {

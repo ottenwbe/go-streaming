@@ -2,7 +2,7 @@ package pubsub
 
 import (
 	"errors"
-	"slices"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/ottenwbe/go-streaming/pkg/events"
@@ -23,10 +23,8 @@ func (p PublisherID) String() string {
 type (
 	// Publisher routes events to a stream
 	Publisher[T any] interface {
-		// PublishContent an event to a stream with a given StreamID
-		PublishContent(eventBody T) error
-		// PublishEvent to the stream
-		PublishEvent(event events.Event[T]) error
+		// Publish an event to a stream
+		Publish(event events.Event[T]) error
 		// ID that identifies this publisher
 		ID() PublisherID
 		// StreamID of the stream that an event of this publisher is published to
@@ -60,7 +58,8 @@ type (
 )
 
 type defaultPublisherManager[T any] struct {
-	publisherArr []Publisher[T]
+	publishersMap map[PublisherID]Publisher[T]
+	mutex         sync.RWMutex
 }
 
 func (p *defaultPublisherManager[T]) migratePublishers(newFanIn publisherFanIn[T], old publisherManager[T]) {
@@ -73,47 +72,61 @@ func (p *defaultPublisherManager[T]) migratePublishers(newFanIn publisherFanIn[T
 }
 
 func (p *defaultPublisherManager[T]) publishers() []Publisher[T] {
-	return p.publisherArr
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	pubs := make([]Publisher[T], 0, len(p.publishersMap))
+	for _, pub := range p.publishersMap {
+		pubs = append(pubs, pub)
+	}
+	return pubs
 }
 func (p *defaultPublisherManager[T]) closePublishers() {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 	// ensure no publisher is dangling
-	for _, publisher := range p.publisherArr {
+	for _, publisher := range p.publishersMap {
 		if publisher != nil {
 			publisher.setFanin(emptyPublisherFanIn[T]{})
 		}
 	}
 
-	p.clearPublishers()
+	p.publishersMap = make(map[PublisherID]Publisher[T])
 }
 
 func (p *defaultPublisherManager[T]) clearPublishers() {
-	for i := range p.publisherArr {
-		p.publisherArr[i] = nil
-	}
-	p.publisherArr = p.publisherArr[:0]
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.publishersMap = make(map[PublisherID]Publisher[T])
 }
 
 func (p *defaultPublisherManager[T]) addPublisher(pub Publisher[T]) {
-	p.publisherArr = append(p.publisherArr, pub)
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.publishersMap[pub.ID()] = pub
 }
 
 func (p *defaultPublisherManager[T]) newPublisher(id StreamID, in publisherFanIn[T]) (Publisher[T], error) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 	publisher := newDefaultPublisher(id, in)
-	p.publisherArr = append(p.publisherArr, publisher)
+	p.publishersMap[publisher.ID()] = publisher
 
 	return publisher, nil
 }
 
 func (p *defaultPublisherManager[T]) removePublisher(id PublisherID) {
-	if idx := slices.IndexFunc(p.publisherArr, func(publisher Publisher[T]) bool { return id == publisher.ID() }); idx != -1 {
-		copy(p.publisherArr[idx:], p.publisherArr[idx+1:])
-		p.publisherArr[len(p.publisherArr)-1] = nil
-		p.publisherArr = p.publisherArr[:len(p.publisherArr)-1]
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	if pub, ok := p.publishersMap[id]; ok {
+		pub.setFanin(emptyPublisherFanIn[T]{})
 	}
+	delete(p.publishersMap, id)
 }
 
 func (p *defaultPublisherManager[T]) len() int {
-	return len(p.publisherArr)
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	return len(p.publishersMap)
 }
 
 func (e emptyPublisherFanIn[T]) publish(event events.Event[T]) error {
@@ -129,10 +142,10 @@ func newDefaultPublisher[T any](streamID StreamID, fanIn publisherFanIn[T]) *def
 }
 
 func newPublisherManager[T any]() publisherManager[T] {
-	publishers := &defaultPublisherManager[T]{
-		publisherArr: make([]Publisher[T], 0),
+	return &defaultPublisherManager[T]{
+		publishersMap: make(map[PublisherID]Publisher[T]),
+		mutex:         sync.RWMutex{},
 	}
-	return publishers
 }
 
 func (p *defaultPublisher[T]) StreamID() StreamID {
@@ -141,12 +154,9 @@ func (p *defaultPublisher[T]) StreamID() StreamID {
 func (p *defaultPublisher[T]) ID() PublisherID {
 	return p.id
 }
-func (p *defaultPublisher[T]) PublishContent(eventBody T) error {
-	return p.fanIn.publish(events.NewEvent(eventBody))
-}
 func (p *defaultPublisher[T]) setFanin(fanIn publisherFanIn[T]) {
 	p.fanIn = fanIn
 }
-func (p *defaultPublisher[T]) PublishEvent(event events.Event[T]) error {
+func (p *defaultPublisher[T]) Publish(event events.Event[T]) error {
 	return p.fanIn.publish(event)
 }

@@ -66,7 +66,7 @@ var _ = Describe("Stream", func() {
 				p, _ := pubsub.RegisterPublisher[string](streamID)
 				defer pubsub.UnRegisterPublisher[string](p)
 
-				p.PublishContent(content)
+				p.Publish(events.NewEvent(content))
 				<-done
 
 				Expect(eventResult.GetContent()).To(Equal(content))
@@ -113,7 +113,7 @@ var _ = Describe("Stream", func() {
 			})
 
 			It("should be subscribable (auto-create) after closing the stream", func() {
-				// close stream (it has no subscribers/publishers yet)
+				// close stream (it has no subscribers/publishersMap yet)
 				pubsub.TryRemoveStreams(streamID)
 
 				result, err := pubsub.SubscribeByTopicID[string](streamID, func(_ events.Event[string]) {})
@@ -143,7 +143,7 @@ var _ = Describe("Stream", func() {
 
 				wg.Go(func() {
 					for i := range numE {
-						p.PublishContent(fmt.Sprintf("a%v", i))
+						p.Publish(events.NewEvent(fmt.Sprintf("a%v", i)))
 
 					}
 				})
@@ -181,9 +181,9 @@ var _ = Describe("Stream", func() {
 				publisher, _ := pubsub.RegisterPublisher[string](streamID)
 				defer pubsub.UnRegisterPublisher[string](publisher)
 
-				publisher.PublishContent(content1)
-				publisher.PublishContent(content2)
-				publisher.PublishContent(content3)
+				publisher.Publish(events.NewEvent(content1))
+				publisher.Publish(events.NewEvent(content2))
+				publisher.Publish(events.NewEvent(content3))
 
 				<-done
 
@@ -232,7 +232,7 @@ var _ = Describe("Stream", func() {
 			wg.Go(func() {
 				defer GinkgoRecover()
 				for range maxRange {
-					pub.PublishContent("test")
+					pub.Publish(events.NewEvent("test"))
 				}
 			})
 

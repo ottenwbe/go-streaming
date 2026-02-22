@@ -187,7 +187,7 @@ var _ = Describe("PubSub", func() {
 	//	})
 
 	Describe("TryRemoveStreams", func() {
-		It("is successful if stream still has no subscribers/publishers", func() {
+		It("is successful if stream still has no subscribers/publishersMap", func() {
 
 			sID, err := pubsub.AddOrReplaceStreamOnRepository[int](repo, "try-close-1")
 			repo.TryRemoveStreams(sID)
@@ -195,7 +195,7 @@ var _ = Describe("PubSub", func() {
 			_, err = repo.GetDescription(sID)
 			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
-		It("is not successful if stream still has publishers", func() {
+		It("is not successful if stream still has publishersMap", func() {
 			sID, err := pubsub.AddOrReplaceStreamOnRepository[int](repo, "try-close-3")
 			defer repo.ForceRemoveStream(sID)
 
@@ -273,7 +273,7 @@ var _ = Describe("PubSub", func() {
 
 			go func() {
 				publisher, _ := pubsub.RegisterPublisherOnRepository[string](repo, id)
-				publisher.PublishContent(event)
+				publisher.Publish(events.NewEvent(event))
 			}()
 
 			Eventually(done).Should(BeClosed())
@@ -432,7 +432,7 @@ var _ = Describe("PubSub", func() {
 
 			Expect(err).To(BeNil())
 
-			pub.PublishContent(1)
+			pub.Publish(events.NewEvent(1))
 
 			m, err := repo.Metrics(id)
 			Expect(err).To(BeNil())

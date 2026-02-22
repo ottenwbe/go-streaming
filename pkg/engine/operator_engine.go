@@ -102,7 +102,7 @@ func (o *PipelineOperatorEngine[TIN, TOUT]) Process(in ...events.Event[TIN]) {
 	result := o.operation(in)
 	for _, r := range result {
 		ce := events.NewEventFromOthers(r, events.GetTimeStamps(in...)...)
-		_ = o.Output.PublishEvent(ce)
+		_ = o.Output.Publish(ce)
 	}
 }
 
@@ -118,7 +118,7 @@ func (o *FilterOperatorEngine[TIN]) Start() error {
 func (o *FilterOperatorEngine[TIN]) Process(in ...events.Event[TIN]) {
 	for _, event := range in {
 		if event != nil && o.predicate(event) {
-			_ = o.baseOperatorEngine.Output.PublishEvent(event)
+			_ = o.baseOperatorEngine.Output.Publish(event)
 		}
 	}
 }
@@ -152,7 +152,7 @@ func (o *MapOperatorEngine[TIN, TOUT]) Start() error {
 func (o *MapOperatorEngine[TIN, TOUT]) ProcessSingleEvent(event events.Event[TIN]) {
 	if event != nil {
 		out := events.NewEventFromOthers(o.mapper(event), event.GetStamp())
-		_ = o.baseOperatorEngine.Output.PublishEvent(out)
+		_ = o.baseOperatorEngine.Output.Publish(out)
 	}
 }
 
@@ -230,7 +230,7 @@ func (o *FanOutOperatorEngine[T]) Process(events ...events.Event[T]) {
 	for _, event := range events {
 		if event != nil {
 			for _, pub := range o.Outputs {
-				_ = pub.PublishEvent(event)
+				_ = pub.Publish(event)
 			}
 		}
 	}
