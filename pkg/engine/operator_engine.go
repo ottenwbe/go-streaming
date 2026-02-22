@@ -60,7 +60,9 @@ func (o *baseOperatorEngine[TIN, TOUT]) OutStream(to pubsub.StreamID) {
 }
 
 func (o *baseOperatorEngine[TIN, TOUT]) start(processFunc func(in ...events.Event[TIN])) error {
-	o.active.Store(true)
+	if !o.active.CompareAndSwap(false, true) {
+		return nil
+	}
 
 	outID := o.config.Outputs[0]
 	inID := o.config.Inputs[0].Stream
@@ -127,7 +129,9 @@ type MapOperatorEngine[TIN any, TOUT any] struct {
 }
 
 func (o *MapOperatorEngine[TIN, TOUT]) Start() error {
-	o.active.Store(true)
+	if !o.active.CompareAndSwap(false, true) {
+		return nil
+	}
 
 	outID := o.config.Outputs[0]
 	inID := o.config.Inputs[0].Stream
@@ -181,7 +185,9 @@ func (o *FanOutOperatorEngine[T]) OutStream(to pubsub.StreamID) {
 }
 
 func (o *FanOutOperatorEngine[T]) Start() error {
-	o.active.Store(true)
+	if !o.active.CompareAndSwap(false, true) {
+		return nil
+	}
 
 	inID := o.config.Inputs[0].Stream
 	policy := o.config.Inputs[0].InputPolicy

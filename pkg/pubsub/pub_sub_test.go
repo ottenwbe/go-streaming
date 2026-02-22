@@ -35,7 +35,7 @@ var _ = Describe("PubSub", func() {
 			s2, err := pubsub.GetOrAddStreamOnRepository[int](repo, topic)
 			defer repo.TryRemoveStreams(s1)
 			defer repo.TryRemoveStreams(s2)
-			Expect(err).To(Equal(pubsub.StreamAlreadyExistsError))
+			Expect(err).To(Equal(pubsub.ErrStreamAlreadyExists))
 			Expect(s1).To(Equal(s2))
 		})
 
@@ -69,7 +69,7 @@ var _ = Describe("PubSub", func() {
 			Expect(err).To(BeNil())
 
 			_, err = repo.GetDescription(s)
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
+			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 
 	})
@@ -193,7 +193,7 @@ var _ = Describe("PubSub", func() {
 			repo.TryRemoveStreams(sID)
 
 			_, err = repo.GetDescription(sID)
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
+			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 		It("is not successful if stream still has publishers", func() {
 			sID, err := pubsub.AddOrReplaceStreamOnRepository[int](repo, "try-close-3")
@@ -350,7 +350,7 @@ var _ = Describe("PubSub", func() {
 
 			repo.TryRemoveStreams(sID)
 			_, err = repo.GetDescription(sID)
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
+			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 
 		It("returns error when stream does not exist", func() {
@@ -365,7 +365,7 @@ var _ = Describe("PubSub", func() {
 			repo.ForceRemoveStream(sID)
 
 			err = pubsub.UnRegisterPublisherOnRepository[int](repo, pub)
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
+			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 	})
 

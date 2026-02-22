@@ -233,7 +233,7 @@ var _ = Describe("Subscriber", func() {
 
 		It("should return error when policy is set for single subscriber", func() {
 			_, err := nMap.newSubscriber(sID, handler, SubscriberWithSelectionPolicy(selection.MakePolicy(selection.CountingWindow, 0, 0, time.Now(), time.Nanosecond, time.Nanosecond)))
-			Expect(err).To(Equal(SubscriberPolicyError))
+			Expect(err).To(Equal(ErrSubscriberPolicy))
 		})
 	})
 })

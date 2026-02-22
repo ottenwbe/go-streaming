@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	EmptyPublisherFanInPublisherError = errors.New("empty Publisher cannot publishSource events")
+	ErrEmptyPublisherFanIn = errors.New("empty Publisher cannot publishSource events")
 )
 
 // PublisherID uniquely identifies a publisher.
@@ -118,10 +118,10 @@ func (p *defaultPublisherManager[T]) len() int {
 }
 
 func (e emptyPublisherFanIn[T]) publishSource(T) error {
-	return EmptyPublisherFanInPublisherError
+	return ErrEmptyPublisherFanIn
 }
 func (e emptyPublisherFanIn[T]) publishComplex(event events.Event[T]) error {
-	return EmptyPublisherFanInPublisherError
+	return ErrEmptyPublisherFanIn
 }
 
 func newDefaultPublisher[T any](streamID StreamID, fanIn publisherFanIn[T]) *defaultPublisher[T] {

@@ -13,9 +13,9 @@ import (
 )
 
 var (
-	SubscriberPolicyError = errors.New("subscriber: single subscriber cannot have a selection policy")
-	BufferError           = errors.New("subscriber: batch subscribers need to be async")
-	NotificationError     = errors.New("subscriber: could not notify all subscribers")
+	ErrSubscriberPolicy    = errors.New("subscriber: single subscriber cannot have a selection policy")
+	ErrBatchSubscriberSync = errors.New("subscriber: batch subscribers need to be async")
+	ErrNotification        = errors.New("subscriber: could not notify all subscribers")
 )
 
 type subscribers[T any] interface {
@@ -208,7 +208,7 @@ func (m *notificationMap[T]) newSubscriber(streamID StreamID, callback func(even
 
 		// validate description
 		if description.BufferPolicySelection.Active {
-			return nil, SubscriberPolicyError
+			return nil, ErrSubscriberPolicy
 		}
 	}
 
@@ -241,7 +241,7 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 
 		// validate description
 		if description.Synchronous {
-			return nil, BufferError
+			return nil, ErrBatchSubscriberSync
 		}
 	}
 
@@ -304,7 +304,7 @@ func (m *notificationMap[T]) notify(event events.Event[T]) error {
 	for _, notifier := range snapshot {
 		if event != nil {
 			if errNotify := notifier.doNotify(event); errNotify != nil {
-				err = NotificationError
+				err = ErrNotification
 			}
 		}
 	}

@@ -113,12 +113,12 @@ var _ = Describe("Publisher", func() {
 
 		It("should do nothing on publishSource", func() {
 			err := empty.publishSource("test")
-			Expect(err).To(Equal(EmptyPublisherFanInPublisherError))
+			Expect(err).To(Equal(ErrEmptyPublisherFanIn))
 		})
 
 		It("should do nothing on publishComplex", func() {
 			err := empty.publishSource("test")
-			Expect(err).To(Equal(EmptyPublisherFanInPublisherError))
+			Expect(err).To(Equal(ErrEmptyPublisherFanIn))
 		})
 	})
 })

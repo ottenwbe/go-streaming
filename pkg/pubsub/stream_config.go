@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	StreamDescriptionWithoutID = errors.New("stream description: no id provided")
+	ErrStreamDescriptionWithoutID = errors.New("stream description: no id provided")
 )
 
 // SubscriberDescription details the subscriber configurations
@@ -149,7 +149,7 @@ func (d StreamDescription) StreamID() StreamID {
 // StreamDescriptionValidation validates the StreamDescription, ensuring it has a valid ID.
 func StreamDescriptionValidation(d StreamDescription) (StreamDescription, error) {
 	if d.ID.IsNil() {
-		return StreamDescription{}, StreamDescriptionWithoutID
+		return StreamDescription{}, ErrStreamDescriptionWithoutID
 	}
 
 	return d, nil

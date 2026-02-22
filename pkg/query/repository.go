@@ -7,6 +7,11 @@ import (
 	"github.com/google/uuid"
 )
 
+var (
+	ErrInvalidQueryID     = errors.New("query: invalid query ID")
+	ErrQueryAlreadyExists = errors.New("query: query with this ID already exists")
+)
+
 // ID uniquely identifies a query in the repository.
 type ID uuid.UUID
 
@@ -31,7 +36,7 @@ type concreteQueryRepository map[ID]ContinuousQuery
 func (c concreteQueryRepository) String() string {
 
 	s := "ContinuousQueryRepository {"
-	for id, _ := range c.List() {
+	for id := range c.List() {
 		s = fmt.Sprintf("%v %v, \n", s, id)
 	}
 	s += "}"
@@ -49,10 +54,10 @@ func (c concreteQueryRepository) remove(id ID) {
 
 func (c concreteQueryRepository) put(q ContinuousQuery) error {
 	if q.ID() == ID(uuid.Nil) {
-		return errors.New("invalid query ID")
+		return ErrInvalidQueryID
 	}
 	if _, ok := c.Get(q.ID()); ok {
-		return errors.New("query with this ID already exists")
+		return ErrQueryAlreadyExists
 	}
 
 	c[q.ID()] = q

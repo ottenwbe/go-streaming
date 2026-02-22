@@ -8,7 +8,7 @@ import (
 	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
-var StreamInactiveError = errors.New("streams: stream not active")
+var ErrStreamInactive = errors.New("streams: stream not active")
 
 // stream is a generic interface that is common to all streams with different types.
 // Actual streams have a type, i.e., basic ones like int or more complex ones.
@@ -334,7 +334,7 @@ func (b *baseStream[T]) subscribe(callback func(event events.Event[T]), opts ...
 		return b.subscriberMap.newSubscriber(b.ID(), callback, opts...)
 	}
 
-	return nil, StreamInactiveError
+	return nil, ErrStreamInactive
 }
 
 func (b *baseStream[T]) subscribeBatch(callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
@@ -344,7 +344,7 @@ func (b *baseStream[T]) subscribeBatch(callback func(events ...events.Event[T]),
 	if b.active || !b.started {
 		return b.subscriberMap.newBatchSubscriber(b.ID(), callback, opts...)
 	}
-	return nil, StreamInactiveError
+	return nil, ErrStreamInactive
 }
 
 func (b *baseStream[T]) clearPublishers() { b.publisherArray.clearPublishers() }

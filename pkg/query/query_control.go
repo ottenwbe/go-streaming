@@ -10,7 +10,10 @@ import (
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
 
-var nilContinuousError = errors.New("continuous error is empty")
+var (
+	ErrQueryNil        = errors.New("query: query cannot be nil")
+	ErrInvalidCallback = errors.New("query: callback cannot be nil and needs to implement func(event events.Event[T])")
+)
 
 // ContinuousQuery represents a running query that processes streams.
 type ContinuousQuery interface {
@@ -70,7 +73,7 @@ func (c *TypedContinuousQuery[T]) Subscribe(
 		c.subscriptions = append(c.subscriptions, s)
 		return nil
 	}
-	return errors.New("callback cannot be nil and needs to implement func(event events.Event[T])")
+	return ErrInvalidCallback
 }
 
 func (c *TypedContinuousQuery[T]) Run() error {
@@ -145,7 +148,7 @@ func FromSourceStream[T any](topic string, options ...pubsub.StreamOption) func(
 
 	return func(q ContinuousQuery) StreamWError {
 		if q == nil {
-			return StreamWError{pubsub.NilStreamID(), errors.New("query cannot be nil")}
+			return StreamWError{pubsub.NilStreamID(), ErrQueryNil}
 		}
 
 		sid, err := pubsub.GetOrAddStreamOnRepository[T](q.repository(), topic, append(options, pubsub.WithAutoStart(false))...)
@@ -167,7 +170,7 @@ func Process[T any](
 	return func(q ContinuousQuery) StreamWError {
 
 		if q == nil {
-			return StreamWError{pubsub.StreamID{}, errors.New("query cannot be nil")}
+			return StreamWError{pubsub.NilStreamID(), ErrQueryNil}
 		}
 		from := fromF(q)
 

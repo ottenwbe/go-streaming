@@ -125,7 +125,7 @@ var _ = Describe("Continuous Query", func() {
 
 			// The default repository should NOT have this stream
 			_, err = pubsub.GetDescription(pubsub.MakeStreamID[int](topic))
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
+			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 	})
 

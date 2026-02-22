@@ -8,11 +8,11 @@ import (
 )
 
 var (
-	StreamAlreadyExistsError = errors.New("pub sub: stream already exists")
-	StreamTypeMismatchError  = errors.New("pub sub: stream type mismatch")
-	StreamNotFoundError      = errors.New("pub sub: no stream found")
-	StreamIDNilError         = errors.New("pub sub: stream id nil")
-	StreamRecNilError        = errors.New("pub sub: stream receiver nil")
+	ErrStreamAlreadyExists = errors.New("pub sub: stream already exists")
+	ErrStreamTypeMismatch  = errors.New("pub sub: stream type mismatch")
+	ErrStreamNotFound      = errors.New("pub sub: no stream found")
+	ErrStreamIDNil         = errors.New("pub sub: stream id nil")
+	ErrStreamSubscriberNil = errors.New("pub sub: stream subscriber nil")
 )
 
 // StreamRepository manages a collection of streams and their lifecycle.
@@ -62,7 +62,7 @@ func AddOrReplaceStreamOnRepository[T any](b *StreamRepository, topic string, op
 	s, err := getAndConvertStreamByID[T](b, streamDescription.StreamID())
 
 	// add new stream if no existing stream exists
-	if errors.Is(err, StreamNotFoundError) {
+	if errors.Is(err, ErrStreamNotFound) {
 		stream := newStreamFromDescription[T](streamDescription)
 		return b.doGetOrAddStream(stream)
 	} else if err != nil {
@@ -124,7 +124,7 @@ func (r *StreamRepository) StartStream(id StreamID) error {
 		s.run()
 		return nil
 	}
-	return StreamNotFoundError
+	return ErrStreamNotFound
 }
 
 // SubscribeByTopic to get a stream for this topic with type T
@@ -195,7 +195,7 @@ func UnsubscribeOnRepository[T any](b *StreamRepository, rec Subscriber[T]) erro
 	}()
 
 	if rec == nil {
-		return StreamRecNilError
+		return ErrStreamSubscriberNil
 	}
 
 	s, err := getAndConvertStreamByID[T](b, rec.StreamID())
@@ -297,7 +297,7 @@ func (r *StreamRepository) GetDescription(id StreamID) (StreamDescription, error
 		return s.Description(), nil
 	}
 
-	return StreamDescription{}, StreamNotFoundError
+	return StreamDescription{}, ErrStreamNotFound
 }
 
 // GetPublishersAndSubscribers retrieves the publisher and subscribers of the stream
@@ -324,7 +324,7 @@ func (r *StreamRepository) Metrics(id StreamID) (*StreamMetrics, error) {
 		return s.streamMetrics(), nil
 	}
 
-	return newStreamMetrics(), StreamNotFoundError
+	return newStreamMetrics(), ErrStreamNotFound
 }
 
 func (r *StreamRepository) doGetOrAddStream(stream stream) (StreamID, error) {
@@ -334,7 +334,7 @@ func (r *StreamRepository) doGetOrAddStream(stream stream) (StreamID, error) {
 	}
 
 	if existingStream, ok := r.streamIdx[stream.ID()]; ok {
-		return existingStream.ID(), StreamAlreadyExistsError
+		return existingStream.ID(), ErrStreamAlreadyExists
 	}
 
 	r.addAndStartStream(stream)
@@ -360,7 +360,7 @@ func (r *StreamRepository) addAndStartStream(newStream stream) {
 
 func validateStream(newStream stream) error {
 	if newStream.ID().IsNil() {
-		return StreamIDNilError
+		return ErrStreamIDNil
 	}
 	// Type validation is implicit via StreamID equality in GetOrAdd logic or explicit checks in getAndConvert
 	return nil
@@ -371,7 +371,7 @@ func getOrAddStreamByID[T any](b *StreamRepository, id StreamID) (typedStream[T]
 	if err == nil {
 		return s, nil
 	}
-	if !errors.Is(err, StreamNotFoundError) {
+	if !errors.Is(err, ErrStreamNotFound) {
 		return nil, err
 	}
 
@@ -392,9 +392,9 @@ func getAndConvertStreamByID[T any](b *StreamRepository, id StreamID) (typedStre
 		case typedStream[T]:
 			return stream, nil
 		default:
-			return nil, StreamTypeMismatchError
+			return nil, ErrStreamTypeMismatch
 		}
 	}
-	return nil, StreamNotFoundError
+	return nil, ErrStreamNotFound
 
 }

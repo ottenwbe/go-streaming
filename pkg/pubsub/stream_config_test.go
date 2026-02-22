@@ -122,7 +122,7 @@ id:
 asyncStream: true
 `
 				_, err := pubsub.StreamDescriptionFromYML([]byte(yml))
-				Expect(err).To(Equal(pubsub.StreamDescriptionWithoutID))
+				Expect(err).To(Equal(pubsub.ErrStreamDescriptionWithoutID))
 			})
 		})
 	})

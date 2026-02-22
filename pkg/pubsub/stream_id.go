@@ -16,8 +16,9 @@ const (
 )
 
 var (
-	UnmarshallingTopicNotStringError  = errors.New("streamID: error unmarshalling topic; expected string")
-	UnmarshallingTopicMissingKeyError = errors.New("streamID: error unmarshalling topic; missing key")
+	ErrUnmarshallingTopicNotString  = errors.New("streamID: error unmarshalling topic; expected string")
+	ErrUnmarshallingTopicMissingKey = errors.New("streamID: error unmarshalling topic; missing key")
+	ErrUnmarshallingTypeNotString   = errors.New("streamID: error unmarshalling type; expected string")
 )
 
 // StreamID uniquely identifies a stream by its topic and the type of data it carries.
@@ -48,10 +49,10 @@ func (s *StreamID) UnmarshalJSON(data []byte) error {
 	if topic, ok := unmarshalled[topicKey]; ok {
 		s.Topic, ok = topic.(string)
 		if !ok {
-			return UnmarshallingTopicNotStringError
+			return ErrUnmarshallingTopicNotString
 		}
 	} else {
-		return UnmarshallingTopicMissingKeyError
+		return ErrUnmarshallingTopicMissingKey
 	}
 
 	if topicType, ok := unmarshalled[typeKey]; ok {
@@ -82,10 +83,10 @@ func (s *StreamID) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if topic, ok := unmarshalled[topicKey]; ok {
 		s.Topic, ok = topic.(string)
 		if !ok {
-			return UnmarshallingTopicNotStringError
+			return ErrUnmarshallingTopicNotString
 		}
 	} else {
-		return UnmarshallingTopicMissingKeyError
+		return ErrUnmarshallingTopicMissingKey
 	}
 
 	if topicType, ok := unmarshalled[typeKey]; ok {
@@ -133,7 +134,7 @@ func getTypeFromString(typeName string) reflect.Type {
 func convertInterfaceToTopicType(i interface{}) (reflect.Type, error) {
 	typeName, ok := i.(string)
 	if !ok {
-		return nil, fmt.Errorf("expected string type for topicType, got %T", i)
+		return nil, fmt.Errorf("%w: got %T", ErrUnmarshallingTypeNotString, i)
 	}
 	return getTypeFromString(typeName), nil
 }
