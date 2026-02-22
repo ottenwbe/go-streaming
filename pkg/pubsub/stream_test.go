@@ -30,7 +30,7 @@ var _ = Describe("Stream", func() {
 
 		Context("description", func() {
 			It("should be retrievable", func() {
-				retrievedDesc, err := pubsub.GetDescription(streamID)
+				retrievedDesc, err := pubsub.GetConfiguration(streamID)
 				Expect(err).To(BeNil())
 				Expect(retrievedDesc.ID).To(Equal(streamID))
 			})
@@ -46,7 +46,7 @@ var _ = Describe("Stream", func() {
 
 				pubsub.TryRemoveStreams(streamID)
 
-				_, err = pubsub.GetDescription(streamID)
+				_, err = pubsub.GetConfiguration(streamID)
 				Expect(err).To(BeNil()) // stream should still exist
 			})
 		})
@@ -66,7 +66,7 @@ var _ = Describe("Stream", func() {
 				p, _ := pubsub.RegisterPublisher[string](streamID)
 				defer pubsub.UnRegisterPublisher[string](p)
 
-				p.Publish(content)
+				p.Publish(events.NewEvent(content))
 				<-done
 
 				Expect(eventResult.GetContent()).To(Equal(content))
@@ -92,7 +92,7 @@ var _ = Describe("Stream", func() {
 
 		Context("description", func() {
 			It("should be retrievable", func() {
-				retrievedDesc, err := pubsub.GetDescription(streamID)
+				retrievedDesc, err := pubsub.GetConfiguration(streamID)
 				Expect(err).To(BeNil())
 				Expect(retrievedDesc.ID).To(Equal(streamID))
 			})
@@ -108,12 +108,12 @@ var _ = Describe("Stream", func() {
 
 				pubsub.TryRemoveStreams(streamID)
 
-				_, err = pubsub.GetDescription(streamID)
+				_, err = pubsub.GetConfiguration(streamID)
 				Expect(err).To(BeNil()) // stream should still exist
 			})
 
 			It("should be subscribable (auto-create) after closing the stream", func() {
-				// close stream (it has no subscribers/publishers yet)
+				// close stream (it has no subscribers/publishersMap yet)
 				pubsub.TryRemoveStreams(streamID)
 
 				result, err := pubsub.SubscribeByTopicID[string](streamID, func(_ events.Event[string]) {})
@@ -143,7 +143,7 @@ var _ = Describe("Stream", func() {
 
 				wg.Go(func() {
 					for i := range numE {
-						p.Publish(fmt.Sprintf("a%v", i))
+						p.Publish(events.NewEvent(fmt.Sprintf("a%v", i)))
 
 					}
 				})
@@ -181,9 +181,9 @@ var _ = Describe("Stream", func() {
 				publisher, _ := pubsub.RegisterPublisher[string](streamID)
 				defer pubsub.UnRegisterPublisher[string](publisher)
 
-				publisher.Publish(content1)
-				publisher.Publish(content2)
-				publisher.Publish(content3)
+				publisher.Publish(events.NewEvent(content1))
+				publisher.Publish(events.NewEvent(content2))
+				publisher.Publish(events.NewEvent(content3))
 
 				<-done
 
@@ -210,7 +210,7 @@ var _ = Describe("Stream", func() {
 
 		AfterEach(func() {
 			pubsub.TryRemoveStreams(streamID)
-			_, err := pubsub.GetDescription(streamID)
+			_, err := pubsub.GetConfiguration(streamID)
 			Expect(err).ToNot(BeNil())
 		})
 
@@ -232,7 +232,7 @@ var _ = Describe("Stream", func() {
 			wg.Go(func() {
 				defer GinkgoRecover()
 				for range maxRange {
-					pub.Publish("test")
+					pub.Publish(events.NewEvent("test"))
 				}
 			})
 

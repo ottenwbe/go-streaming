@@ -13,9 +13,9 @@ import (
 )
 
 var (
-	SubscriberPolicyError = errors.New("subscriber: single subscriber cannot have a selection policy")
-	BufferError           = errors.New("subscriber: batch subscribers need to be async")
-	NotificationError     = errors.New("subscriber: could not notify all subscribers")
+	ErrSubscriberPolicy    = errors.New("subscriber: single subscriber cannot have a selection policy")
+	ErrBatchSubscriberSync = errors.New("subscriber: batch subscribers need to be async")
+	ErrNotification        = errors.New("subscriber: could not notify all subscribers")
 )
 
 type subscribers[T any] interface {
@@ -181,14 +181,14 @@ func (r *bufferedSubscriber[T]) notifyNext() {
 }
 
 type notificationMap[T any] struct {
-	description SubscriberDescription
+	description SubscriberConfig
 	receiver    map[SubscriberID]Subscriber[T]
 	active      bool
 	metrics     *StreamMetrics
 	mutex       sync.RWMutex
 }
 
-func newNotificationMap[T any](description SubscriberDescription, metrics *StreamMetrics) *notificationMap[T] {
+func newNotificationMap[T any](description SubscriberConfig, metrics *StreamMetrics) *notificationMap[T] {
 	m := &notificationMap[T]{
 		description: description,
 		receiver:    make(map[SubscriberID]Subscriber[T]),
@@ -204,24 +204,18 @@ func (m *notificationMap[T]) newSubscriber(streamID StreamID, callback func(even
 
 	var description = m.description
 	if len(options) > 0 {
-		EnrichSubscriberDescription(&description, options...)
+		EnrichSubscriberConfig(&description, options...)
 
 		// validate description
 		if description.BufferPolicySelection.Active {
-			return nil, SubscriberPolicyError
+			return nil, ErrSubscriberPolicy
 		}
 	}
 
 	// subscribe
 	var rec Subscriber[T]
 	if !description.Synchronous {
-		var buf buffer.Buffer[T]
-		if description.BufferCapacity > 0 {
-			buf = buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
-		} else {
-			buf = buffer.NewSimpleAsyncBuffer[T]()
-		}
-		rec = newBufferedSubscriber[T](streamID, buf, callback, nil)
+		rec = newBufferedSubscriber[T](streamID, newBufferForSubscriber[T](description, nil), callback, nil)
 	} else {
 		rec = newDefaultSubscriber[T](streamID, callback)
 	}
@@ -237,41 +231,46 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 
 	var description = m.description
 	if len(options) > 0 {
-		EnrichSubscriberDescription(&description, options...)
+		EnrichSubscriberConfig(&description, options...)
 
 		// validate description
 		if description.Synchronous {
-			return nil, BufferError
+			return nil, ErrBatchSubscriberSync
 		}
 	}
 
 	var rec Subscriber[T]
+	var buf buffer.Buffer[T]
+
 	if description.BufferPolicySelection.Active {
 		p, err := selection.NewPolicyFromDescription[T](description.BufferPolicySelection)
 		if err != nil {
 			return nil, err
 		}
-		var buf buffer.Buffer[T]
-		if description.BufferCapacity > 0 {
-			buf = buffer.NewLimitedConsumableAsyncBuffer[T](p, description.BufferCapacity)
-		} else {
-			buf = buffer.NewConsumableAsyncBuffer[T](p)
-		}
-		rec = newBufferedSubscriber[T](streamID, buf, nil, callback)
+		buf = newBufferForSubscriber[T](description, p)
 	} else {
 		// Default batch subscriber (no policy, just buffering)
-		var buf buffer.Buffer[T]
-		if description.BufferCapacity > 0 {
-			buf = buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
-		} else {
-			buf = buffer.NewSimpleAsyncBuffer[T]()
-		}
-		rec = newBufferedSubscriber[T](streamID, buf, nil, callback)
+		buf = newBufferForSubscriber[T](description, nil)
 	}
+	rec = newBufferedSubscriber[T](streamID, buf, nil, callback)
 
 	m.receiver[rec.ID()] = rec
 
 	return rec, nil
+}
+
+func newBufferForSubscriber[T any](description SubscriberConfig, p selection.Policy[T]) buffer.Buffer[T] {
+	if p != nil { // policy based
+		if description.BufferCapacity > 0 {
+			return buffer.NewLimitedConsumableAsyncBuffer[T](p, description.BufferCapacity)
+		}
+		return buffer.NewConsumableAsyncBuffer[T](p)
+	}
+	// simple buffer
+	if description.BufferCapacity > 0 {
+		return buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
+	}
+	return buffer.NewSimpleAsyncBuffer[T]()
 }
 
 func (m *notificationMap[T]) close() error {
@@ -304,7 +303,7 @@ func (m *notificationMap[T]) notify(event events.Event[T]) error {
 	for _, notifier := range snapshot {
 		if event != nil {
 			if errNotify := notifier.doNotify(event); errNotify != nil {
-				err = NotificationError
+				err = ErrNotification
 			}
 		}
 	}

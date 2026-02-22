@@ -60,7 +60,9 @@ func (o *baseOperatorEngine[TIN, TOUT]) OutStream(to pubsub.StreamID) {
 }
 
 func (o *baseOperatorEngine[TIN, TOUT]) start(processFunc func(in ...events.Event[TIN])) error {
-	o.active.Store(true)
+	if !o.active.CompareAndSwap(false, true) {
+		return nil
+	}
 
 	outID := o.config.Outputs[0]
 	inID := o.config.Inputs[0].Stream
@@ -100,7 +102,7 @@ func (o *PipelineOperatorEngine[TIN, TOUT]) Process(in ...events.Event[TIN]) {
 	result := o.operation(in)
 	for _, r := range result {
 		ce := events.NewEventFromOthers(r, events.GetTimeStamps(in...)...)
-		_ = o.Output.PublishComplex(ce)
+		_ = o.Output.Publish(ce)
 	}
 }
 
@@ -116,7 +118,7 @@ func (o *FilterOperatorEngine[TIN]) Start() error {
 func (o *FilterOperatorEngine[TIN]) Process(in ...events.Event[TIN]) {
 	for _, event := range in {
 		if event != nil && o.predicate(event) {
-			_ = o.baseOperatorEngine.Output.PublishComplex(event)
+			_ = o.baseOperatorEngine.Output.Publish(event)
 		}
 	}
 }
@@ -127,7 +129,9 @@ type MapOperatorEngine[TIN any, TOUT any] struct {
 }
 
 func (o *MapOperatorEngine[TIN, TOUT]) Start() error {
-	o.active.Store(true)
+	if !o.active.CompareAndSwap(false, true) {
+		return nil
+	}
 
 	outID := o.config.Outputs[0]
 	inID := o.config.Inputs[0].Stream
@@ -148,12 +152,86 @@ func (o *MapOperatorEngine[TIN, TOUT]) Start() error {
 func (o *MapOperatorEngine[TIN, TOUT]) ProcessSingleEvent(event events.Event[TIN]) {
 	if event != nil {
 		out := events.NewEventFromOthers(o.mapper(event), event.GetStamp())
-		_ = o.baseOperatorEngine.Output.PublishComplex(out)
+		_ = o.baseOperatorEngine.Output.Publish(out)
 	}
 }
 
 func (o *MapOperatorEngine[TIN, TOUT]) Process(in ...events.Event[TIN]) {
 	for _, event := range in {
 		o.ProcessSingleEvent(event)
+	}
+}
+
+type FanOutOperatorEngine[T any] struct {
+	config  *OperatorDescription
+	active  atomic.Bool
+	Outputs []pubsub.Publisher[T]
+	Input   pubsub.Subscriber[T]
+}
+
+func (o *FanOutOperatorEngine[T]) ID() OperatorID {
+	return o.config.ID
+}
+
+func (o *FanOutOperatorEngine[T]) InStream(in pubsub.StreamID, p selection.PolicyDescription) {
+	o.config.Inputs = append(o.config.Inputs, InputDescription{
+		Stream:      in,
+		InputPolicy: p,
+	})
+}
+
+func (o *FanOutOperatorEngine[T]) OutStream(to pubsub.StreamID) {
+	o.config.Outputs = append(o.config.Outputs, to)
+}
+
+func (o *FanOutOperatorEngine[T]) Start() error {
+	if !o.active.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	inID := o.config.Inputs[0].Stream
+	policy := o.config.Inputs[0].InputPolicy
+
+	o.Outputs = make([]pubsub.Publisher[T], 0, len(o.config.Outputs))
+	for _, outID := range o.config.Outputs {
+		pub, err := pubsub.RegisterPublisher[T](outID)
+		if err != nil {
+			return err
+		}
+		o.Outputs = append(o.Outputs, pub)
+	}
+
+	var err error
+	o.Input, err = pubsub.SubscribeBatchByTopicID[T](
+		inID,
+		o.Process,
+		pubsub.SubscriberIsSync(false),
+		pubsub.SubscriberWithSelectionPolicy(policy))
+
+	return err
+}
+
+func (o *FanOutOperatorEngine[T]) Stop() error {
+	o.active.Store(false)
+	err := pubsub.Unsubscribe(o.Input)
+	var errs []error
+	if err != nil {
+		errs = append(errs, err)
+	}
+	for _, pub := range o.Outputs {
+		if e := pubsub.UnRegisterPublisher(pub); e != nil {
+			errs = append(errs, e)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (o *FanOutOperatorEngine[T]) Process(events ...events.Event[T]) {
+	for _, event := range events {
+		if event != nil {
+			for _, pub := range o.Outputs {
+				_ = pub.Publish(event)
+			}
+		}
 	}
 }

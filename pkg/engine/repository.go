@@ -18,10 +18,15 @@ var (
 	ErrMapOperatorInputOutput      = errors.New("map operator needs exactly 1 input and 1 output")
 	ErrInvalidMapOperation         = errors.New("invalid operation type for map operator, expected func(events.Event[TIn]) Tout")
 	ErrNilOperator                 = errors.New("operator is considered nil (either id or operator is nil)")
+	ErrFanoutOperatorInputOutput   = errors.New("fanout operator needs exactly 1 input and at least 1 output")
 	ErrOperatorAlreadyExists       = errors.New("operator already exists")
 )
 
-func NewOperator[TIn, Tout any](operation any, d *OperatorDescription) (OperatorID, error) {
+func NewOperator[TIn, Tout any](operation any, d *OperatorDescription, id OperatorID) (OperatorID, error) {
+	if id != NilOperatorID() {
+		d.ID = id
+	}
+
 	var o OperatorEngine
 
 	switch d.Type {
@@ -78,6 +83,14 @@ func NewOperator[TIn, Tout any](operation any, d *OperatorDescription) (Operator
 				config: d,
 			},
 			mapper: mapper,
+		}
+	case FANOUT_OPERATOR:
+		// validate
+		if len(d.Inputs) != 1 || len(d.Outputs) < 1 {
+			return NilOperatorID(), ErrFanoutOperatorInputOutput
+		}
+		o = &FanOutOperatorEngine[TIn]{
+			config: d,
 		}
 	default:
 		return NilOperatorID(), fmt.Errorf("%w: %s", ErrUnknownOperatorType, d.Type)

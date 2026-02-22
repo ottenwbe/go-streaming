@@ -6,7 +6,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	engine2 "github.com/ottenwbe/go-streaming/pkg/engine"
+	"github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"github.com/ottenwbe/go-streaming/pkg/query"
@@ -25,7 +25,7 @@ var _ = Describe("Continuous Query", func() {
 		q, err =
 			query.Query[int](
 				query.Process[int](
-					engine2.ContinuousSmaller[int](5),
+					engine.ContinuousSmaller[int](5),
 					query.FromSourceStream[int]("test"),
 				),
 			)
@@ -52,6 +52,25 @@ var _ = Describe("Continuous Query", func() {
 			pubsub.InstantPublishByTopic("test", 4)
 
 			Eventually(count.Load).To(Equal(int32(2)))
+		})
+	})
+
+	Describe("Query Lifecycle", func() {
+		It("stops processing events after Close() is called", func() {
+			topic := "lifecycle-test"
+			q, err := query.Query[int](query.FromSourceStream[int](topic))
+			Expect(err).To(BeNil())
+
+			var count atomic.Int32
+			q.Subscribe(func(e events.Event[int]) { count.Add(1) })
+			q.Run()
+
+			pubsub.InstantPublishByTopic(topic, 1)
+			Eventually(count.Load).Should(Equal(int32(1)))
+
+			query.Close(q)
+			pubsub.InstantPublishByTopic(topic, 2)
+			Consistently(count.Load).Should(Equal(int32(1)))
 		})
 	})
 
@@ -86,7 +105,7 @@ var _ = Describe("Continuous Query", func() {
 			err = q2.Run()
 			Expect(err).To(BeNil())
 
-			// Publish to repo1 only
+			// PublishContent to repo1 only
 			err = pubsub.InstantPublishByTopicOnRepository(repo1, topic, 10)
 			Expect(err).To(BeNil())
 
@@ -105,15 +124,15 @@ var _ = Describe("Continuous Query", func() {
 			defer query.Close(q)
 
 			// The default repository should NOT have this stream
-			_, err = pubsub.GetDescription(pubsub.MakeStreamID[int](topic))
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
+			_, err = pubsub.GetConfiguration(pubsub.MakeStreamID[int](topic))
+			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 	})
 
 	Describe("Error Handling", func() {
 		It("Process propagates operator creation errors", func() {
-			errOp := func(in []pubsub.StreamID, out []pubsub.StreamID) (engine2.OperatorID, error) {
-				return engine2.OperatorID{}, errors.New("op failed")
+			errOp := func(in []pubsub.StreamID, out []pubsub.StreamID, id engine.OperatorID) (engine.OperatorID, error) {
+				return engine.OperatorID{}, errors.New("op failed")
 			}
 
 			_, err := query.Query[int](

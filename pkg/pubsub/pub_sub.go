@@ -8,11 +8,11 @@ import (
 )
 
 var (
-	StreamAlreadyExistsError = errors.New("pub sub: stream already exists")
-	StreamTypeMismatchError  = errors.New("pub sub: stream type mismatch")
-	StreamNotFoundError      = errors.New("pub sub: no stream found")
-	StreamIDNilError         = errors.New("pub sub: stream id nil")
-	StreamRecNilError        = errors.New("pub sub: stream receiver nil")
+	ErrStreamAlreadyExists = errors.New("pub sub: stream already exists")
+	ErrStreamTypeMismatch  = errors.New("pub sub: stream type mismatch")
+	ErrStreamNotFound      = errors.New("pub sub: no stream found")
+	ErrStreamIDNil         = errors.New("pub sub: stream id nil")
+	ErrStreamSubscriberNil = errors.New("pub sub: stream subscriber nil")
 )
 
 // StreamRepository manages a collection of streams and their lifecycle.
@@ -45,7 +45,7 @@ func GetOrAddStream[T any](topic string, opts ...StreamOption) (StreamID, error)
 func GetOrAddStreamOnRepository[T any](b *StreamRepository, topic string, opts ...StreamOption) (StreamID, error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
-	streamDescription := MakeStreamDescription[T](topic, opts...)
+	streamDescription := MakeStreamConfig[T](topic, opts...)
 	stream := newStreamFromDescription[T](streamDescription)
 	return b.doGetOrAddStream(stream)
 }
@@ -58,11 +58,11 @@ func AddOrReplaceStream[T any](topic string, opts ...StreamOption) (StreamID, er
 func AddOrReplaceStreamOnRepository[T any](b *StreamRepository, topic string, opts ...StreamOption) (StreamID, error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
-	streamDescription := MakeStreamDescription[T](topic, opts...)
+	streamDescription := MakeStreamConfig[T](topic, opts...)
 	s, err := getAndConvertStreamByID[T](b, streamDescription.StreamID())
 
 	// add new stream if no existing stream exists
-	if errors.Is(err, StreamNotFoundError) {
+	if errors.Is(err, ErrStreamNotFound) {
 		stream := newStreamFromDescription[T](streamDescription)
 		return b.doGetOrAddStream(stream)
 	} else if err != nil {
@@ -75,7 +75,7 @@ func AddOrReplaceStreamOnRepository[T any](b *StreamRepository, topic string, op
 
 // ForceRemoveStream forces removal of streams by their id, ensuring all resources are closed.
 // The streams will be removed from the central pub sub system.
-// BE CAREFUL USING THIS: when active subscribers publishers exist, the code might panic.
+// BE CAREFUL USING THIS: when active subscribers publishersMap exist, the code might panic.
 // In most cases TryRemoveStream is the safer and better choice.
 func ForceRemoveStream(streamIDs ...StreamID) {
 	defaultStreamRepository.ForceRemoveStream(streamIDs...)
@@ -93,7 +93,7 @@ func (r *StreamRepository) ForceRemoveStream(streamIDs ...StreamID) {
 }
 
 // TryRemoveStreams attempts to remove the provided streams from the pub sub system.
-// A stream is only removed if it has no active publishers or subscribers.
+// A stream is only removed if it has no active publishersMap or subscribers.
 func TryRemoveStreams(streamIDs ...StreamID) {
 	defaultStreamRepository.TryRemoveStreams(streamIDs...)
 }
@@ -109,6 +109,14 @@ func StartStream(id StreamID) error {
 	return defaultStreamRepository.StartStream(id)
 }
 
+// StartStream starts the stream with the given ID.
+func StartStreamOnRepository(id StreamID, r *StreamRepository) error {
+	if r == nil {
+		r = defaultStreamRepository
+	}
+	return r.StartStream(id)
+}
+
 func (r *StreamRepository) StartStream(id StreamID) error {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
@@ -116,7 +124,7 @@ func (r *StreamRepository) StartStream(id StreamID) error {
 		s.run()
 		return nil
 	}
-	return StreamNotFoundError
+	return ErrStreamNotFound
 }
 
 // SubscribeByTopic to get a stream for this topic with type T
@@ -130,7 +138,11 @@ func SubscribeByTopicOnRepository[T any](r *StreamRepository, topic string, call
 
 // SubscribeBatchByTopic to get a stream for this topic with type T returning a batch subscriber
 func SubscribeBatchByTopic[T any](topic string, callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
-	return SubscribeBatchByTopicIDOnRepository[T](defaultStreamRepository, MakeStreamID[T](topic), callback, opts...)
+	return SubscribeBatchByTopicOnRepository[T](defaultStreamRepository, topic, callback, opts...)
+}
+
+func SubscribeBatchByTopicOnRepository[T any](r *StreamRepository, topic string, callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+	return SubscribeBatchByTopicIDOnRepository[T](r, MakeStreamID[T](topic), callback, opts...)
 }
 
 // SubscribeByTopicID to a stream by the stream's id
@@ -183,7 +195,7 @@ func UnsubscribeOnRepository[T any](b *StreamRepository, rec Subscriber[T]) erro
 	}()
 
 	if rec == nil {
-		return StreamRecNilError
+		return ErrStreamSubscriberNil
 	}
 
 	s, err := getAndConvertStreamByID[T](b, rec.StreamID())
@@ -211,7 +223,7 @@ func InstantPublishByTopicOnRepository[T any](b *StreamRepository, topic string,
 		return err
 	}
 
-	return publisher.Publish(eventBody)
+	return publisher.Publish(events.NewEvent(eventBody))
 }
 
 // RegisterPublisherByTopic creates and registers a new publisher for the stream identified by the given topic.
@@ -273,19 +285,19 @@ func UnRegisterPublisherOnRepository[T any](b *StreamRepository, publisher Publi
 	return nil
 }
 
-// GetDescription retrieves the description of a stream identified by the given ID.
-func GetDescription(id StreamID) (StreamDescription, error) {
+// GetConfiguration retrieves the description of a stream identified by the given ID.
+func GetConfiguration(id StreamID) (StreamConfig, error) {
 	return defaultStreamRepository.GetDescription(id)
 }
 
-func (r *StreamRepository) GetDescription(id StreamID) (StreamDescription, error) {
+func (r *StreamRepository) GetDescription(id StreamID) (StreamConfig, error) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 	if s, ok := r.streamIdx[id]; ok {
 		return s.Description(), nil
 	}
 
-	return StreamDescription{}, StreamNotFoundError
+	return StreamConfig{}, ErrStreamNotFound
 }
 
 // GetPublishersAndSubscribers retrieves the publisher and subscribers of the stream
@@ -294,7 +306,7 @@ func (r *StreamRepository) GetDescription(id StreamID) (StreamDescription, error
 //	defer b.mutex.RUnlock()
 //
 //	if s, err := b.getAndConvertStreamByID(id); err != nil {
-//		return s.publishers(), s.subscribers(), nil
+//		return s.publishersMap(), s.subscribers(), nil
 //	}
 //
 //	return nil, nil, StreamNotFoundError
@@ -312,7 +324,7 @@ func (r *StreamRepository) Metrics(id StreamID) (*StreamMetrics, error) {
 		return s.streamMetrics(), nil
 	}
 
-	return newStreamMetrics(), StreamNotFoundError
+	return newStreamMetrics(), ErrStreamNotFound
 }
 
 func (r *StreamRepository) doGetOrAddStream(stream stream) (StreamID, error) {
@@ -322,7 +334,7 @@ func (r *StreamRepository) doGetOrAddStream(stream stream) (StreamID, error) {
 	}
 
 	if existingStream, ok := r.streamIdx[stream.ID()]; ok {
-		return existingStream.ID(), StreamAlreadyExistsError
+		return existingStream.ID(), ErrStreamAlreadyExists
 	}
 
 	r.addAndStartStream(stream)
@@ -347,8 +359,9 @@ func (r *StreamRepository) addAndStartStream(newStream stream) {
 }
 
 func validateStream(newStream stream) error {
-	if newStream.ID().IsNil() {
-		return StreamIDNilError
+	id := newStream.ID()
+	if id.IsNil() {
+		return ErrStreamIDNil
 	}
 	// Type validation is implicit via StreamID equality in GetOrAdd logic or explicit checks in getAndConvert
 	return nil
@@ -359,15 +372,11 @@ func getOrAddStreamByID[T any](b *StreamRepository, id StreamID) (typedStream[T]
 	if err == nil {
 		return s, nil
 	}
-	if !errors.Is(err, StreamNotFoundError) {
+	if !errors.Is(err, ErrStreamNotFound) {
 		return nil, err
 	}
 
-	if s, err := getAndConvertStreamByID[T](b, id); err == nil {
-		return s, nil
-	}
-
-	desc := MakeStreamDescriptionByID(id, WithAutoCleanup(true))
+	desc := MakeStreamConfigByID(id, WithAutoCleanup(true))
 	newS := newStreamFromDescription[T](desc)
 	b.addAndStartStream(newS)
 
@@ -380,9 +389,9 @@ func getAndConvertStreamByID[T any](b *StreamRepository, id StreamID) (typedStre
 		case typedStream[T]:
 			return stream, nil
 		default:
-			return nil, StreamTypeMismatchError
+			return nil, ErrStreamTypeMismatch
 		}
 	}
-	return nil, StreamNotFoundError
+	return nil, ErrStreamNotFound
 
 }

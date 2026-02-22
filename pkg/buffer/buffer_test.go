@@ -1,6 +1,7 @@
 package buffer_test
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/ottenwbe/go-streaming/pkg/buffer"
@@ -56,7 +57,8 @@ var _ = Describe("Buffer", func() {
 			It("should throw an error when more than two events are added", func() {
 
 				err1 := buf.AddEvents([]events.Event[string]{e1, e2, e3})
-				Expect(err1).To(Not(BeNil()))
+				Expect(err1).To(HaveOccurred())
+				Expect(errors.Is(err1, buffer.ErrLimitExceeded)).To(BeTrue())
 			})
 		})
 

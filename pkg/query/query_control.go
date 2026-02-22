@@ -10,7 +10,10 @@ import (
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
 
-var nilContinuousError = errors.New("continuous error is empty")
+var (
+	ErrQueryNil        = errors.New("query: query cannot be nil")
+	ErrInvalidCallback = errors.New("query: callback cannot be nil and needs to implement func(event events.Event[T])")
+)
 
 // ContinuousQuery represents a running query that processes streams.
 type ContinuousQuery interface {
@@ -45,55 +48,6 @@ func Close(qs ContinuousQuery) {
 	qs.close()
 }
 
-// RunAndSubscribe starts the query and returns a typed wrapper with an active subscription to the output.
-//func RunAndSubscribe[T any](c *ContinuousQuery, err ...error) (*TypedContinuousQuery[T], []error) {
-//
-//	errs, done := anyErrorExists(err, c)
-//	if done {
-//		return nil, errs
-//	}
-//
-//	if runErr := c.run(); runErr != nil {
-//		c.close()
-//		return nil, append(errs, runErr)
-//	}
-//
-//	return &TypedContinuousQuery[T]{
-//		ContinuousQuery: c,
-//	}, errs
-//}
-//
-//func anyErrorExists(err []error, c *ContinuousQuery) ([]error, bool) {
-//	for i, _ := range err {
-//		if err[i] == nil {
-//			err = append(err[:i], err[i+1:]...)
-//		}
-//	}
-//
-//	if c == nil {
-//		err = append(err, nilContinuousError)
-//	}
-//
-//	return err, len(err) > 0
-//}
-
-// ComposeWith merges another query into the current one, chaining their operations.
-//func (c *TypedContinuousQuery[T]) ComposeWith(c2 *ContinuousQuery) (*ContinuousQuery, error) {
-//
-//	if !c2.output.IsNil() && in(c.streams, c2.output) {
-//		c2.output = c.output
-//	} else if (!c.output.IsNil() && in(c2.streams, c.output)) || (c.output.IsNil() && !c2.output.IsNil()) {
-//		c.output = c2.output
-//	} else {
-//		return nil, errors.New("output streams don't match")
-//	}
-//
-//	c.addStreams(c2.streams...)
-//	c.addOperations(c2.operators...)
-//
-//	return c, nil
-//}
-
 // ID returns the unique identifier of the query.
 func (c *TypedContinuousQuery[T]) ID() ID {
 	return c.id
@@ -119,7 +73,7 @@ func (c *TypedContinuousQuery[T]) Subscribe(
 		c.subscriptions = append(c.subscriptions, s)
 		return nil
 	}
-	return errors.New("callback cannot be nil and needs to implement func(event events.Event[T])")
+	return ErrInvalidCallback
 }
 
 func (c *TypedContinuousQuery[T]) Run() error {
@@ -194,7 +148,7 @@ func FromSourceStream[T any](topic string, options ...pubsub.StreamOption) func(
 
 	return func(q ContinuousQuery) StreamWError {
 		if q == nil {
-			return StreamWError{pubsub.NilStreamID(), errors.New("query cannot be nil")}
+			return StreamWError{pubsub.NilStreamID(), ErrQueryNil}
 		}
 
 		sid, err := pubsub.GetOrAddStreamOnRepository[T](q.repository(), topic, append(options, pubsub.WithAutoStart(false))...)
@@ -209,14 +163,14 @@ func FromSourceStream[T any](topic string, options ...pubsub.StreamOption) func(
 }
 
 func Process[T any](
-	operatorCreationFunc func(in []pubsub.StreamID, out []pubsub.StreamID) (engine2.OperatorID, error),
+	operatorCreationFunc func(in []pubsub.StreamID, out []pubsub.StreamID, id engine2.OperatorID) (engine2.OperatorID, error),
 	fromF func(q ContinuousQuery) StreamWError,
 	options ...pubsub.StreamOption,
 ) func(q ContinuousQuery) StreamWError {
 	return func(q ContinuousQuery) StreamWError {
 
 		if q == nil {
-			return StreamWError{pubsub.StreamID{}, errors.New("query cannot be nil")}
+			return StreamWError{pubsub.NilStreamID(), ErrQueryNil}
 		}
 		from := fromF(q)
 
@@ -225,7 +179,7 @@ func Process[T any](
 			return StreamWError{pubsub.NilStreamID(), err}
 		}
 
-		operatorEngine, err2 := operatorCreationFunc([]pubsub.StreamID{from.streamID}, []pubsub.StreamID{to})
+		operatorEngine, err2 := operatorCreationFunc([]pubsub.StreamID{from.streamID}, []pubsub.StreamID{to}, engine2.NilOperatorID())
 		if err2 != nil {
 			return StreamWError{pubsub.NilStreamID(), err2}
 		}

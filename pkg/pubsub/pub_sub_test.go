@@ -1,8 +1,11 @@
 package pubsub_test
 
 import (
+	"sync/atomic"
+
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
+	"github.com/ottenwbe/go-streaming/pkg/selection"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,14 +35,14 @@ var _ = Describe("PubSub", func() {
 			s2, err := pubsub.GetOrAddStreamOnRepository[int](repo, topic)
 			defer repo.TryRemoveStreams(s1)
 			defer repo.TryRemoveStreams(s2)
-			Expect(err).To(Equal(pubsub.StreamAlreadyExistsError))
+			Expect(err).To(Equal(pubsub.ErrStreamAlreadyExists))
 			Expect(s1).To(Equal(s2))
 		})
 
 		It("is not replacing an existing stream if the latter should be preserved", func() {
 			var topic = "test-ps-2"
-			d1 := pubsub.MakeStreamDescription[string](topic)
-			d2 := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsynchronousStream(true))
+			d1 := pubsub.MakeStreamConfig[string](topic)
+			d2 := pubsub.MakeStreamConfig[string](topic, pubsub.WithAsynchronousStream(true))
 
 			stream1, _ := pubsub.GetOrAddStreamOnRepository[string](repo, topic)
 			stream2, _ := pubsub.GetOrAddStreamOnRepository[string](repo, topic, pubsub.WithAsynchronousStream(true))
@@ -66,7 +69,7 @@ var _ = Describe("PubSub", func() {
 			Expect(err).To(BeNil())
 
 			_, err = repo.GetDescription(s)
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
+			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 
 	})
@@ -74,7 +77,7 @@ var _ = Describe("PubSub", func() {
 	Describe("AddOrReplaceStream", func() {
 		It("successfully adds a new stream if it doesn't exist", func() {
 			topic := "test-ps-1"
-			d := pubsub.MakeStreamDescription[string](topic)
+			d := pubsub.MakeStreamConfig[string](topic)
 			sID, err := pubsub.AddOrReplaceStreamOnRepository[string](repo, topic)
 			Expect(err).To(BeNil())
 
@@ -94,7 +97,7 @@ var _ = Describe("PubSub", func() {
 		//			Expect(err).To(BeNil())
 		//			Expect(streamID).To(Equal(d.StreamID()))
 		//
-		//			_, err = pubsub.GetDescription(d.StreamID())
+		//			_, err = pubsub.GetConfiguration(d.StreamID())
 		//			Expect(err).To(BeNil())
 		//
 		//		})
@@ -131,6 +134,38 @@ var _ = Describe("PubSub", func() {
 			Expect(err2).To(BeNil())
 			Expect(r1.Asynchronous).To(BeTrue())
 		})
+
+		It("preserves events during migration from sync to async", func() {
+			topic := "migration-test"
+			var receivedCount atomic.Int32
+			done := make(chan struct{})
+
+			// 1. Create a synchronous stream
+			sID, _ := pubsub.AddOrReplaceStreamOnRepository[int](repo, topic, pubsub.WithSubscriberSync(true))
+			repo.StartStream(sID)
+
+			// 2. Subscribe
+			sub, _ := pubsub.SubscribeByTopicOnRepository[int](repo, topic, func(e events.Event[int]) {
+				receivedCount.Add(1)
+				if receivedCount.Load() == 10 {
+					close(done)
+				}
+			})
+			defer pubsub.UnsubscribeOnRepository(repo, sub)
+
+			// 3. Start publishing
+			go func() {
+				for i := 1; i <= 10; i++ {
+					pubsub.InstantPublishByTopicOnRepository(repo, topic, i)
+					if i == 5 {
+						// 4. Migrate the stream mid-flight
+						pubsub.AddOrReplaceStreamOnRepository[int](repo, topic, pubsub.WithAsynchronousStream(true))
+					}
+				}
+			}()
+
+			Eventually(done).Should(BeClosed())
+		})
 	})
 
 	//	Describe("ForceRemoveStream", func() {
@@ -146,21 +181,21 @@ var _ = Describe("PubSub", func() {
 	//
 	//			pubsub.ForceRemoveStream(id)
 	//
-	//			_, err = pubsub.GetDescription(d.StreamID())
+	//			_, err = pubsub.GetConfiguration(d.StreamID())
 	//			Expect(err).To(Equal(pubsub.StreamNotFoundError))
 	//		})
 	//	})
 
 	Describe("TryRemoveStreams", func() {
-		It("is successful if stream still has no subscribers/publishers", func() {
+		It("is successful if stream still has no subscribers/publishersMap", func() {
 
 			sID, err := pubsub.AddOrReplaceStreamOnRepository[int](repo, "try-close-1")
 			repo.TryRemoveStreams(sID)
 
 			_, err = repo.GetDescription(sID)
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
+			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
-		It("is not successful if stream still has publishers", func() {
+		It("is not successful if stream still has publishersMap", func() {
 			sID, err := pubsub.AddOrReplaceStreamOnRepository[int](repo, "try-close-3")
 			defer repo.ForceRemoveStream(sID)
 
@@ -185,7 +220,7 @@ var _ = Describe("PubSub", func() {
 		})
 	})
 
-	Describe("GetDescription", func() {
+	Describe("GetConfiguration", func() {
 		It("results in an error if non-existing", func() {
 			id := pubsub.RandomStreamID()
 			_, e := repo.GetDescription(id)
@@ -219,7 +254,7 @@ var _ = Describe("PubSub", func() {
 		})
 	})
 
-	Describe("Publish", func() {
+	Describe("PublishContent", func() {
 		It("allows to send and receive events via the pub sub system", func() {
 			var topic = "test-send-rec-1"
 
@@ -238,7 +273,7 @@ var _ = Describe("PubSub", func() {
 
 			go func() {
 				publisher, _ := pubsub.RegisterPublisherOnRepository[string](repo, id)
-				publisher.Publish(event)
+				publisher.Publish(events.NewEvent(event))
 			}()
 
 			Eventually(done).Should(BeClosed())
@@ -315,7 +350,7 @@ var _ = Describe("PubSub", func() {
 
 			repo.TryRemoveStreams(sID)
 			_, err = repo.GetDescription(sID)
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
+			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 
 		It("returns error when stream does not exist", func() {
@@ -330,7 +365,7 @@ var _ = Describe("PubSub", func() {
 			repo.ForceRemoveStream(sID)
 
 			err = pubsub.UnRegisterPublisherOnRepository[int](repo, pub)
-			Expect(err).To(Equal(pubsub.StreamNotFoundError))
+			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 	})
 
@@ -362,6 +397,23 @@ var _ = Describe("PubSub", func() {
 		})
 	})
 
+	Describe("SubscribeBatchByTopic", func() {
+		It("receives events in batches based on policy", func() {
+			topic := "batch-topic"
+			desc := selection.PolicyDescription{Type: selection.CountingWindow, Size: 2, Slide: 2}
+
+			sub, err := pubsub.SubscribeBatchByTopicOnRepository[int](repo, topic, func(events ...events.Event[int]) {
+				Expect(len(events)).To(Equal(2))
+			}, pubsub.SubscriberWithSelectionPolicy(desc))
+			Expect(err).To(BeNil())
+			defer pubsub.UnsubscribeOnRepository(repo, sub)
+
+			// PublishContent 2 events
+			pubsub.InstantPublishByTopicOnRepository(repo, topic, 1)
+			pubsub.InstantPublishByTopicOnRepository(repo, topic, 2)
+		})
+	})
+
 	Describe("Metrics", func() {
 		It("handles NilStreamID gracefully", func() {
 			m, err := repo.Metrics(pubsub.NilStreamID())
@@ -380,7 +432,7 @@ var _ = Describe("PubSub", func() {
 
 			Expect(err).To(BeNil())
 
-			pub.Publish(1)
+			pub.Publish(events.NewEvent(1))
 
 			m, err := repo.Metrics(id)
 			Expect(err).To(BeNil())

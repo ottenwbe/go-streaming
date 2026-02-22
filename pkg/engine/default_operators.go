@@ -12,9 +12,9 @@ type number interface {
 }
 
 // ContinuousBatchSum creates a query that sums numeric events over a window defined by the selection policy.
-func ContinuousBatchSum[TEvent number](policy selection.PolicyDescription) func(in []pubsub.StreamID, out []pubsub.StreamID) (OperatorID, error) {
+func ContinuousBatchSum[TEvent number](policy selection.PolicyDescription) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
-	return func(in []pubsub.StreamID, out []pubsub.StreamID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 		batchSumF := func(input []events.Event[TEvent]) []TEvent {
 			var result = TEvent(0)
@@ -28,16 +28,16 @@ func ContinuousBatchSum[TEvent number](policy selection.PolicyDescription) func(
 			PIPELINE_OPERATOR,
 		)
 
-		op, err := NewOperator[TEvent, TEvent](batchSumF, config)
+		op, err := NewOperator[TEvent, TEvent](batchSumF, config, id)
 
 		return op, err
 	}
 }
 
 // ContinuousBatchCount creates a query that counts events over a window defined by the selection policy.
-func ContinuousBatchCount[TEvent any, TOut number](policy selection.PolicyDescription) func(in []pubsub.StreamID, out []pubsub.StreamID) (OperatorID, error) {
+func ContinuousBatchCount[TEvent any, TOut number](policy selection.PolicyDescription) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
-	return func(in []pubsub.StreamID, out []pubsub.StreamID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 		batchCount := func(input []events.Event[TEvent]) []TOut {
 			result := TOut(len(input))
@@ -50,13 +50,13 @@ func ContinuousBatchCount[TEvent any, TOut number](policy selection.PolicyDescri
 			WithOutput(out...),
 		)
 
-		return NewOperator[TEvent, TEvent](batchCount, config)
+		return NewOperator[TEvent, TEvent](batchCount, config, id)
 	}
 }
 
 // ContinuousGreater creates a query that filters events greater than a specified value.
-func ContinuousGreater[T number](greaterThan T) func(in []pubsub.StreamID, out []pubsub.StreamID) (OperatorID, error) {
-	return func(in []pubsub.StreamID, out []pubsub.StreamID) (OperatorID, error) {
+func ContinuousGreater[T number](greaterThan T) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 		greater := func(input events.Event[T]) bool {
 			return input.GetContent() > greaterThan
@@ -68,14 +68,14 @@ func ContinuousGreater[T number](greaterThan T) func(in []pubsub.StreamID, out [
 			WithOutput(out...),
 		)
 
-		return NewOperator[T, T](greater, config)
+		return NewOperator[T, T](greater, config, id)
 	}
 }
 
 // ContinuousSmaller creates a query that filters events smaller than a specified value.
-func ContinuousSmaller[T number](than T) func(in []pubsub.StreamID, out []pubsub.StreamID) (OperatorID, error) {
+func ContinuousSmaller[T number](than T) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
-	return func(in []pubsub.StreamID, out []pubsub.StreamID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 		smaller := func(input events.Event[T]) bool {
 			return input.GetContent() < than
@@ -87,14 +87,14 @@ func ContinuousSmaller[T number](than T) func(in []pubsub.StreamID, out []pubsub
 			WithOutput(out...),
 		)
 
-		return NewOperator[T, T](smaller, config)
+		return NewOperator[T, T](smaller, config, id)
 	}
 }
 
 // ContinuousConvert creates a query that converts events from one numeric type to another.
-func ContinuousConvert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubsub.StreamID) (OperatorID, error) {
+func ContinuousConvert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
-	return func(in []pubsub.StreamID, out []pubsub.StreamID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 		convert := func(input events.Event[TIn]) TOut {
 			return TOut(input.GetContent())
 		}
@@ -105,6 +105,18 @@ func ContinuousConvert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubs
 			WithOutput(out...),
 		)
 
-		return NewOperator[TIn, TOut](convert, config)
+		return NewOperator[TIn, TOut](convert, config, id)
+	}
+}
+
+// ContinuousFanOut creates a query that broadcasts events to multiple output streams.
+func ContinuousFanOut[T any]() func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+		config := NewOperatorDescription(
+			FANOUT_OPERATOR,
+			WithInput(InputDescriptions(in, selection.PolicyDescription{})...),
+			WithOutput(out...),
+		)
+		return NewOperator[T, T](nil, config, id)
 	}
 }

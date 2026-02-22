@@ -9,106 +9,106 @@ import (
 )
 
 var (
-	StreamDescriptionWithoutID = errors.New("stream description: no id provided")
+	ErrStreamDescriptionWithoutID = errors.New("stream description: no id provided")
 )
 
-// SubscriberDescription details the subscriber configurations
-type SubscriberDescription struct {
+// SubscriberConfig details the subscriber configurations
+type SubscriberConfig struct {
 	Synchronous           bool                        `yaml:"synchronous" json:"synchronous"`
 	BufferCapacity        int                         `yaml:"bufferCapacity" json:"bufferCapacity"`
 	BufferPolicySelection selection.PolicyDescription `yaml:"selectionPolicy" json:"selectionPolicy"`
 }
 
-// StreamDescription details the stream configurations
-type StreamDescription struct {
-	ID                 StreamID              `yaml:"id" json:"id"`
-	Asynchronous       bool                  `yaml:"asyncStream" json:"asyncStream"`
-	BufferCapacity     int                   `yaml:"bufferCapacity" json:"bufferCapacity"`
-	AutoCleanup        bool                  `yaml:"autoCleanup" json:"autoCleanup"`
-	AutoStart          bool                  `yaml:"autoStart" json:"autoStart"`
-	DefaultSubscribers SubscriberDescription `yaml:"subscribers" json:"subscribers"`
+// StreamConfig details the stream configurations
+type StreamConfig struct {
+	ID                 StreamID         `yaml:"id" json:"id"`
+	Asynchronous       bool             `yaml:"asyncStream" json:"asyncStream"`
+	BufferCapacity     int              `yaml:"bufferCapacity" json:"bufferCapacity"`
+	AutoCleanup        bool             `yaml:"autoCleanup" json:"autoCleanup"`
+	AutoStart          bool             `yaml:"autoStart" json:"autoStart"`
+	DefaultSubscribers SubscriberConfig `yaml:"subscribers" json:"subscribers"`
 }
 
 // SubscriberOption allows to configure the subscription
-type SubscriberOption func(*SubscriberDescription)
+type SubscriberOption func(*SubscriberConfig)
 
 // SubscriberWithSelectionPolicy allows to provide a selection policy for the subscriber
 func SubscriberWithSelectionPolicy(p selection.PolicyDescription) SubscriberOption {
-	return func(s *SubscriberDescription) {
+	return func(s *SubscriberConfig) {
 		s.BufferPolicySelection = p
 	}
 }
 
 func SubscriberIsSync(synchronous bool) SubscriberOption {
-	return func(s *SubscriberDescription) {
+	return func(s *SubscriberConfig) {
 		s.Synchronous = synchronous
 	}
 }
 
 func SubscriberWithBufferCapacity(capacity int) SubscriberOption {
-	return func(s *SubscriberDescription) {
+	return func(s *SubscriberConfig) {
 		s.BufferCapacity = capacity
 	}
 }
 
-type StreamOption func(*StreamDescription)
+type StreamOption func(*StreamConfig)
 
 func WithSubscriberSelectionPolicy(p selection.PolicyDescription) StreamOption {
-	return func(s *StreamDescription) {
+	return func(s *StreamConfig) {
 		s.DefaultSubscribers.BufferPolicySelection = p
 	}
 }
 
 func WithSubscriberSync(synchronous bool) StreamOption {
-	return func(s *StreamDescription) {
+	return func(s *StreamConfig) {
 		s.DefaultSubscribers.Synchronous = synchronous
 	}
 }
 
 func WithSubscriberBufferCapacity(capacity int) StreamOption {
-	return func(s *StreamDescription) {
+	return func(s *StreamConfig) {
 		s.DefaultSubscribers.BufferCapacity = capacity
 	}
 }
 
 func WithAsynchronousStream(async bool) StreamOption {
-	return func(s *StreamDescription) {
+	return func(s *StreamConfig) {
 		s.Asynchronous = async
 	}
 }
 
 func WithBufferCapacity(capacity int) StreamOption {
-	return func(s *StreamDescription) {
+	return func(s *StreamConfig) {
 		s.BufferCapacity = capacity
 	}
 }
 
 func WithAutoCleanup(autoCleanup bool) StreamOption {
-	return func(s *StreamDescription) {
+	return func(s *StreamConfig) {
 		s.AutoCleanup = autoCleanup
 	}
 }
 
 func WithAutoStart(autoStart bool) StreamOption {
-	return func(s *StreamDescription) {
+	return func(s *StreamConfig) {
 		s.AutoStart = autoStart
 	}
 }
 
-func WithDefaultSubscribers(subscribers SubscriberDescription) StreamOption {
-	return func(s *StreamDescription) {
+func WithDefaultSubscribers(subscribers SubscriberConfig) StreamOption {
+	return func(s *StreamConfig) {
 		s.DefaultSubscribers = subscribers
 	}
 }
 
-// MakeStreamDescription creates a new StreamDescription with the provided parameters.
-func MakeStreamDescription[T any](topic string, options ...StreamOption) StreamDescription {
-	return MakeStreamDescriptionByID(MakeStreamID[T](topic), options...)
+// MakeStreamConfig creates a new StreamConfig with the provided parameters.
+func MakeStreamConfig[T any](topic string, options ...StreamOption) StreamConfig {
+	return MakeStreamConfigByID(MakeStreamID[T](topic), options...)
 }
 
-// MakeStreamDescriptionByID creates a new StreamDescription using an existing StreamID.
-func MakeStreamDescriptionByID(id StreamID, options ...StreamOption) StreamDescription {
-	d := StreamDescription{
+// MakeStreamConfigByID creates a new StreamConfig using an existing StreamID.
+func MakeStreamConfigByID(id StreamID, options ...StreamOption) StreamConfig {
+	d := StreamConfig{
 		ID:        id,
 		AutoStart: true,
 	}
@@ -119,7 +119,7 @@ func MakeStreamDescriptionByID(id StreamID, options ...StreamOption) StreamDescr
 	return d
 }
 
-func EnrichSubscriberDescription(description *SubscriberDescription, options ...SubscriberOption) {
+func EnrichSubscriberConfig(description *SubscriberConfig, options ...SubscriberOption) {
 	if description != nil {
 		for _, option := range options {
 			option(description)
@@ -127,9 +127,9 @@ func EnrichSubscriberDescription(description *SubscriberDescription, options ...
 	}
 }
 
-// MakeSubscriberDescription creates a new SubscriberDescription based on provided options.
-func MakeSubscriberDescription(options ...SubscriberOption) SubscriberDescription {
-	d := SubscriberDescription{}
+// MakeSubscriberConfig creates a new SubscriberConfig based on provided options.
+func MakeSubscriberConfig(options ...SubscriberOption) SubscriberConfig {
+	d := SubscriberConfig{}
 	for _, option := range options {
 		option(&d)
 	}
@@ -137,44 +137,44 @@ func MakeSubscriberDescription(options ...SubscriberOption) SubscriberDescriptio
 }
 
 // EqualTo checks if two StreamDescriptions are equal based on their ID.
-func (d StreamDescription) EqualTo(comp StreamDescription) bool {
+func (d StreamConfig) EqualTo(comp StreamConfig) bool {
 	return d.ID == comp.ID
 }
 
-// StreamID returns the ID associated with the StreamDescription.
-func (d StreamDescription) StreamID() StreamID {
+// StreamID returns the ID associated with the StreamConfig.
+func (d StreamConfig) StreamID() StreamID {
 	return d.ID
 }
 
-// StreamDescriptionValidation validates the StreamDescription, ensuring it has a valid ID.
-func StreamDescriptionValidation(d StreamDescription) (StreamDescription, error) {
+// StreamDescriptionValidation validates the StreamConfig, ensuring it has a valid ID.
+func StreamDescriptionValidation(d StreamConfig) (StreamConfig, error) {
 	if d.ID.IsNil() {
-		return StreamDescription{}, StreamDescriptionWithoutID
+		return StreamConfig{}, ErrStreamDescriptionWithoutID
 	}
 
 	return d, nil
 }
 
-// StreamDescriptionFromJSON parses a StreamDescription from a JSON byte slice.
-func StreamDescriptionFromJSON(b []byte) (StreamDescription, error) {
-	var d = StreamDescription{
+// StreamDescriptionFromJSON parses a StreamConfig from a JSON byte slice.
+func StreamDescriptionFromJSON(b []byte) (StreamConfig, error) {
+	var d = StreamConfig{
 		AutoStart: true,
 	}
 	if err := json.Unmarshal(b, &d); err != nil {
 
-		return StreamDescription{}, err
+		return StreamConfig{}, err
 	}
 
 	return StreamDescriptionValidation(d)
 }
 
-// StreamDescriptionFromYML parses a StreamDescription from a YAML byte slice.
-func StreamDescriptionFromYML(b []byte) (StreamDescription, error) {
-	var d = StreamDescription{
+// StreamDescriptionFromYML parses a StreamConfig from a YAML byte slice.
+func StreamDescriptionFromYML(b []byte) (StreamConfig, error) {
+	var d = StreamConfig{
 		AutoStart: true,
 	}
 	if err := yaml.Unmarshal(b, &d); err != nil {
-		return StreamDescription{}, err
+		return StreamConfig{}, err
 	}
 
 	return StreamDescriptionValidation(d)

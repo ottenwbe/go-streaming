@@ -56,8 +56,8 @@ package main
 //	}(finished)
 //
 //	<-started
-//	// 3. Publish
+//	// 3. PublishContent
 //	publisher, _ := pubsub.RegisterPublisher[string](streamID)
-//	publisher.Publish(events.NewEvent("Hello World!"))
+//	publisher.PublishContent(events.NewEvent("Hello World!"))
 //	<-finished
 //}
