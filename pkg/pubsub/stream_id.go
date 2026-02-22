@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -19,6 +20,7 @@ var (
 	ErrUnmarshallingTopicNotString  = errors.New("streamID: error unmarshalling topic; expected string")
 	ErrUnmarshallingTopicMissingKey = errors.New("streamID: error unmarshalling topic; missing key")
 	ErrUnmarshallingTypeNotString   = errors.New("streamID: error unmarshalling type; expected string")
+	ErrUnknownType                  = errors.New("streamID: unknown type")
 )
 
 // StreamID uniquely identifies a stream by its topic and the type of data it carries.
@@ -33,7 +35,7 @@ type marshalledStreamID struct {
 }
 
 // MarshalJSON implements the json.Marshaler interface for StreamID.
-func (s StreamID) MarshalJSON() ([]byte, error) {
+func (s *StreamID) MarshalJSON() ([]byte, error) {
 	data := s.marshalStreamID()
 	return json.Marshal(data)
 }
@@ -45,59 +47,13 @@ func (s *StreamID) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-
-	if topic, ok := unmarshalled[topicKey]; ok {
-		s.Topic, ok = topic.(string)
-		if !ok {
-			return ErrUnmarshallingTopicNotString
-		}
-	} else {
-		return ErrUnmarshallingTopicMissingKey
-	}
-
-	if topicType, ok := unmarshalled[typeKey]; ok {
-		s.TopicType, err = convertInterfaceToTopicType(topicType)
-		if err != nil {
-			return fmt.Errorf("error unmarshalling topicType: %w", err)
-		}
-	} else {
-		s.TopicType = nil
-	}
-	return nil
+	return s.unmarshalFromMap(unmarshalled)
 }
 
 // MarshalYAML implements the yaml.Marshaler interface for StreamID.
-func (s StreamID) MarshalYAML() (interface{}, error) {
+func (s *StreamID) MarshalYAML() (interface{}, error) {
 	data := s.marshalStreamID()
 	return data, nil
-}
-
-// UnmarshalYAML implements the yaml.Unmarshaler interface for StreamID.
-func (s *StreamID) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var unmarshalled map[string]interface{}
-	err := unmarshal(&unmarshalled)
-	if err != nil {
-		return err
-	}
-
-	if topic, ok := unmarshalled[topicKey]; ok {
-		s.Topic, ok = topic.(string)
-		if !ok {
-			return ErrUnmarshallingTopicNotString
-		}
-	} else {
-		return ErrUnmarshallingTopicMissingKey
-	}
-
-	if topicType, ok := unmarshalled[typeKey]; ok {
-		s.TopicType, err = convertInterfaceToTopicType(topicType)
-		if err != nil {
-			return fmt.Errorf("error unmarshalling topicType: %w", err)
-		}
-	} else {
-		s.TopicType = nil
-	}
-	return nil
 }
 
 var (
@@ -121,14 +77,14 @@ func UnRegisterType[T any]() {
 	delete(typeRegistry, t.String())
 }
 
-func getTypeFromString(typeName string) reflect.Type {
+func getTypeFromString(typeName string) (reflect.Type, error) {
 	typeRegistryMutex.RLock()
 	defer typeRegistryMutex.RUnlock()
 
 	if t, ok := typeRegistry[typeName]; ok {
-		return t
+		return t, nil
 	}
-	return nil
+	return nil, fmt.Errorf("%w: %s", ErrUnknownType, typeName)
 }
 
 func convertInterfaceToTopicType(i interface{}) (reflect.Type, error) {
@@ -136,10 +92,66 @@ func convertInterfaceToTopicType(i interface{}) (reflect.Type, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: got %T", ErrUnmarshallingTypeNotString, i)
 	}
-	return getTypeFromString(typeName), nil
+	return getTypeFromString(typeName)
 }
 
-func (s StreamID) marshalStreamID() marshalledStreamID {
+// UnmarshalYAML implements the yaml.Unmarshaler interface for StreamID.
+func (s *StreamID) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var unmarshalled map[string]interface{}
+	if err := unmarshal(&unmarshalled); err != nil {
+		return err
+	}
+	return s.unmarshalFromMap(unmarshalled)
+}
+
+// StreamIDFromJSON parses a StreamID from a JSON byte slice.
+func StreamIDFromJSON(b []byte) (StreamID, error) {
+	var s StreamID
+	if err := json.Unmarshal(b, &s); err != nil {
+		return StreamID{}, err
+	}
+	return s, nil
+}
+
+// ToJSON converts a StreamID to its JSON representation.
+func (s *StreamID) ToJSON() ([]byte, error) {
+	return json.Marshal(s)
+}
+
+// StreamIDFromYML parses a StreamID from a YAML byte slice.
+func StreamIDFromYML(b []byte) (StreamID, error) {
+	var s StreamID
+	if err := yaml.Unmarshal(b, &s); err != nil {
+		return StreamID{}, err
+	}
+	return s, nil
+}
+
+// ToYML converts a StreamID to its YAML representation.
+func (s *StreamID) ToYML() ([]byte, error) {
+	return yaml.Marshal(s)
+}
+
+func (s *StreamID) unmarshalFromMap(data map[string]interface{}) error {
+	var ok bool
+	if topic, found := data[topicKey]; found {
+		s.Topic, ok = topic.(string)
+		if !ok {
+			return ErrUnmarshallingTopicNotString
+		}
+	} else {
+		return ErrUnmarshallingTopicMissingKey
+	}
+
+	if topicType, found := data[typeKey]; found {
+		var err error
+		s.TopicType, err = convertInterfaceToTopicType(topicType)
+		return err
+	}
+	return nil
+}
+
+func (s *StreamID) marshalStreamID() marshalledStreamID {
 
 	var t = "nil"
 	if s.TopicType != nil {
@@ -156,12 +168,15 @@ func (s StreamID) marshalStreamID() marshalledStreamID {
 const nilTopic = ""
 
 // IsNil checks if the StreamID is the zero value (nil topic).
-func (s StreamID) IsNil() bool {
+func (s *StreamID) IsNil() bool {
+	if s == nil {
+		return true
+	}
 	return s.Topic == nilTopic
 }
 
 // String returns the topic string of the StreamID.
-func (s StreamID) String() string {
+func (s *StreamID) String() string {
 	return s.Topic
 }
 

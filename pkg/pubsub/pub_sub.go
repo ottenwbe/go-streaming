@@ -359,7 +359,8 @@ func (r *StreamRepository) addAndStartStream(newStream stream) {
 }
 
 func validateStream(newStream stream) error {
-	if newStream.ID().IsNil() {
+	id := newStream.ID()
+	if id.IsNil() {
 		return ErrStreamIDNil
 	}
 	// Type validation is implicit via StreamID equality in GetOrAdd logic or explicit checks in getAndConvert

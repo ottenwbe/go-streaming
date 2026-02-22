@@ -2,6 +2,7 @@ package pubsub_test
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 
 	"github.com/google/uuid"
@@ -24,12 +25,14 @@ var _ = Describe("StreamID", func() {
 
 	BeforeEach(func() {
 		pubsub.RegisterType[int]()
+		pubsub.RegisterType[any]()
 		pubsub.RegisterType[string]()
 		pubsub.RegisterType[float64]()
 		pubsub.RegisterType[float32]()
 	})
 
 	AfterEach(func() {
+		pubsub.UnRegisterType[any]()
 		pubsub.UnRegisterType[int]()
 		pubsub.UnRegisterType[string]()
 		pubsub.UnRegisterType[float64]()
@@ -129,6 +132,13 @@ var _ = Describe("StreamID", func() {
 			Expect(err).To(Equal(pubsub.ErrUnmarshallingTopicNotString))
 		})
 
+		It("should fail for an unknown type (json)", func() {
+			var id pubsub.StreamID
+			err := json.Unmarshal([]byte(`{"topic":"unknown","type":"unknown_type"}`), &id)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, pubsub.ErrUnknownType)).To(BeTrue())
+		})
+
 		It("should be able to unmarshal a yaml", func() {
 
 			var id pubsub.StreamID
@@ -159,7 +169,7 @@ var _ = Describe("StreamID", func() {
 		It("should be able to marshal a json", func() {
 			id := pubsub.RandomStreamID()
 
-			b, err := json.Marshal(id)
+			b, err := json.Marshal(&id)
 
 			Expect(string(b)).To(ContainSubstring(id.Topic))
 			Expect(err).To(BeNil())
@@ -167,7 +177,7 @@ var _ = Describe("StreamID", func() {
 		It("should be able to marshal a json with a correct type", func() {
 			id := pubsub.MakeStreamID[int]("json-1")
 
-			b, err := json.Marshal(id)
+			b, err := json.Marshal(&id)
 
 			Expect(string(b)).To(ContainSubstring("int"))
 			Expect(err).To(BeNil())
@@ -175,7 +185,7 @@ var _ = Describe("StreamID", func() {
 		It("should be able to marshal a yaml", func() {
 			id := pubsub.RandomStreamID()
 
-			b, err := yaml.Marshal(id)
+			b, err := yaml.Marshal(&id)
 
 			Expect(string(b)).To(ContainSubstring(id.Topic))
 			Expect(err).To(BeNil())
@@ -183,7 +193,7 @@ var _ = Describe("StreamID", func() {
 		It("should be able to marshal a yaml with a correct type", func() {
 			id := pubsub.MakeStreamID[int]("json-1")
 
-			b, err := yaml.Marshal(id)
+			b, err := yaml.Marshal(&id)
 
 			Expect(string(b)).To(ContainSubstring("int"))
 			Expect(err).To(BeNil())
