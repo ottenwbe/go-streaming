@@ -28,7 +28,7 @@ func (m *mockStream[T]) tryClose() bool                        { return true }
 func (m *mockStream[T]) forceClose()                           {}
 func (m *mockStream[T]) hasPublishersOrSubscribers() bool      { return false }
 func (m *mockStream[T]) ID() StreamID                          { return m.id }
-func (m *mockStream[T]) Description() StreamDescription        { return StreamDescription{} }
+func (m *mockStream[T]) Description() StreamConfig             { return StreamConfig{} }
 func (m *mockStream[T]) migrateStream(stream)                  {}
 func (m *mockStream[T]) addPublisher(pub *defaultPublisher[T]) {}
 func (m *mockStream[T]) lock()                                 {}

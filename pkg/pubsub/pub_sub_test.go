@@ -41,8 +41,8 @@ var _ = Describe("PubSub", func() {
 
 		It("is not replacing an existing stream if the latter should be preserved", func() {
 			var topic = "test-ps-2"
-			d1 := pubsub.MakeStreamDescription[string](topic)
-			d2 := pubsub.MakeStreamDescription[string](topic, pubsub.WithAsynchronousStream(true))
+			d1 := pubsub.MakeStreamConfig[string](topic)
+			d2 := pubsub.MakeStreamConfig[string](topic, pubsub.WithAsynchronousStream(true))
 
 			stream1, _ := pubsub.GetOrAddStreamOnRepository[string](repo, topic)
 			stream2, _ := pubsub.GetOrAddStreamOnRepository[string](repo, topic, pubsub.WithAsynchronousStream(true))
@@ -77,7 +77,7 @@ var _ = Describe("PubSub", func() {
 	Describe("AddOrReplaceStream", func() {
 		It("successfully adds a new stream if it doesn't exist", func() {
 			topic := "test-ps-1"
-			d := pubsub.MakeStreamDescription[string](topic)
+			d := pubsub.MakeStreamConfig[string](topic)
 			sID, err := pubsub.AddOrReplaceStreamOnRepository[string](repo, topic)
 			Expect(err).To(BeNil())
 
@@ -97,7 +97,7 @@ var _ = Describe("PubSub", func() {
 		//			Expect(err).To(BeNil())
 		//			Expect(streamID).To(Equal(d.StreamID()))
 		//
-		//			_, err = pubsub.GetDescription(d.StreamID())
+		//			_, err = pubsub.GetConfiguration(d.StreamID())
 		//			Expect(err).To(BeNil())
 		//
 		//		})
@@ -181,7 +181,7 @@ var _ = Describe("PubSub", func() {
 	//
 	//			pubsub.ForceRemoveStream(id)
 	//
-	//			_, err = pubsub.GetDescription(d.StreamID())
+	//			_, err = pubsub.GetConfiguration(d.StreamID())
 	//			Expect(err).To(Equal(pubsub.StreamNotFoundError))
 	//		})
 	//	})
@@ -220,7 +220,7 @@ var _ = Describe("PubSub", func() {
 		})
 	})
 
-	Describe("GetDescription", func() {
+	Describe("GetConfiguration", func() {
 		It("results in an error if non-existing", func() {
 			id := pubsub.RandomStreamID()
 			_, e := repo.GetDescription(id)

@@ -61,6 +61,7 @@ var _ = Describe("OperatorRepository", func() {
 		oid, err = engine.NewOperator[int, int](
 			sum,
 			d,
+			engine.NilOperatorID(),
 		)
 		Expect(err).To(BeNil())
 	})
@@ -142,7 +143,7 @@ var _ = Describe("FilterOperatorEngine", func() {
 			return event.GetContent()%2 == 0
 		}
 
-		oid, err = engine.NewOperator[int, int](isEven, d)
+		oid, err = engine.NewOperator[int, int](isEven, d, engine.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 
@@ -209,7 +210,7 @@ var _ = Describe("MapOperatorEngine", func() {
 			return event.GetContent() * 2
 		}
 
-		oid, err = engine.NewOperator[int, int](double, d)
+		oid, err = engine.NewOperator[int, int](double, d, engine.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 
@@ -269,7 +270,7 @@ var _ = Describe("FanOutOperatorEngine", func() {
 				Stream: sidin,
 			}))
 
-		oid, err = engine.NewOperator[int, int](nil, d)
+		oid, err = engine.NewOperator[int, int](nil, d, engine.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 

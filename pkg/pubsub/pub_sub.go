@@ -45,7 +45,7 @@ func GetOrAddStream[T any](topic string, opts ...StreamOption) (StreamID, error)
 func GetOrAddStreamOnRepository[T any](b *StreamRepository, topic string, opts ...StreamOption) (StreamID, error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
-	streamDescription := MakeStreamDescription[T](topic, opts...)
+	streamDescription := MakeStreamConfig[T](topic, opts...)
 	stream := newStreamFromDescription[T](streamDescription)
 	return b.doGetOrAddStream(stream)
 }
@@ -58,7 +58,7 @@ func AddOrReplaceStream[T any](topic string, opts ...StreamOption) (StreamID, er
 func AddOrReplaceStreamOnRepository[T any](b *StreamRepository, topic string, opts ...StreamOption) (StreamID, error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
-	streamDescription := MakeStreamDescription[T](topic, opts...)
+	streamDescription := MakeStreamConfig[T](topic, opts...)
 	s, err := getAndConvertStreamByID[T](b, streamDescription.StreamID())
 
 	// add new stream if no existing stream exists
@@ -285,19 +285,19 @@ func UnRegisterPublisherOnRepository[T any](b *StreamRepository, publisher Publi
 	return nil
 }
 
-// GetDescription retrieves the description of a stream identified by the given ID.
-func GetDescription(id StreamID) (StreamDescription, error) {
+// GetConfiguration retrieves the description of a stream identified by the given ID.
+func GetConfiguration(id StreamID) (StreamConfig, error) {
 	return defaultStreamRepository.GetDescription(id)
 }
 
-func (r *StreamRepository) GetDescription(id StreamID) (StreamDescription, error) {
+func (r *StreamRepository) GetDescription(id StreamID) (StreamConfig, error) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 	if s, ok := r.streamIdx[id]; ok {
 		return s.Description(), nil
 	}
 
-	return StreamDescription{}, ErrStreamNotFound
+	return StreamConfig{}, ErrStreamNotFound
 }
 
 // GetPublishersAndSubscribers retrieves the publisher and subscribers of the stream
@@ -376,7 +376,7 @@ func getOrAddStreamByID[T any](b *StreamRepository, id StreamID) (typedStream[T]
 		return nil, err
 	}
 
-	desc := MakeStreamDescriptionByID(id, WithAutoCleanup(true))
+	desc := MakeStreamConfigByID(id, WithAutoCleanup(true))
 	newS := newStreamFromDescription[T](desc)
 	b.addAndStartStream(newS)
 

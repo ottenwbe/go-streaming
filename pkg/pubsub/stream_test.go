@@ -30,7 +30,7 @@ var _ = Describe("Stream", func() {
 
 		Context("description", func() {
 			It("should be retrievable", func() {
-				retrievedDesc, err := pubsub.GetDescription(streamID)
+				retrievedDesc, err := pubsub.GetConfiguration(streamID)
 				Expect(err).To(BeNil())
 				Expect(retrievedDesc.ID).To(Equal(streamID))
 			})
@@ -46,7 +46,7 @@ var _ = Describe("Stream", func() {
 
 				pubsub.TryRemoveStreams(streamID)
 
-				_, err = pubsub.GetDescription(streamID)
+				_, err = pubsub.GetConfiguration(streamID)
 				Expect(err).To(BeNil()) // stream should still exist
 			})
 		})
@@ -92,7 +92,7 @@ var _ = Describe("Stream", func() {
 
 		Context("description", func() {
 			It("should be retrievable", func() {
-				retrievedDesc, err := pubsub.GetDescription(streamID)
+				retrievedDesc, err := pubsub.GetConfiguration(streamID)
 				Expect(err).To(BeNil())
 				Expect(retrievedDesc.ID).To(Equal(streamID))
 			})
@@ -108,7 +108,7 @@ var _ = Describe("Stream", func() {
 
 				pubsub.TryRemoveStreams(streamID)
 
-				_, err = pubsub.GetDescription(streamID)
+				_, err = pubsub.GetConfiguration(streamID)
 				Expect(err).To(BeNil()) // stream should still exist
 			})
 
@@ -210,7 +210,7 @@ var _ = Describe("Stream", func() {
 
 		AfterEach(func() {
 			pubsub.TryRemoveStreams(streamID)
-			_, err := pubsub.GetDescription(streamID)
+			_, err := pubsub.GetConfiguration(streamID)
 			Expect(err).ToNot(BeNil())
 		})
 

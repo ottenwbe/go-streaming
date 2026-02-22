@@ -82,7 +82,7 @@ var _ = Describe("Subscriber", func() {
 
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-topic-buffered")
-			nMap = newNotificationMap[string](MakeSubscriberDescription(), newStreamMetrics())
+			nMap = newNotificationMap[string](MakeSubscriberConfig(), newStreamMetrics())
 			var err error
 			rec, err = nMap.newSubscriber(streamID, func(event events.Event[string]) {
 				result = event
@@ -121,7 +121,7 @@ var _ = Describe("Subscriber", func() {
 
 		BeforeEach(func() {
 			streamID = MakeStreamID[string]("test-topic-buffered-limit")
-			nMap = newNotificationMap[string](MakeSubscriberDescription(SubscriberWithBufferCapacity(1)), newStreamMetrics())
+			nMap = newNotificationMap[string](MakeSubscriberConfig(SubscriberWithBufferCapacity(1)), newStreamMetrics())
 			var err error
 			rec, err = nMap.newSubscriber(streamID, func(event events.Event[string]) {
 				for !start.Load() {
@@ -172,7 +172,7 @@ var _ = Describe("Subscriber", func() {
 		)
 
 		BeforeEach(func() {
-			nMap = newNotificationMap[string](MakeSubscriberDescription(), newStreamMetrics())
+			nMap = newNotificationMap[string](MakeSubscriberConfig(), newStreamMetrics())
 			sID = MakeStreamID[string]("topic")
 			nMap.start()
 		})

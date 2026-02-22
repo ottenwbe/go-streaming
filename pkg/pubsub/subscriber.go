@@ -181,14 +181,14 @@ func (r *bufferedSubscriber[T]) notifyNext() {
 }
 
 type notificationMap[T any] struct {
-	description SubscriberDescription
+	description SubscriberConfig
 	receiver    map[SubscriberID]Subscriber[T]
 	active      bool
 	metrics     *StreamMetrics
 	mutex       sync.RWMutex
 }
 
-func newNotificationMap[T any](description SubscriberDescription, metrics *StreamMetrics) *notificationMap[T] {
+func newNotificationMap[T any](description SubscriberConfig, metrics *StreamMetrics) *notificationMap[T] {
 	m := &notificationMap[T]{
 		description: description,
 		receiver:    make(map[SubscriberID]Subscriber[T]),
@@ -204,7 +204,7 @@ func (m *notificationMap[T]) newSubscriber(streamID StreamID, callback func(even
 
 	var description = m.description
 	if len(options) > 0 {
-		EnrichSubscriberDescription(&description, options...)
+		EnrichSubscriberConfig(&description, options...)
 
 		// validate description
 		if description.BufferPolicySelection.Active {
@@ -231,7 +231,7 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 
 	var description = m.description
 	if len(options) > 0 {
-		EnrichSubscriberDescription(&description, options...)
+		EnrichSubscriberConfig(&description, options...)
 
 		// validate description
 		if description.Synchronous {
@@ -259,7 +259,7 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 	return rec, nil
 }
 
-func newBufferForSubscriber[T any](description SubscriberDescription, p selection.Policy[T]) buffer.Buffer[T] {
+func newBufferForSubscriber[T any](description SubscriberConfig, p selection.Policy[T]) buffer.Buffer[T] {
 	if p != nil { // policy based
 		if description.BufferCapacity > 0 {
 			return buffer.NewLimitedConsumableAsyncBuffer[T](p, description.BufferCapacity)

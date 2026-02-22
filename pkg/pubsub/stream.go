@@ -20,9 +20,9 @@ type stream interface {
 	hasPublishersOrSubscribers() bool
 
 	ID() StreamID
-	Description() StreamDescription
+	Description() StreamConfig
 
-	migrateStream(StreamDescription)
+	migrateStream(StreamConfig)
 	streamMetrics() *StreamMetrics
 }
 
@@ -47,7 +47,7 @@ type streamCoordinator[T any] interface {
 }
 
 type baseStream[T any] struct {
-	description StreamDescription
+	description StreamConfig
 
 	publisherArray publisherManager[T]
 	subscriberMap  *notificationMap[T]
@@ -104,7 +104,7 @@ func (b *baseStream[T]) doTryClose(force bool) bool {
 	return false
 }
 
-func (b *baseStream[T]) migrateStream(description StreamDescription) {
+func (b *baseStream[T]) migrateStream(description StreamConfig) {
 
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
@@ -203,7 +203,7 @@ type localAsyncStream[T any] struct {
 }
 
 // newStreamFromDescription creates and returns a typedStream of a given stream type T
-func newStreamFromDescription[T any](description StreamDescription) typedStream[T] {
+func newStreamFromDescription[T any](description StreamConfig) typedStream[T] {
 	var (
 		streamCoordinator streamCoordinator[T]
 		metrics           = newStreamMetrics()
@@ -226,7 +226,7 @@ func newStreamFromDescription[T any](description StreamDescription) typedStream[
 	return stream
 }
 
-func newStreamCoordinator[T any](description StreamDescription, subscribers *notificationMap[T]) (streamEngine streamCoordinator[T]) {
+func newStreamCoordinator[T any](description StreamConfig, subscribers *notificationMap[T]) (streamEngine streamCoordinator[T]) {
 	if description.Asynchronous {
 		streamEngine = newLocalAsyncStream[T](subscribers, description)
 	} else {
@@ -245,7 +245,7 @@ func newLocalSyncStream[T any](subscribers subscribers[T]) *localSyncStream[T] {
 }
 
 // newLocalAsyncStream is created w/ event buffering
-func newLocalAsyncStream[T any](subscribers subscribers[T], description StreamDescription) *localAsyncStream[T] {
+func newLocalAsyncStream[T any](subscribers subscribers[T], description StreamConfig) *localAsyncStream[T] {
 
 	var ch events.EventChannel[T]
 	if description.BufferCapacity > 0 {
@@ -343,7 +343,7 @@ func (b *baseStream[T]) ID() StreamID {
 	return b.description.ID
 }
 
-func (b *baseStream[T]) Description() StreamDescription {
+func (b *baseStream[T]) Description() StreamConfig {
 	return b.description
 }
 

@@ -124,14 +124,14 @@ var _ = Describe("Continuous Query", func() {
 			defer query.Close(q)
 
 			// The default repository should NOT have this stream
-			_, err = pubsub.GetDescription(pubsub.MakeStreamID[int](topic))
+			_, err = pubsub.GetConfiguration(pubsub.MakeStreamID[int](topic))
 			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 	})
 
 	Describe("Error Handling", func() {
 		It("Process propagates operator creation errors", func() {
-			errOp := func(in []pubsub.StreamID, out []pubsub.StreamID) (engine.OperatorID, error) {
+			errOp := func(in []pubsub.StreamID, out []pubsub.StreamID, id engine.OperatorID) (engine.OperatorID, error) {
 				return engine.OperatorID{}, errors.New("op failed")
 			}
 

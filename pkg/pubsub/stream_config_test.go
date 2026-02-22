@@ -23,29 +23,29 @@ var _ = Describe("Descriptions", func() {
 		pubsub.UnRegisterType[float32]()
 	})
 
-	Describe("MakeSubscriberDescription", func() {
+	Describe("MakeSubscriberConfig", func() {
 		It("creates a description with defaults", func() {
-			d := pubsub.MakeSubscriberDescription()
+			d := pubsub.MakeSubscriberConfig()
 			Expect(d.Synchronous).To(BeFalse())
 			Expect(d.BufferCapacity).To(Equal(0))
 			Expect(d.BufferPolicySelection).To(Equal(selection.PolicyDescription{}))
 		})
 	})
 
-	Describe("MakeStreamDescription", func() {
+	Describe("MakeStreamConfig", func() {
 		It("creates a description with defaults", func() {
-			d := pubsub.MakeStreamDescription[int]("topic")
+			d := pubsub.MakeStreamConfig[int]("topic")
 			Expect(d.ID.Topic).To(Equal("topic"))
 			Expect(d.Asynchronous).To(BeFalse())
 			Expect(d.AutoCleanup).To(BeFalse())
 			Expect(d.BufferCapacity).To(Equal(0))
-			Expect(d.DefaultSubscribers).To(Equal(pubsub.MakeSubscriberDescription()))
+			Expect(d.DefaultSubscribers).To(Equal(pubsub.MakeSubscriberConfig()))
 		})
 
 		It("applies options correctly", func() {
-			v := pubsub.MakeSubscriberDescription()
+			v := pubsub.MakeSubscriberConfig()
 
-			d := pubsub.MakeStreamDescription[int]("topic",
+			d := pubsub.MakeStreamConfig[int]("topic",
 				pubsub.WithAsynchronousStream(true),
 				pubsub.WithAutoCleanup(true),
 				pubsub.WithDefaultSubscribers(v),
@@ -56,10 +56,10 @@ var _ = Describe("Descriptions", func() {
 		})
 	})
 
-	Describe("MakeStreamDescriptionByID", func() {
+	Describe("MakeStreamConfigByID", func() {
 		It("creates a description from ID with options", func() {
 			id := pubsub.MakeStreamID[string]("topic-id")
-			d := pubsub.MakeStreamDescriptionByID(id, pubsub.WithAsynchronousStream(true))
+			d := pubsub.MakeStreamConfigByID(id, pubsub.WithAsynchronousStream(true))
 			Expect(d.ID).To(Equal(id))
 			Expect(d.Asynchronous).To(BeTrue())
 		})

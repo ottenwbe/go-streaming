@@ -163,7 +163,7 @@ func FromSourceStream[T any](topic string, options ...pubsub.StreamOption) func(
 }
 
 func Process[T any](
-	operatorCreationFunc func(in []pubsub.StreamID, out []pubsub.StreamID) (engine2.OperatorID, error),
+	operatorCreationFunc func(in []pubsub.StreamID, out []pubsub.StreamID, id engine2.OperatorID) (engine2.OperatorID, error),
 	fromF func(q ContinuousQuery) StreamWError,
 	options ...pubsub.StreamOption,
 ) func(q ContinuousQuery) StreamWError {
@@ -179,7 +179,7 @@ func Process[T any](
 			return StreamWError{pubsub.NilStreamID(), err}
 		}
 
-		operatorEngine, err2 := operatorCreationFunc([]pubsub.StreamID{from.streamID}, []pubsub.StreamID{to})
+		operatorEngine, err2 := operatorCreationFunc([]pubsub.StreamID{from.streamID}, []pubsub.StreamID{to}, engine2.NilOperatorID())
 		if err2 != nil {
 			return StreamWError{pubsub.NilStreamID(), err2}
 		}
