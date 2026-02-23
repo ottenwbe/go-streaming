@@ -27,6 +27,7 @@ type StreamConfig struct {
 	AutoCleanup        bool             `yaml:"autoCleanup" json:"autoCleanup"`
 	AutoStart          bool             `yaml:"autoStart" json:"autoStart"`
 	DefaultSubscribers SubscriberConfig `yaml:"subscribers" json:"subscribers"`
+	Sort               bool             `yaml:"sorted" json:"sorted"`
 }
 
 // SubscriberOption allows to configure the subscription
@@ -74,6 +75,12 @@ func WithSubscriberBufferCapacity(capacity int) StreamOption {
 func WithAsynchronousStream(async bool) StreamOption {
 	return func(s *StreamConfig) {
 		s.Asynchronous = async
+	}
+}
+
+func WithSorted(sorted bool) StreamOption {
+	return func(s *StreamConfig) {
+		s.Sort = sorted
 	}
 }
 

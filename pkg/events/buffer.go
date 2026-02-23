@@ -3,6 +3,7 @@ package events
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/google/uuid"
@@ -54,6 +55,12 @@ type SimpleAsyncBuffer[T any] struct {
 	*asyncBuffer[T]
 }
 
+// SortedSimpleAsyncBuffer is a buffer that ensures events are strictly ordered by their StartTime.
+type SortedSimpleAsyncBuffer[T any] struct {
+	*SimpleAsyncBuffer[T]
+	limit int
+}
+
 // LimitedSimpleAsyncBuffer is a buffer with a fixed capacity limit.
 type LimitedSimpleAsyncBuffer[T any] struct {
 	*SimpleAsyncBuffer[T]
@@ -98,6 +105,18 @@ func newAsyncBuffer[T any]() *asyncBuffer[T] {
 func NewSimpleAsyncBuffer[T any]() Buffer[T] {
 	s := &SimpleAsyncBuffer[T]{
 		asyncBuffer: newAsyncBuffer[T](),
+	}
+	return s
+}
+
+// NewSortedSimpleAsyncBuffer creates a new asynchronous buffer that sorts events by timestamp on insertion.
+// A limit <= 0 means the buffer is unbounded.
+func NewSortedSimpleAsyncBuffer[T any](limit int) Buffer[T] {
+	s := &SortedSimpleAsyncBuffer[T]{
+		SimpleAsyncBuffer: &SimpleAsyncBuffer[T]{
+			asyncBuffer: newAsyncBuffer[T](),
+		},
+		limit: limit,
 	}
 	return s
 }
@@ -237,6 +256,83 @@ func (s *SimpleAsyncBuffer[T]) AddEvent(event Event[T]) error {
 	s.buffer = append(s.buffer, event)
 	s.cond.Broadcast()
 	return nil
+}
+
+// AddEvents adds multiple events to the buffer and sorts them by StartTime.
+func (s *SortedSimpleAsyncBuffer[T]) AddEvents(events []Event[T]) error {
+	s.bufferMutex.Lock()
+	defer s.bufferMutex.Unlock()
+
+	if s.stopped {
+		return ErrBufferStopped
+	}
+
+	if s.limit > 0 {
+		if len(events) > s.limit {
+			return fmt.Errorf("%w: %d > %d", ErrLimitExceeded, len(events), s.limit)
+		}
+		for s.buffer.Len()+len(events) > s.limit {
+			s.cond.Wait()
+			if s.stopped {
+				return ErrBufferStopped
+			}
+		}
+	}
+
+	s.buffer = append(s.buffer, events...)
+
+	// Sort the buffer based on StartTime
+	sort.SliceStable(s.buffer, func(i, j int) bool {
+		return s.buffer[i].GetStamp().StartTime.Before(s.buffer[j].GetStamp().StartTime)
+	})
+
+	s.cond.Broadcast()
+	return nil
+}
+
+// AddEvent adds a single event to the buffer and sorts it into position.
+func (s *SortedSimpleAsyncBuffer[T]) AddEvent(event Event[T]) error {
+	s.bufferMutex.Lock()
+	defer s.bufferMutex.Unlock()
+
+	if s.stopped {
+		return ErrBufferStopped
+	}
+
+	if s.limit > 0 {
+		for s.buffer.Len() >= s.limit {
+			s.cond.Wait()
+			if s.stopped {
+				return ErrBufferStopped
+			}
+		}
+	}
+
+	s.buffer = append(s.buffer, event)
+	sort.SliceStable(s.buffer, func(i, j int) bool {
+		return s.buffer[i].GetStamp().StartTime.Before(s.buffer[j].GetStamp().StartTime)
+	})
+
+	s.cond.Broadcast()
+	return nil
+}
+
+// GetAndConsumeNextEvents returns the next event from the buffer and removes it.
+func (s *SortedSimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []Event[T] {
+	nextEvents := s.SimpleAsyncBuffer.GetAndConsumeNextEvents()
+	if s.limit > 0 && len(nextEvents) > 0 {
+		s.cond.Broadcast()
+	}
+	return nextEvents
+}
+
+// GetAndRemoveNextEvent returns the next event from the buffer and removes it.
+func (s *SortedSimpleAsyncBuffer[T]) GetAndRemoveNextEvent() Event[T] {
+	event := s.SimpleAsyncBuffer.GetAndRemoveNextEvent()
+	if s.limit > 0 && event != nil {
+		s.cond.Broadcast()
+	}
+	return event
 }
 
 // GetAndConsumeNextEvents returns the next buffered events and removes this event from the buffer.

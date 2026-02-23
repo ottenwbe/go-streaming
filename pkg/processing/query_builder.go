@@ -14,7 +14,7 @@ var (
 	ErrAmbiguousOutput = errors.New("builder: query results in multiple output streams, cannot determine main output")
 )
 
-//NOTE: first draft
+// Default Builder
 
 // Builder provides an API to construct ContinuousQueries.
 type Builder struct {
@@ -194,13 +194,15 @@ func (b *Builder) Build(run bool) (ContinuousQuery, error) {
 	}
 	b.query.out(b.current[0])
 
-	for _, streamf := range b.streams {
-		_, err := streamf(b.query.repository())
+	// create all streams
+	for _, streamF := range b.streams {
+		_, err := streamF(b.query.repository())
 		if err != nil {
 			returnErr = errors.Join(returnErr, err)
 		}
 	}
 
+	// create all operators
 	for _, opf := range b.operators {
 		_, err := opf()
 		if err != nil {
@@ -214,6 +216,7 @@ func (b *Builder) Build(run bool) (ContinuousQuery, error) {
 		return nil, returnErr
 	}
 
+	// start all streams and operators
 	if run {
 		err := b.query.Run()
 		if err != nil {
@@ -222,4 +225,83 @@ func (b *Builder) Build(run bool) (ContinuousQuery, error) {
 	}
 
 	return b.query, nil
+}
+
+func Process[T any](
+	operatorCreationFunc func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error),
+	fromF func(q ContinuousQuery) StreamWError,
+	options ...pubsub.StreamOption,
+) func(q ContinuousQuery) StreamWError {
+	return func(q ContinuousQuery) StreamWError {
+
+		if q == nil {
+			return StreamWError{pubsub.NilStreamID(), ErrQueryNil}
+		}
+		from := fromF(q)
+
+		to, err := pubsub.AddOrReplaceStreamOnRepository[T](q.repository(), uuid.New().String(), append(options, pubsub.WithAutoStart(false))...)
+		if err != nil {
+			return StreamWError{pubsub.NilStreamID(), err}
+		}
+
+		operatorEngine, err2 := operatorCreationFunc([]pubsub.StreamID{from.streamID}, []pubsub.StreamID{to}, NilOperatorID())
+		if err2 != nil {
+			return StreamWError{pubsub.NilStreamID(), err2}
+		}
+
+		q.addOperations(operatorEngine)
+		q.addStreams(to)
+
+		return StreamWError{
+			streamID: to,
+			error:    nil,
+		}
+	}
+}
+
+func Query[T any](
+	fromF func(q ContinuousQuery) StreamWError,
+	opts ...QueryOption,
+) (q ContinuousQuery, err error) {
+
+	q = newContinuousQuery[T](opts...)
+
+	from := fromF(q)
+	if from.error == nil {
+		q.out(from.streamID)
+	}
+
+	if from.error != nil {
+		q.close()
+		return nil, from.error
+	}
+
+	return q, from.error
+}
+
+func OnStream[T any](stream StreamWError) StreamWError {
+	return stream
+}
+
+type StreamWError struct {
+	streamID pubsub.StreamID
+	error    error
+}
+
+type QueryOption func(*queryOptions)
+
+type queryOptions struct {
+	repo *pubsub.StreamRepository
+}
+
+func WithNewRepository() QueryOption {
+	return func(o *queryOptions) {
+		o.repo = pubsub.NewStreamRepository()
+	}
+}
+
+func WithRepository(r *pubsub.StreamRepository) QueryOption {
+	return func(o *queryOptions) {
+		o.repo = r
+	}
 }
