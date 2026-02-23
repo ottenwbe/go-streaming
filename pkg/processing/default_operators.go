@@ -1,9 +1,8 @@
-package engine
+package processing
 
 import (
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 // Constraint to limit the type parameter to numeric types
@@ -12,7 +11,7 @@ type number interface {
 }
 
 // ContinuousBatchSum creates a query that sums numeric events over a window defined by the selection policy.
-func ContinuousBatchSum[TEvent number](policy selection.PolicyDescription) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+func ContinuousBatchSum[TEvent number](policy events.PolicyDescription) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
@@ -35,7 +34,7 @@ func ContinuousBatchSum[TEvent number](policy selection.PolicyDescription) func(
 }
 
 // ContinuousBatchCount creates a query that counts events over a window defined by the selection policy.
-func ContinuousBatchCount[TEvent any, TOut number](policy selection.PolicyDescription) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+func ContinuousBatchCount[TEvent any, TOut number](policy events.PolicyDescription) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
@@ -64,7 +63,7 @@ func ContinuousGreater[T number](greaterThan T) func(in []pubsub.StreamID, out [
 
 		config := NewOperatorDescription(
 			FILTER_OPERATOR,
-			WithInput(InputDescriptions(in, selection.PolicyDescription{})...),
+			WithInput(InputDescriptions(in, events.PolicyDescription{})...),
 			WithOutput(out...),
 		)
 
@@ -83,7 +82,7 @@ func ContinuousSmaller[T number](than T) func(in []pubsub.StreamID, out []pubsub
 
 		config := NewOperatorDescription(
 			FILTER_OPERATOR,
-			WithInput(InputDescriptions(in, selection.PolicyDescription{})...),
+			WithInput(InputDescriptions(in, events.PolicyDescription{})...),
 			WithOutput(out...),
 		)
 
@@ -101,7 +100,7 @@ func ContinuousConvert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubs
 
 		config := NewOperatorDescription(
 			MAP_OPERATOR,
-			WithInput(InputDescriptions(in, selection.PolicyDescription{})...),
+			WithInput(InputDescriptions(in, events.PolicyDescription{})...),
 			WithOutput(out...),
 		)
 
@@ -114,7 +113,7 @@ func ContinuousFanOut[T any]() func(in []pubsub.StreamID, out []pubsub.StreamID,
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 		config := NewOperatorDescription(
 			FANOUT_OPERATOR,
-			WithInput(InputDescriptions(in, selection.PolicyDescription{})...),
+			WithInput(InputDescriptions(in, events.PolicyDescription{})...),
 			WithOutput(out...),
 		)
 		return NewOperator[T, T](nil, config, id)

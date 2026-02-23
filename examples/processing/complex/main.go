@@ -3,10 +3,9 @@ package main
 import (
 	"sync"
 
-	"github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/processing"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"github.com/ottenwbe/go-streaming/pkg/query"
 
 	"go.uber.org/zap"
 )
@@ -18,13 +17,13 @@ const (
 func main() {
 	var wg sync.WaitGroup
 
-	q, err := query.Query[float32](
-		query.Process[float32](
-			engine.ContinuousConvert[int, float32](),
-			//	query.OnStream[int](
-			query.Process[int](
-				engine.ContinuousGreater[int](50),
-				query.FromSourceStream[int]("in", pubsub.WithAsynchronousStream(true)),
+	q, err := processing.Query[float32](
+		processing.Process[float32](
+			processing.ContinuousConvert[int, float32](),
+			//	 processing.OnStream[int](
+			processing.Process[int](
+				processing.ContinuousGreater[int](50),
+				processing.FromSourceStream[int]("in", pubsub.WithAsynchronousStream(true)),
 			),
 			//),
 		),

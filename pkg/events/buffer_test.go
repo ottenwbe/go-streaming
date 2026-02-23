@@ -1,15 +1,12 @@
-package buffer_test
+package events_test
 
 import (
 	"errors"
 	"sync"
 
-	"github.com/ottenwbe/go-streaming/pkg/buffer"
-	"github.com/ottenwbe/go-streaming/pkg/events"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
 var _ = Describe("Buffer", func() {
@@ -17,14 +14,14 @@ var _ = Describe("Buffer", func() {
 	Describe("LimitedSimpleAsyncBuffer", func() {
 
 		var (
-			buf buffer.Buffer[string]
+			buf events.Buffer[string]
 			e1  events.Event[string]
 			e2  events.Event[string]
 			e3  events.Event[string]
 		)
 
 		BeforeEach(func() {
-			buf = buffer.NewLimitedSimpleAsyncBuffer[string](1)
+			buf = events.NewLimitedSimpleAsyncBuffer[string](1)
 			e1 = events.NewEvent("e1")
 			e2 = events.NewEvent("e2")
 			e3 = events.NewEvent("e3")
@@ -58,7 +55,7 @@ var _ = Describe("Buffer", func() {
 
 				err1 := buf.AddEvents([]events.Event[string]{e1, e2, e3})
 				Expect(err1).To(HaveOccurred())
-				Expect(errors.Is(err1, buffer.ErrLimitExceeded)).To(BeTrue())
+				Expect(errors.Is(err1, events.ErrLimitExceeded)).To(BeTrue())
 			})
 		})
 
@@ -66,12 +63,12 @@ var _ = Describe("Buffer", func() {
 
 	Describe("ConsumableAsyncBuffer", func() {
 		var (
-			buf buffer.Buffer[string]
+			buf events.Buffer[string]
 			e1  events.Event[string]
 		)
 
 		BeforeEach(func() {
-			buf = buffer.NewConsumableAsyncBuffer[string](selection.NewSelectNextPolicy[string]())
+			buf = events.NewConsumableAsyncBuffer[string](events.NewSelectNextPolicy[string]())
 			e1 = events.NewEvent("e1")
 		})
 
@@ -115,14 +112,14 @@ var _ = Describe("Buffer", func() {
 	Describe("SimpleAsyncBuffer", func() {
 
 		var (
-			buf buffer.Buffer[string]
+			buf events.Buffer[string]
 			e1  events.Event[string]
 			e2  events.Event[string]
 			e3  events.Event[string]
 		)
 
 		BeforeEach(func() {
-			buf = buffer.NewSimpleAsyncBuffer[string]()
+			buf = events.NewSimpleAsyncBuffer[string]()
 			e1 = events.NewEvent("e1")
 			e2 = events.NewEvent("e2")
 			e3 = events.NewEvent("e3")
@@ -156,7 +153,7 @@ var _ = Describe("Buffer", func() {
 		Context("Dump", func() {
 			It("dumps all buffered events", func() {
 
-				buffer := buffer.NewSimpleAsyncBuffer[string]()
+				buffer := events.NewSimpleAsyncBuffer[string]()
 				defer buffer.StopBlocking()
 
 				buffer.AddEvent(e1)

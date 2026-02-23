@@ -5,11 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ottenwbe/go-streaming/pkg/buffer"
-	"github.com/ottenwbe/go-streaming/pkg/events"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
-
 	"github.com/google/uuid"
+	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
 var (
@@ -62,7 +59,7 @@ type defaultSubscriber[T any] struct {
 type bufferedSubscriber[T any] struct {
 	streamID    StreamID
 	iD          SubscriberID
-	buffer      buffer.Buffer[T]
+	buffer      events.Buffer[T]
 	active      atomic.Bool
 	notify      func(event events.Event[T])
 	notifyBatch func(events ...events.Event[T])
@@ -79,7 +76,7 @@ func newDefaultSubscriber[T any](streamID StreamID, callback func(event events.E
 	return rec
 }
 
-func newBufferedSubscriber[T any](streamID StreamID, buf buffer.Buffer[T], callback func(event events.Event[T]), callbackBatch func(events ...events.Event[T])) Subscriber[T] {
+func newBufferedSubscriber[T any](streamID StreamID, buf events.Buffer[T], callback func(event events.Event[T]), callbackBatch func(events ...events.Event[T])) Subscriber[T] {
 	rec := &bufferedSubscriber[T]{
 		streamID:    streamID,
 		iD:          SubscriberID(uuid.New()),
@@ -240,10 +237,10 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 	}
 
 	var rec Subscriber[T]
-	var buf buffer.Buffer[T]
+	var buf events.Buffer[T]
 
 	if description.BufferPolicySelection.Active {
-		p, err := selection.NewPolicyFromDescription[T](description.BufferPolicySelection)
+		p, err := events.NewPolicyFromDescription[T](description.BufferPolicySelection)
 		if err != nil {
 			return nil, err
 		}
@@ -259,18 +256,18 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 	return rec, nil
 }
 
-func newBufferForSubscriber[T any](description SubscriberConfig, p selection.Policy[T]) buffer.Buffer[T] {
+func newBufferForSubscriber[T any](description SubscriberConfig, p events.Policy[T]) events.Buffer[T] {
 	if p != nil { // policy based
 		if description.BufferCapacity > 0 {
-			return buffer.NewLimitedConsumableAsyncBuffer[T](p, description.BufferCapacity)
+			return events.NewLimitedConsumableAsyncBuffer[T](p, description.BufferCapacity)
 		}
-		return buffer.NewConsumableAsyncBuffer[T](p)
+		return events.NewConsumableAsyncBuffer[T](p)
 	}
 	// simple buffer
 	if description.BufferCapacity > 0 {
-		return buffer.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
+		return events.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
 	}
-	return buffer.NewSimpleAsyncBuffer[T]()
+	return events.NewSimpleAsyncBuffer[T]()
 }
 
 func (m *notificationMap[T]) close() error {

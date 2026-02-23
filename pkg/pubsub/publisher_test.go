@@ -4,7 +4,6 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/ottenwbe/go-streaming/pkg/buffer"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
@@ -43,7 +42,7 @@ func (m *mockStream[T]) newPublisher() (Publisher[T], error) { return nil, nil }
 func (m *mockStream[T]) removePublisher(id PublisherID)      {}
 func (m *mockStream[T]) subscribers() *notificationMap[T]    { return nil }
 
-func (m *mockStream[T]) events() buffer.Buffer[T] { return nil }
+func (m *mockStream[T]) events() events.Buffer[T] { return nil }
 
 func createMockStream[T any](id StreamID) *mockStream[T] {
 

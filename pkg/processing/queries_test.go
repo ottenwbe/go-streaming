@@ -1,4 +1,4 @@
-package query_test
+package processing_test
 
 import (
 	"errors"
@@ -6,10 +6,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	query "github.com/ottenwbe/go-streaming/pkg/processing"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"github.com/ottenwbe/go-streaming/pkg/query"
 )
 
 var _ = Describe("Continuous Query", func() {
@@ -25,7 +24,7 @@ var _ = Describe("Continuous Query", func() {
 		q, err =
 			query.Query[int](
 				query.Process[int](
-					engine.ContinuousSmaller[int](5),
+					query.ContinuousSmaller[int](5),
 					query.FromSourceStream[int]("test"),
 				),
 			)
@@ -131,8 +130,8 @@ var _ = Describe("Continuous Query", func() {
 
 	Describe("Error Handling", func() {
 		It("Process propagates operator creation errors", func() {
-			errOp := func(in []pubsub.StreamID, out []pubsub.StreamID, id engine.OperatorID) (engine.OperatorID, error) {
-				return engine.OperatorID{}, errors.New("op failed")
+			errOp := func(in []pubsub.StreamID, out []pubsub.StreamID, id query.OperatorID) (query.OperatorID, error) {
+				return query.OperatorID{}, errors.New("op failed")
 			}
 
 			_, err := query.Query[int](

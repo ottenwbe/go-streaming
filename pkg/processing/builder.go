@@ -1,10 +1,9 @@
-package query
+package processing
 
 import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
 
@@ -20,7 +19,7 @@ var (
 // Builder provides an API to construct ContinuousQueries.
 type Builder struct {
 	streams   map[pubsub.StreamID]CreateStreamFunc
-	operators map[engine.OperatorID]func() (engine.OperatorID, error)
+	operators map[OperatorID]func() (OperatorID, error)
 
 	current []pubsub.StreamID
 	query   ContinuousQuery
@@ -33,7 +32,7 @@ func NewBuilder[T any](opts ...QueryOption) *Builder {
 	return &Builder{
 		query:     newContinuousQuery[T](opts...),
 		streams:   make(map[pubsub.StreamID]CreateStreamFunc),
-		operators: make(map[engine.OperatorID]func() (engine.OperatorID, error)),
+		operators: make(map[OperatorID]func() (OperatorID, error)),
 	}
 }
 
@@ -44,11 +43,11 @@ type StreamCreationOptions struct {
 	streamID         pubsub.StreamID
 }
 
-type CreateOperatorFunc func([]pubsub.StreamID, []pubsub.StreamID, engine.OperatorID) (engine.OperatorID, error)
+type CreateOperatorFunc func([]pubsub.StreamID, []pubsub.StreamID, OperatorID) (OperatorID, error)
 type OperatorCreationOptions struct {
 	outStreamCreateOptions []StreamCreationOptions
 	operatorCreateFunc     CreateOperatorFunc
-	operatorID             engine.OperatorID
+	operatorID             OperatorID
 }
 
 // Source creates a StreamDef for a source stream of type T.
@@ -110,11 +109,11 @@ func (b *Builder) Join(b2 *Builder) *Builder {
 	return b
 }
 
-func CreateStream[TOut any](operatorCreateFunc CreateOperatorFunc, opts ...pubsub.StreamOption) OperatorCreationOptions {
+func Operator[TOut any](operatorCreateFunc CreateOperatorFunc, opts ...pubsub.StreamOption) OperatorCreationOptions {
 	outTopic := uuid.New().String()
 	return OperatorCreationOptions{
 		operatorCreateFunc: operatorCreateFunc,
-		operatorID:         engine.NewOperatorID(),
+		operatorID:         NewOperatorID(),
 
 		outStreamCreateOptions: []StreamCreationOptions{{
 			streamCreateFunc: func(repo *pubsub.StreamRepository) (pubsub.StreamID, error) {
@@ -139,7 +138,7 @@ func CreateFanOutStream[TOut any](operatorCreateFunc CreateOperatorFunc, numOutp
 	return OperatorCreationOptions{
 		operatorCreateFunc:     operatorCreateFunc,
 		outStreamCreateOptions: outOptions,
-		operatorID:             engine.NewOperatorID(),
+		operatorID:             NewOperatorID(),
 	}
 }
 
@@ -171,7 +170,7 @@ func (b *Builder) Process(operatorFunc OperatorCreationOptions) *Builder {
 	// Create operator
 	inputs := b.current
 	opID := operatorFunc.operatorID
-	opF := func() (engine.OperatorID, error) {
+	opF := func() (OperatorID, error) {
 		return operatorFunc.operatorCreateFunc(inputs, outputs, opID)
 	}
 

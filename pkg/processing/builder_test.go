@@ -1,4 +1,4 @@
-package query_test
+package processing_test
 
 import (
 	"sync"
@@ -6,10 +6,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	query "github.com/ottenwbe/go-streaming/pkg/processing"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"github.com/ottenwbe/go-streaming/pkg/query"
 )
 
 var _ = Describe("Builder API", func() {
@@ -30,8 +29,8 @@ var _ = Describe("Builder API", func() {
 			// Source -> Greater(10) -> Output
 			b := query.NewBuilder[int]()
 			b.From(query.Source[int]("builder-source-1")).
-				Process(query.CreateStream[int](
-					engine.ContinuousGreater[int](10),
+				Process(query.Operator[int](
+					query.ContinuousGreater[int](10),
 				))
 
 			q, err = b.Build(true)
@@ -40,8 +39,8 @@ var _ = Describe("Builder API", func() {
 
 			var received int
 			var wg sync.WaitGroup
-			wg.Add(1)
 
+			wg.Add(1)
 			err = q.Subscribe(func(e events.Event[int]) {
 				received = e.GetContent()
 				wg.Done()
@@ -72,7 +71,7 @@ var _ = Describe("Builder API", func() {
 			// No From() called
 
 			// Process requires input
-			b.Process(query.CreateStream[int](engine.ContinuousGreater[int](10)))
+			b.Process(query.Operator[int](query.ContinuousGreater[int](10)))
 
 			_, err := b.Build(false)
 			Expect(err).To(HaveOccurred())

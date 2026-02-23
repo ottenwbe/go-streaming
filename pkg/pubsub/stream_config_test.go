@@ -3,8 +3,8 @@ package pubsub_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 var _ = Describe("Descriptions", func() {
@@ -28,7 +28,7 @@ var _ = Describe("Descriptions", func() {
 			d := pubsub.MakeSubscriberConfig()
 			Expect(d.Synchronous).To(BeFalse())
 			Expect(d.BufferCapacity).To(Equal(0))
-			Expect(d.BufferPolicySelection).To(Equal(selection.PolicyDescription{}))
+			Expect(d.BufferPolicySelection).To(Equal(events.PolicyDescription{}))
 		})
 	})
 

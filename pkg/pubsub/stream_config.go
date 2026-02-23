@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/ottenwbe/go-streaming/pkg/selection"
+	"github.com/ottenwbe/go-streaming/pkg/events"
 	"gopkg.in/yaml.v3"
 )
 
@@ -14,9 +14,9 @@ var (
 
 // SubscriberConfig details the subscriber configurations
 type SubscriberConfig struct {
-	Synchronous           bool                        `yaml:"synchronous" json:"synchronous"`
-	BufferCapacity        int                         `yaml:"bufferCapacity" json:"bufferCapacity"`
-	BufferPolicySelection selection.PolicyDescription `yaml:"selectionPolicy" json:"selectionPolicy"`
+	Synchronous           bool                     `yaml:"synchronous" json:"synchronous"`
+	BufferCapacity        int                      `yaml:"bufferCapacity" json:"bufferCapacity"`
+	BufferPolicySelection events.PolicyDescription `yaml:"selectionPolicy" json:"selectionPolicy"`
 }
 
 // StreamConfig details the stream configurations
@@ -33,7 +33,7 @@ type StreamConfig struct {
 type SubscriberOption func(*SubscriberConfig)
 
 // SubscriberWithSelectionPolicy allows to provide a selection policy for the subscriber
-func SubscriberWithSelectionPolicy(p selection.PolicyDescription) SubscriberOption {
+func SubscriberWithSelectionPolicy(p events.PolicyDescription) SubscriberOption {
 	return func(s *SubscriberConfig) {
 		s.BufferPolicySelection = p
 	}
@@ -53,7 +53,7 @@ func SubscriberWithBufferCapacity(capacity int) SubscriberOption {
 
 type StreamOption func(*StreamConfig)
 
-func WithSubscriberSelectionPolicy(p selection.PolicyDescription) StreamOption {
+func WithSubscriberSelectionPolicy(p events.PolicyDescription) StreamOption {
 	return func(s *StreamConfig) {
 		s.DefaultSubscribers.BufferPolicySelection = p
 	}

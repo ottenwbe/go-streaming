@@ -1,4 +1,4 @@
-package engine
+package processing
 
 import (
 	"errors"
@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 type OperatorID uuid.UUID
@@ -28,7 +27,7 @@ type OperatorEngine interface {
 	ID() OperatorID
 	Start() error
 	Stop() error
-	InStream(from pubsub.StreamID, description selection.PolicyDescription)
+	InStream(from pubsub.StreamID, description events.PolicyDescription)
 	OutStream(to pubsub.StreamID)
 }
 
@@ -48,7 +47,7 @@ func (o *baseOperatorEngine[TIN, TOUT]) ID() OperatorID {
 	return o.config.ID
 }
 
-func (o *baseOperatorEngine[TIN, TOUT]) InStream(in pubsub.StreamID, p selection.PolicyDescription) {
+func (o *baseOperatorEngine[TIN, TOUT]) InStream(in pubsub.StreamID, p events.PolicyDescription) {
 	o.config.Inputs = append(o.config.Inputs, InputDescription{
 		in,
 		p,
@@ -173,7 +172,7 @@ func (o *FanOutOperatorEngine[T]) ID() OperatorID {
 	return o.config.ID
 }
 
-func (o *FanOutOperatorEngine[T]) InStream(in pubsub.StreamID, p selection.PolicyDescription) {
+func (o *FanOutOperatorEngine[T]) InStream(in pubsub.StreamID, p events.PolicyDescription) {
 	o.config.Inputs = append(o.config.Inputs, InputDescription{
 		Stream:      in,
 		InputPolicy: p,

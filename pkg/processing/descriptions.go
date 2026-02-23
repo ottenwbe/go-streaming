@@ -1,8 +1,8 @@
-package engine
+package processing
 
 import (
+	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 const (
@@ -13,8 +13,8 @@ const (
 )
 
 type InputDescription struct {
-	Stream      pubsub.StreamID             `yaml:"stream" json:"stream"`
-	InputPolicy selection.PolicyDescription `yaml:"policy" json:"policy"`
+	Stream      pubsub.StreamID          `yaml:"stream" json:"stream"`
+	InputPolicy events.PolicyDescription `yaml:"policy" json:"policy"`
 }
 
 type OperatorDescription struct {
@@ -45,7 +45,7 @@ func WithOutput(topics ...pubsub.StreamID) OperatorOption {
 	}
 }
 
-func InputDescriptions(in []pubsub.StreamID, policy selection.PolicyDescription) []InputDescription {
+func InputDescriptions(in []pubsub.StreamID, policy events.PolicyDescription) []InputDescription {
 	res := make([]InputDescription, len(in))
 
 	for i, id := range in {

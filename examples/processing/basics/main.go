@@ -4,10 +4,9 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/processing"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"github.com/ottenwbe/go-streaming/pkg/query"
 	"go.uber.org/zap"
 )
 
@@ -17,10 +16,10 @@ var (
 
 func main() {
 	// define the query
-	q, err := query.Query[int](
-		query.Process[int](
-			engine.ContinuousGreater[int](50),
-			query.FromSourceStream[int]("in", pubsub.WithAsynchronousStream(true)),
+	q, err := processing.Query[int](
+		processing.Process[int](
+			processing.ContinuousGreater[int](50),
+			processing.FromSourceStream[int]("in", pubsub.WithAsynchronousStream(true)),
 		),
 	)
 	if err != nil {
@@ -40,7 +39,7 @@ func main() {
 		zap.S().Fatal("could not run the query", zap.Error(err))
 	}
 	// always close your query when no longer needed to free resources
-	defer query.Close(q)
+	defer processing.Close(q)
 
 	publishEvents()
 
