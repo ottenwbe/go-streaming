@@ -3,12 +3,10 @@ package pubsub_test
 import (
 	"sync/atomic"
 
-	"github.com/ottenwbe/go-streaming/pkg/events"
-	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
 
 var _ = Describe("PubSub", func() {
@@ -400,7 +398,7 @@ var _ = Describe("PubSub", func() {
 	Describe("SubscribeBatchByTopic", func() {
 		It("receives events in batches based on policy", func() {
 			topic := "batch-topic"
-			desc := selection.PolicyDescription{Type: selection.CountingWindow, Size: 2, Slide: 2}
+			desc := events.PolicyDescription{Type: events.CountingWindow, Size: 2, Slide: 2}
 
 			sub, err := pubsub.SubscribeBatchByTopicOnRepository[int](repo, topic, func(events ...events.Event[int]) {
 				Expect(len(events)).To(Equal(2))

@@ -4,10 +4,9 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/processing"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"github.com/ottenwbe/go-streaming/pkg/query"
 	"go.uber.org/zap"
 )
 
@@ -18,12 +17,12 @@ var (
 func main() {
 	// Define the query using the functional API
 	// This constructs a pipeline: Source("in") -> GreaterThan(0.5) -> Output
-	q, err := query.Query[float64](
-		query.Process[float64](
-			engine.ContinuousGreater[float64](
+	q, err := processing.Query[float64](
+		processing.Process[float64](
+			processing.ContinuousGreater[float64](
 				0.5,
 			),
-			query.FromSourceStream[float64]("in", pubsub.WithAsynchronousStream(true)),
+			processing.FromSourceStream[float64]("in", pubsub.WithAsynchronousStream(true)),
 		),
 	)
 	if err != nil {
@@ -42,7 +41,7 @@ func main() {
 	if err := q.Run(); err != nil {
 		zap.S().Fatal(err)
 	}
-	defer query.Close(q)
+	defer processing.Close(q)
 
 	// PublishContent events to the input stream
 	publishEvents()

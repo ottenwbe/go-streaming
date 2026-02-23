@@ -2,7 +2,9 @@ package pubsub_test
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"sync"
+	"time"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
@@ -194,6 +196,75 @@ var _ = Describe("Stream", func() {
 				Expect(content1).To(Equal(eventResult[0].GetContent()))
 				Expect(content2).To(Equal(eventResult[1].GetContent()))
 				Expect(content3).To(Equal(eventResult[2].GetContent()))
+			})
+		})
+	})
+
+	Describe("localAsyncSortingStream", func() {
+		var (
+			streamID pubsub.StreamID
+			topic    = "test-sorted"
+		)
+
+		Context("publishing and receiving events", func() {
+			It("should deliver events in timestamp order", func() {
+
+				var (
+					err        error
+					sendEvents = []events.Event[string]{}
+					tmpEvents  = []events.Event[string]{}
+					received   []events.Event[string]
+					wg         sync.WaitGroup
+				)
+
+				streamID, err = pubsub.AddOrReplaceStream[string](topic,
+					pubsub.WithSorted(true),
+					pubsub.WithAsynchronousStream(true),
+					pubsub.WithAutoStart(false),
+				)
+				Expect(err).To(BeNil())
+				defer pubsub.TryRemoveStreams(streamID)
+
+				// Start the stream processing
+				pubsub.StartStream(streamID)
+
+				now := time.Now()
+
+				for i := 0; i < 50; i++ {
+					sendEvents = append(sendEvents, &events.TemporalEvent[string]{
+						Stamp:   events.TimeStamp{StartTime: now.Add(time.Duration(i) * time.Second)},
+						Content: fmt.Sprintf("%d", i),
+					})
+				}
+
+				p, _ := pubsub.RegisterPublisher[string](streamID)
+				defer pubsub.UnRegisterPublisher(p)
+
+				start := make(chan bool)
+				wg.Add(len(sendEvents))
+
+				sub, _ := pubsub.SubscribeByTopicID[string](streamID, func(e events.Event[string]) {
+					<-start // wait to receive events until all events are published
+					received = append(received, e)
+					wg.Done()
+				})
+				defer pubsub.Unsubscribe(sub)
+
+				tmpEvents = append(tmpEvents, sendEvents...)
+
+				// send events in random order to our stream
+				p.Publish(tmpEvents[0]) //except for the first event
+				tmpEvents = tmpEvents[1:]
+				for len(tmpEvents) > 0 {
+					n := rand.IntN(len(tmpEvents))
+					p.Publish(tmpEvents[n])
+					tmpEvents = append(tmpEvents[:n], tmpEvents[n+1:]...)
+				}
+
+				close(start)
+
+				wg.Wait()
+				Expect(received).To(HaveExactElements(sendEvents))
 			})
 		})
 	})

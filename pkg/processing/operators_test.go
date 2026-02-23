@@ -1,27 +1,20 @@
-package engine_test
+package processing_test
 
 import (
 	"sync"
-	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/processing"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
-
-func TestEngine(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Engine Suite")
-}
 
 var _ = Describe("OperatorRepository", func() {
 
 	var (
 		sidin, sidout pubsub.StreamID
-		oid           engine.OperatorID
+		oid           processing.OperatorID
 		err           error
 	)
 
@@ -30,14 +23,14 @@ var _ = Describe("OperatorRepository", func() {
 		sidin, _ = pubsub.GetOrAddStream[int]("in")
 		sidout, _ = pubsub.GetOrAddStream[int]("out")
 
-		d := engine.NewOperatorDescription(engine.PIPELINE_OPERATOR,
-			engine.WithOutput(sidout),
-			engine.WithAutoStart(true),
-			engine.WithInput(engine.InputDescription{
+		d := processing.MakeOperatorConfig(processing.PIPELINE_OPERATOR,
+			processing.WithOutput(sidout),
+			processing.WithAutoStart(true),
+			processing.WithInput(processing.InputConfig{
 				Stream: sidin,
-				InputPolicy: selection.PolicyDescription{
+				InputPolicy: events.PolicyDescription{
 					Active: true,
-					Type:   selection.CountingWindow,
+					Type:   events.CountingWindow,
 					Size:   10,
 					Slide:  10,
 				},
@@ -58,31 +51,31 @@ var _ = Describe("OperatorRepository", func() {
 			return []int{s}
 		}
 
-		oid, err = engine.NewOperator[int, int](
+		oid, err = processing.NewOperator[int, int](
 			sum,
 			d,
-			engine.NilOperatorID(),
+			processing.NilOperatorID(),
 		)
 		Expect(err).To(BeNil())
 	})
 
 	AfterEach(func() {
-		engine.RemoveOperator(oid)
+		processing.RemoveOperator(oid)
 		pubsub.TryRemoveStreams(sidin, sidout)
 	})
 
 	Context("NewOperator", func() {
 		It("adds new operators to the map and it can be retrieved", func() {
-			operator, ok := engine.OperatorRepository().Get(oid)
+			operator, ok := processing.OperatorRepository().Get(oid)
 			Expect(ok).To(BeTrue())
 			Expect(operator).To(Not(BeNil()))
 		})
 	})
 	Context("RemoveOperator", func() {
 		It("ensures that an operator is no longer managed by a repository", func() {
-			engine.RemoveOperator(oid)
+			processing.RemoveOperator(oid)
 
-			operator, ok := engine.OperatorRepository().Get(oid)
+			operator, ok := processing.OperatorRepository().Get(oid)
 			Expect(ok).To(BeFalse())
 			Expect(operator).To(BeNil())
 		})
@@ -121,7 +114,7 @@ var _ = Describe("OperatorRepository", func() {
 
 var _ = Describe("FilterOperatorEngine", func() {
 	var (
-		oid           engine.OperatorID
+		oid           processing.OperatorID
 		err           error
 		sidin, sidout pubsub.StreamID
 	)
@@ -129,13 +122,13 @@ var _ = Describe("FilterOperatorEngine", func() {
 	BeforeEach(func() {
 		sidin, _ = pubsub.GetOrAddStream[int]("in-filter")
 		sidout, _ = pubsub.GetOrAddStream[int]("out-filter")
-		d := engine.NewOperatorDescription(engine.FILTER_OPERATOR,
-			engine.WithOutput(sidout),
-			engine.WithAutoStart(true),
-			engine.WithInput(engine.InputDescription{
+		d := processing.MakeOperatorConfig(processing.FILTER_OPERATOR,
+			processing.WithOutput(sidout),
+			processing.WithAutoStart(true),
+			processing.WithInput(processing.InputConfig{
 				Stream: sidin,
-				InputPolicy: selection.PolicyDescription{
-					Type: selection.SelectNext,
+				InputPolicy: events.PolicyDescription{
+					Type: events.SelectNext,
 				},
 			}))
 
@@ -143,12 +136,12 @@ var _ = Describe("FilterOperatorEngine", func() {
 			return event.GetContent()%2 == 0
 		}
 
-		oid, err = engine.NewOperator[int, int](isEven, d, engine.NilOperatorID())
+		oid, err = processing.NewOperator[int, int](isEven, d, processing.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 
 	AfterEach(func() {
-		engine.RemoveOperator(oid)
+		processing.RemoveOperator(oid)
 		pubsub.ForceRemoveStream(sidin, sidout)
 	})
 
@@ -189,7 +182,7 @@ var _ = Describe("FilterOperatorEngine", func() {
 
 var _ = Describe("MapOperatorEngine", func() {
 	var (
-		oid           engine.OperatorID
+		oid           processing.OperatorID
 		err           error
 		sidin, sidout pubsub.StreamID
 	)
@@ -197,10 +190,10 @@ var _ = Describe("MapOperatorEngine", func() {
 	BeforeEach(func() {
 		sidin, _ = pubsub.GetOrAddStream[int]("in-map")
 		sidout, _ = pubsub.GetOrAddStream[int]("out-map")
-		d := engine.NewOperatorDescription(engine.MAP_OPERATOR,
-			engine.WithOutput(sidout),
-			engine.WithAutoStart(true),
-			engine.WithInput(engine.InputDescription{
+		d := processing.MakeOperatorConfig(processing.MAP_OPERATOR,
+			processing.WithOutput(sidout),
+			processing.WithAutoStart(true),
+			processing.WithInput(processing.InputConfig{
 				Stream: sidin,
 				// InputPolicy is ignored for MapOperator
 			}))
@@ -210,12 +203,12 @@ var _ = Describe("MapOperatorEngine", func() {
 			return event.GetContent() * 2
 		}
 
-		oid, err = engine.NewOperator[int, int](double, d, engine.NilOperatorID())
+		oid, err = processing.NewOperator[int, int](double, d, processing.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 
 	AfterEach(func() {
-		engine.RemoveOperator(oid)
+		processing.RemoveOperator(oid)
 		pubsub.ForceRemoveStream(sidin, sidout)
 	})
 
@@ -253,7 +246,7 @@ var _ = Describe("MapOperatorEngine", func() {
 
 var _ = Describe("FanOutOperatorEngine", func() {
 	var (
-		oid              engine.OperatorID
+		oid              processing.OperatorID
 		err              error
 		sidin            pubsub.StreamID
 		sidout1, sidout2 pubsub.StreamID
@@ -263,19 +256,19 @@ var _ = Describe("FanOutOperatorEngine", func() {
 		sidin, _ = pubsub.GetOrAddStream[int]("in-fanout")
 		sidout1, _ = pubsub.GetOrAddStream[int]("out-fanout-1")
 		sidout2, _ = pubsub.GetOrAddStream[int]("out-fanout-2")
-		d := engine.NewOperatorDescription(engine.FANOUT_OPERATOR,
-			engine.WithOutput(sidout1, sidout2),
-			engine.WithAutoStart(true),
-			engine.WithInput(engine.InputDescription{
+		d := processing.MakeOperatorConfig(processing.FANOUT_OPERATOR,
+			processing.WithOutput(sidout1, sidout2),
+			processing.WithAutoStart(true),
+			processing.WithInput(processing.InputConfig{
 				Stream: sidin,
 			}))
 
-		oid, err = engine.NewOperator[int, int](nil, d, engine.NilOperatorID())
+		oid, err = processing.NewOperator[int, int](nil, d, processing.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 
 	AfterEach(func() {
-		engine.RemoveOperator(oid)
+		processing.RemoveOperator(oid)
 		pubsub.ForceRemoveStream(sidin, sidout1, sidout2)
 	})
 

@@ -1,11 +1,10 @@
-package selection
+package events
 
 import (
 	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/ottenwbe/go-streaming/pkg/events"
 	"gopkg.in/yaml.v3"
 
 	"github.com/google/uuid"
@@ -13,7 +12,7 @@ import (
 
 // BufferReader allows read-only access to an underlying event buffer that implements BufferReader
 type BufferReader[T any] interface {
-	Get(i int) events.Event[T]
+	Get(i int) Event[T]
 	Len() int
 }
 

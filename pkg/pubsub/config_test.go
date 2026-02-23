@@ -3,8 +3,8 @@ package pubsub_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 var _ = Describe("Descriptions", func() {
@@ -28,7 +28,7 @@ var _ = Describe("Descriptions", func() {
 			d := pubsub.MakeSubscriberConfig()
 			Expect(d.Synchronous).To(BeFalse())
 			Expect(d.BufferCapacity).To(Equal(0))
-			Expect(d.BufferPolicySelection).To(Equal(selection.PolicyDescription{}))
+			Expect(d.BufferPolicySelection).To(Equal(events.PolicyDescription{}))
 		})
 	})
 
@@ -40,6 +40,7 @@ var _ = Describe("Descriptions", func() {
 			Expect(d.AutoCleanup).To(BeFalse())
 			Expect(d.BufferCapacity).To(Equal(0))
 			Expect(d.DefaultSubscribers).To(Equal(pubsub.MakeSubscriberConfig()))
+			Expect(d.Sort).To(BeFalse())
 		})
 
 		It("applies options correctly", func() {
@@ -49,10 +50,12 @@ var _ = Describe("Descriptions", func() {
 				pubsub.WithAsynchronousStream(true),
 				pubsub.WithAutoCleanup(true),
 				pubsub.WithDefaultSubscribers(v),
+				pubsub.WithSorted(true),
 			)
 			Expect(d.Asynchronous).To(BeTrue())
 			Expect(d.AutoCleanup).To(BeTrue())
 			Expect(d.DefaultSubscribers).To(Equal(v))
+			Expect(d.Sort).To(BeTrue())
 		})
 	})
 
@@ -76,12 +79,14 @@ id:
   type: string
 asyncStream: true
 autoCleanup: true
+sorted: true
 `
 				v, err := pubsub.StreamDescriptionFromYML([]byte(yml))
 				Expect(err).To(BeNil())
 				Expect(v.ID).To(Equal(pubsub.MakeStreamID[string]("3c191d62-6574-4951-a8e6-4ec83c947250")))
 				Expect(v.Asynchronous).To(BeTrue())
 				Expect(v.AutoCleanup).To(BeTrue())
+				Expect(v.Sort).To(BeTrue())
 			})
 
 			It("parses correctly with default values", func() {
@@ -106,13 +111,15 @@ id:
     "type": "float64"
   },
   "asyncStream": true,
-  "asyncReceiver": false
+  "asyncReceiver": false,
+  "sorted": true
 }
 `
 				v, err := pubsub.StreamDescriptionFromJSON([]byte(jsonStr))
 				Expect(err).To(BeNil())
 				Expect(v.Asynchronous).To(BeTrue())
 				Expect(v.AutoCleanup).To(BeFalse())
+				Expect(v.Sort).To(BeTrue())
 			})
 		})
 

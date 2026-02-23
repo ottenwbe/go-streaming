@@ -1,4 +1,4 @@
-package buffer_test
+package processing_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestBuffer(t *testing.T) {
+func TestQuery(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Buffer Suite")
+	RunSpecs(t, "Continuous Processing Suite")
 }

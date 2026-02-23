@@ -202,6 +202,13 @@ type localAsyncStream[T any] struct {
 	subscriberMap subscribers[T]
 }
 
+type localAsyncSortingStream[T any] struct {
+	streamBuf     events.Buffer[T]
+	closed        sync.WaitGroup
+	subscriberMap subscribers[T]
+	active        atomic.Bool
+}
+
 // newStreamFromDescription creates and returns a typedStream of a given stream type T
 func newStreamFromDescription[T any](description StreamConfig) typedStream[T] {
 	var (
@@ -228,7 +235,11 @@ func newStreamFromDescription[T any](description StreamConfig) typedStream[T] {
 
 func newStreamCoordinator[T any](description StreamConfig, subscribers *notificationMap[T]) (streamEngine streamCoordinator[T]) {
 	if description.Asynchronous {
-		streamEngine = newLocalAsyncStream[T](subscribers, description)
+		if description.Sort {
+			streamEngine = newLocalAsyncSortedStream[T](subscribers, description)
+		} else {
+			streamEngine = newLocalAsyncStream[T](subscribers, description)
+		}
 	} else {
 		streamEngine = newLocalSyncStream[T](subscribers)
 	}
@@ -261,7 +272,42 @@ func newLocalAsyncStream[T any](subscribers subscribers[T], description StreamCo
 	return a
 }
 
+// newLocalAsyncSortedStream is created w/ sorted event buffering
+func newLocalAsyncSortedStream[T any](subscribers subscribers[T], description StreamConfig) *localAsyncSortingStream[T] {
+
+	a := &localAsyncSortingStream[T]{
+		subscriberMap: subscribers,
+		closed:        sync.WaitGroup{},
+		streamBuf:     events.NewSortedSimpleAsyncBuffer[T](description.BufferCapacity),
+		active:        atomic.Bool{},
+	}
+	return a
+}
+
 func (s *localSyncStream[T]) close() {
+}
+
+func (l *localAsyncSortingStream[T]) publish(e events.Event[T]) error {
+	return l.streamBuf.AddEvent(e)
+}
+
+func (l *localAsyncSortingStream[T]) close() {
+	l.active.Store(false)
+	l.streamBuf.StopBlocking()
+	l.closed.Wait()
+}
+
+func (l *localAsyncSortingStream[T]) run() {
+	l.active.Store(true)
+	l.closed.Go(func() {
+
+		for l.active.Load() {
+			e := l.streamBuf.GetAndRemoveNextEvent()
+			if e != nil {
+				_ = l.subscriberMap.notify(e)
+			}
+		}
+	})
 }
 
 func (l *localAsyncStream[T]) close() {

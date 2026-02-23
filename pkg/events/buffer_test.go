@@ -1,15 +1,13 @@
-package buffer_test
+package events_test
 
 import (
 	"errors"
 	"sync"
-
-	"github.com/ottenwbe/go-streaming/pkg/buffer"
-	"github.com/ottenwbe/go-streaming/pkg/events"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
 var _ = Describe("Buffer", func() {
@@ -17,14 +15,14 @@ var _ = Describe("Buffer", func() {
 	Describe("LimitedSimpleAsyncBuffer", func() {
 
 		var (
-			buf buffer.Buffer[string]
+			buf events.Buffer[string]
 			e1  events.Event[string]
 			e2  events.Event[string]
 			e3  events.Event[string]
 		)
 
 		BeforeEach(func() {
-			buf = buffer.NewLimitedSimpleAsyncBuffer[string](1)
+			buf = events.NewLimitedSimpleAsyncBuffer[string](1)
 			e1 = events.NewEvent("e1")
 			e2 = events.NewEvent("e2")
 			e3 = events.NewEvent("e3")
@@ -58,7 +56,7 @@ var _ = Describe("Buffer", func() {
 
 				err1 := buf.AddEvents([]events.Event[string]{e1, e2, e3})
 				Expect(err1).To(HaveOccurred())
-				Expect(errors.Is(err1, buffer.ErrLimitExceeded)).To(BeTrue())
+				Expect(errors.Is(err1, events.ErrLimitExceeded)).To(BeTrue())
 			})
 		})
 
@@ -66,12 +64,12 @@ var _ = Describe("Buffer", func() {
 
 	Describe("ConsumableAsyncBuffer", func() {
 		var (
-			buf buffer.Buffer[string]
+			buf events.Buffer[string]
 			e1  events.Event[string]
 		)
 
 		BeforeEach(func() {
-			buf = buffer.NewConsumableAsyncBuffer[string](selection.NewSelectNextPolicy[string]())
+			buf = events.NewConsumableAsyncBuffer[string](events.NewSelectNextPolicy[string]())
 			e1 = events.NewEvent("e1")
 		})
 
@@ -115,14 +113,14 @@ var _ = Describe("Buffer", func() {
 	Describe("SimpleAsyncBuffer", func() {
 
 		var (
-			buf buffer.Buffer[string]
+			buf events.Buffer[string]
 			e1  events.Event[string]
 			e2  events.Event[string]
 			e3  events.Event[string]
 		)
 
 		BeforeEach(func() {
-			buf = buffer.NewSimpleAsyncBuffer[string]()
+			buf = events.NewSimpleAsyncBuffer[string]()
 			e1 = events.NewEvent("e1")
 			e2 = events.NewEvent("e2")
 			e3 = events.NewEvent("e3")
@@ -156,7 +154,7 @@ var _ = Describe("Buffer", func() {
 		Context("Dump", func() {
 			It("dumps all buffered events", func() {
 
-				buffer := buffer.NewSimpleAsyncBuffer[string]()
+				buffer := events.NewSimpleAsyncBuffer[string]()
 				defer buffer.StopBlocking()
 
 				buffer.AddEvent(e1)
@@ -264,6 +262,70 @@ var _ = Describe("Buffer", func() {
 				Consistently(done).ShouldNot(BeClosed())
 				buf.StopBlocking()
 				Eventually(done).Should(BeClosed())
+			})
+		})
+	})
+
+	Describe("SortedSimpleAsyncBuffer", func() {
+		var (
+			buf events.Buffer[string]
+			e1  events.Event[string]
+			e2  events.Event[string]
+			e3  events.Event[string]
+		)
+
+		BeforeEach(func() {
+			buf = events.NewSortedSimpleAsyncBuffer[string](0)
+
+			// Create events with specific, out-of-order timestamps
+			now := time.Now()
+			e1 = &events.TemporalEvent[string]{ // The oldest
+				Stamp:   events.TimeStamp{StartTime: now},
+				Content: "e1",
+			}
+			e2 = &events.TemporalEvent[string]{ // The newest
+				Stamp:   events.TimeStamp{StartTime: now.Add(2 * time.Second)},
+				Content: "e2",
+			}
+			e3 = &events.TemporalEvent[string]{ // In the middle
+				Stamp:   events.TimeStamp{StartTime: now.Add(1 * time.Second)},
+				Content: "e3",
+			}
+		})
+
+		AfterEach(func() {
+			buf.StopBlocking()
+		})
+
+		Context("Adding events", func() {
+			It("should sort events by timestamp upon insertion", func() {
+				// Add events out of temporal order
+				Expect(buf.AddEvent(e2)).To(Succeed())
+				Expect(buf.AddEvent(e1)).To(Succeed())
+				Expect(buf.AddEvent(e3)).To(Succeed())
+
+				// Dump the buffer and check the order
+				dumpedEvents := buf.Dump()
+				Expect(dumpedEvents).To(Equal([]events.Event[string]{e1, e3, e2}))
+			})
+
+			It("should sort a batch of events by timestamp", func() {
+				// Add events out of temporal order in a single batch
+				Expect(buf.AddEvents([]events.Event[string]{e2, e1, e3})).To(Succeed())
+
+				// Dump the buffer and check the order
+				dumpedEvents := buf.Dump()
+				Expect(dumpedEvents).To(Equal([]events.Event[string]{e1, e3, e2}))
+			})
+		})
+
+		Context("Consuming events", func() {
+			It("should consume events in sorted timestamp order", func() {
+				Expect(buf.AddEvents([]events.Event[string]{e2, e1, e3})).To(Succeed())
+				Expect(buf.GetAndConsumeNextEvents()).To(Equal([]events.Event[string]{e1}))
+				Expect(buf.GetAndConsumeNextEvents()).To(Equal([]events.Event[string]{e3}))
+				Expect(buf.GetAndConsumeNextEvents()).To(Equal([]events.Event[string]{e2}))
+				Expect(buf.Len()).To(Equal(0))
 			})
 		})
 	})

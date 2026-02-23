@@ -1,20 +1,18 @@
-package selection_test
+package events_test
 
 import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/ottenwbe/go-streaming/pkg/buffer"
 	"github.com/ottenwbe/go-streaming/pkg/events"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 var _ = Describe("Policy", func() {
 	Describe("CountingWindowPolicy", func() {
 		Context("Select Events", func() {
 			It("can read n events at the time", func() {
-				b := buffer.NewConsumableAsyncBuffer[string](selection.NewCountingWindowPolicy[string](2, 2))
+				b := events.NewConsumableAsyncBuffer[string](events.NewCountingWindowPolicy[string](2, 2))
 				defer b.StopBlocking()
 
 				e1 := events.NewEvent("e1")
@@ -28,7 +26,7 @@ var _ = Describe("Policy", func() {
 				Expect(es).To(Equal([]events.Event[string]{e1, e2}))
 			})
 			It("can select multiple events in a row", func() {
-				b := buffer.NewConsumableAsyncBuffer[string](selection.NewCountingWindowPolicy[string](2, 1))
+				b := events.NewConsumableAsyncBuffer[string](events.NewCountingWindowPolicy[string](2, 1))
 				e1 := events.NewEvent("e1")
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")
@@ -45,7 +43,7 @@ var _ = Describe("Policy", func() {
 				Expect(es3).To(Equal([]events.Event[string]{e3, e4}))
 			})
 			It("waits until enough events are available", func() {
-				b := buffer.NewConsumableAsyncBuffer[string](selection.NewCountingWindowPolicy[string](3, 3))
+				b := events.NewConsumableAsyncBuffer[string](events.NewCountingWindowPolicy[string](3, 3))
 				defer b.StopBlocking()
 
 				e1 := events.NewEvent("e1")
@@ -64,7 +62,7 @@ var _ = Describe("Policy", func() {
 				Eventually(done).Should(Receive(HaveLen(3)))
 			})
 			It("handles shifts larger than size (skipping events)", func() {
-				b := buffer.NewConsumableAsyncBuffer[string](selection.NewCountingWindowPolicy[string](1, 2))
+				b := events.NewConsumableAsyncBuffer[string](events.NewCountingWindowPolicy[string](1, 2))
 				e1 := events.NewEvent("e1")
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")
@@ -78,7 +76,7 @@ var _ = Describe("Policy", func() {
 				Expect(es2).To(Equal([]events.Event[string]{e3}))
 			})
 			It("handles overlapping windows correctly", func() {
-				b := buffer.NewConsumableAsyncBuffer[string](selection.NewCountingWindowPolicy[string](3, 1))
+				b := events.NewConsumableAsyncBuffer[string](events.NewCountingWindowPolicy[string](3, 1))
 				e1 := events.NewEvent("e1")
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")
@@ -131,8 +129,8 @@ var _ = Describe("Policy", func() {
 					Content: "e4",
 				}
 
-				w := selection.NewTemporalWindowPolicy[string](e1.GetStamp().StartTime, time.Hour, time.Minute*10)
-				b := buffer.NewConsumableAsyncBuffer(w)
+				w := events.NewTemporalWindowPolicy[string](e1.GetStamp().StartTime, time.Hour, time.Minute*10)
+				b := events.NewConsumableAsyncBuffer(w)
 
 				b.AddEvents(events.Arr[string](e1, e2, e3, e4))
 
@@ -185,8 +183,8 @@ var _ = Describe("Policy", func() {
 					Content: "e5",
 				}
 
-				w := selection.NewTemporalWindowPolicy[string](e1.GetStamp().StartTime, time.Minute*30, time.Minute*30)
-				b := buffer.NewConsumableAsyncBuffer(w)
+				w := events.NewTemporalWindowPolicy[string](e1.GetStamp().StartTime, time.Minute*30, time.Minute*30)
+				b := events.NewConsumableAsyncBuffer(w)
 
 				b.AddEvents(events.Arr[string](e1, e2, e3, e4, e5))
 
@@ -218,8 +216,8 @@ var _ = Describe("Policy", func() {
 					Content: "e4",
 				}
 
-				w := selection.NewTemporalWindowPolicy[string](startTime, time.Minute*10, time.Minute*10)
-				b := buffer.NewConsumableAsyncBuffer(w)
+				w := events.NewTemporalWindowPolicy[string](startTime, time.Minute*10, time.Minute*10)
+				b := events.NewConsumableAsyncBuffer(w)
 
 				b.AddEvents(events.Arr[string](e1, e2, e3, e4))
 
@@ -234,7 +232,7 @@ var _ = Describe("Policy", func() {
 	Describe("SelectNextPolicy", func() {
 		Context("Select Events", func() {
 			It("one at a time", func() {
-				b := buffer.NewConsumableAsyncBuffer(selection.NewSelectNextPolicy[string]())
+				b := events.NewConsumableAsyncBuffer(events.NewSelectNextPolicy[string]())
 				e1 := events.NewEvent("e1")
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")
@@ -246,7 +244,7 @@ var _ = Describe("Policy", func() {
 				Expect(es).To(Equal(events.Arr(e1)))
 			})
 			It("selects multiple events in a row", func() {
-				b := buffer.NewConsumableAsyncBuffer(selection.NewSelectNextPolicy[string]())
+				b := events.NewConsumableAsyncBuffer(events.NewSelectNextPolicy[string]())
 				e1 := events.NewEvent("e1")
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")
@@ -265,39 +263,39 @@ var _ = Describe("Policy", func() {
 	})
 	Describe("PolicyDescription", func() {
 		It("can create a CountingWindowPolicy", func() {
-			desc := selection.PolicyDescription{
-				Type:  selection.CountingWindow,
+			desc := events.PolicyDescription{
+				Type:  events.CountingWindow,
 				Size:  5,
 				Slide: 1,
 			}
-			p, err := selection.NewPolicyFromDescription[int](desc)
+			p, err := events.NewPolicyFromDescription[int](desc)
 			Expect(err).To(BeNil())
 			Expect(p).NotTo(BeNil())
 		})
 		It("can create a SelectNextPolicy", func() {
-			desc := selection.PolicyDescription{
-				Type: selection.SelectNext,
+			desc := events.PolicyDescription{
+				Type: events.SelectNext,
 			}
-			p, err := selection.NewPolicyFromDescription[int](desc)
+			p, err := events.NewPolicyFromDescription[int](desc)
 			Expect(err).To(BeNil())
 			Expect(p).NotTo(BeNil())
 		})
 		It("can create a TemporalWindowPolicy", func() {
-			desc := selection.PolicyDescription{
-				Type:         selection.TemporalWindow,
+			desc := events.PolicyDescription{
+				Type:         events.TemporalWindow,
 				WindowStart:  time.Now(),
 				WindowLength: time.Minute,
 				WindowShift:  time.Minute,
 			}
-			p, err := selection.NewPolicyFromDescription[int](desc)
+			p, err := events.NewPolicyFromDescription[int](desc)
 			Expect(err).To(BeNil())
 			Expect(p).NotTo(BeNil())
 		})
 		It("can be parsed from JSON", func() {
 			jsonStr := `{"active":true,"type":"counting","size":5,"slide":1}`
-			desc, err := selection.PolicyDescriptionFromJSON([]byte(jsonStr))
+			desc, err := events.PolicyDescriptionFromJSON([]byte(jsonStr))
 			Expect(err).To(BeNil())
-			Expect(desc.Type).To(Equal(selection.CountingWindow))
+			Expect(desc.Type).To(Equal(events.CountingWindow))
 			Expect(desc.Size).To(Equal(5))
 			Expect(desc.Slide).To(Equal(1))
 		})
@@ -308,33 +306,33 @@ type: counting
 size: 5
 slide: 1
 `
-			desc, err := selection.PolicyDescriptionFromYML([]byte(ymlStr))
+			desc, err := events.PolicyDescriptionFromYML([]byte(ymlStr))
 			Expect(err).To(BeNil())
-			Expect(desc.Type).To(Equal(selection.CountingWindow))
+			Expect(desc.Type).To(Equal(events.CountingWindow))
 			Expect(desc.Size).To(Equal(5))
 			Expect(desc.Slide).To(Equal(1))
 		})
 		It("can be marshalled to JSON", func() {
-			desc := selection.PolicyDescription{Type: selection.CountingWindow, Size: 5, Slide: 1}
+			desc := events.PolicyDescription{Type: events.CountingWindow, Size: 5, Slide: 1}
 			jsonBytes, err := desc.ToJSON()
 			Expect(err).To(BeNil())
 			Expect(string(jsonBytes)).To(ContainSubstring(`"type":"counting"`))
 		})
 		It("can be marshalled to YAML", func() {
-			desc := selection.PolicyDescription{Type: selection.CountingWindow, Size: 5, Slide: 1}
+			desc := events.PolicyDescription{Type: events.CountingWindow, Size: 5, Slide: 1}
 			ymlBytes, err := desc.ToYML()
 			Expect(err).To(BeNil())
 			Expect(string(ymlBytes)).To(ContainSubstring("type: counting"))
 		})
 		It("returns error for invalid JSON", func() {
-			_, err := selection.PolicyDescriptionFromJSON([]byte(`{invalid-json`))
+			_, err := events.PolicyDescriptionFromJSON([]byte(`{invalid-json`))
 			Expect(err).To(HaveOccurred())
 		})
 		It("returns error for unknown policy type", func() {
 			jsonStr := `{"type":"unknown_type"}`
-			desc, err := selection.PolicyDescriptionFromJSON([]byte(jsonStr))
+			desc, err := events.PolicyDescriptionFromJSON([]byte(jsonStr))
 			Expect(err).To(BeNil())
-			_, err = selection.NewPolicyFromDescription[int](desc)
+			_, err = events.NewPolicyFromDescription[int](desc)
 			Expect(err).To(HaveOccurred())
 		})
 	})

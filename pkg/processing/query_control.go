@@ -1,11 +1,10 @@
-package query
+package processing
 
 import (
 	"errors"
 	"sync"
 
 	"github.com/google/uuid"
-	engine2 "github.com/ottenwbe/go-streaming/pkg/engine"
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
@@ -18,7 +17,7 @@ var (
 // ContinuousQuery represents a running query that processes streams.
 type ContinuousQuery interface {
 	addStreams(streams ...pubsub.StreamID)
-	addOperations(operators ...engine2.OperatorID)
+	addOperations(operators ...OperatorID)
 	ID() ID
 	close()
 	Run() error
@@ -31,7 +30,7 @@ type ContinuousQuery interface {
 type TypedContinuousQuery[T any] struct {
 	id ID
 
-	operators []engine2.OperatorID
+	operators []OperatorID
 	streams   []pubsub.StreamID
 	outStream pubsub.StreamID
 
@@ -83,7 +82,7 @@ func (c *TypedContinuousQuery[T]) Run() error {
 	}
 
 	for _, oid := range c.operators {
-		op, exists := engine2.OperatorRepository().Get(oid)
+		op, exists := OperatorRepository().Get(oid)
 		if exists {
 			err = op.Start()
 		}
@@ -102,7 +101,7 @@ func (c *TypedContinuousQuery[T]) close() {
 		}
 
 		for _, o := range c.operators {
-			engine2.RemoveOperator(o)
+			RemoveOperator(o)
 		}
 		c.repo.TryRemoveStreams(c.streams...)
 
@@ -121,7 +120,7 @@ func newContinuousQuery[T any](opts ...QueryOption) ContinuousQuery {
 	id := ID(uuid.New())
 	return &TypedContinuousQuery[T]{
 		id:        id,
-		operators: make([]engine2.OperatorID, 0),
+		operators: make([]OperatorID, 0),
 		streams:   []pubsub.StreamID{},
 		repo:      options.repo,
 	}
@@ -131,7 +130,7 @@ func (c *TypedContinuousQuery[T]) addStreams(streams ...pubsub.StreamID) {
 	c.streams = append(c.streams, streams...)
 }
 
-func (c *TypedContinuousQuery[T]) addOperations(operators ...engine2.OperatorID) {
+func (c *TypedContinuousQuery[T]) addOperations(operators ...OperatorID) {
 	c.operators = append(c.operators, operators...)
 }
 
@@ -159,79 +158,5 @@ func FromSourceStream[T any](topic string, options ...pubsub.StreamOption) func(
 		q.addStreams(sid)
 
 		return StreamWError{sid, err}
-	}
-}
-
-func Process[T any](
-	operatorCreationFunc func(in []pubsub.StreamID, out []pubsub.StreamID, id engine2.OperatorID) (engine2.OperatorID, error),
-	fromF func(q ContinuousQuery) StreamWError,
-	options ...pubsub.StreamOption,
-) func(q ContinuousQuery) StreamWError {
-	return func(q ContinuousQuery) StreamWError {
-
-		if q == nil {
-			return StreamWError{pubsub.NilStreamID(), ErrQueryNil}
-		}
-		from := fromF(q)
-
-		to, err := pubsub.AddOrReplaceStreamOnRepository[T](q.repository(), uuid.New().String(), append(options, pubsub.WithAutoStart(false))...)
-		if err != nil {
-			return StreamWError{pubsub.NilStreamID(), err}
-		}
-
-		operatorEngine, err2 := operatorCreationFunc([]pubsub.StreamID{from.streamID}, []pubsub.StreamID{to}, engine2.NilOperatorID())
-		if err2 != nil {
-			return StreamWError{pubsub.NilStreamID(), err2}
-		}
-
-		q.addOperations(operatorEngine)
-		q.addStreams(to)
-
-		return StreamWError{
-			streamID: to,
-			error:    nil,
-		}
-	}
-}
-
-func Query[T any](
-	fromF func(q ContinuousQuery) StreamWError,
-	opts ...QueryOption,
-) (q ContinuousQuery, err error) {
-
-	q = newContinuousQuery[T](opts...)
-
-	from := fromF(q)
-	if from.error == nil {
-		q.out(from.streamID)
-	}
-
-	return q, from.error
-}
-
-func OnStream[T any](stream StreamWError) StreamWError {
-	return stream
-}
-
-type StreamWError struct {
-	streamID pubsub.StreamID
-	error    error
-}
-
-type QueryOption func(*queryOptions)
-
-type queryOptions struct {
-	repo *pubsub.StreamRepository
-}
-
-func WithNewRepository() QueryOption {
-	return func(o *queryOptions) {
-		o.repo = pubsub.NewStreamRepository()
-	}
-}
-
-func WithRepository(r *pubsub.StreamRepository) QueryOption {
-	return func(o *queryOptions) {
-		o.repo = r
 	}
 }

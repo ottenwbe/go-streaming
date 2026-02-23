@@ -9,7 +9,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/ottenwbe/go-streaming/pkg/events"
-	"github.com/ottenwbe/go-streaming/pkg/selection"
 )
 
 var handler = func(event events.Event[string]) {}
@@ -232,7 +231,7 @@ var _ = Describe("Subscriber", func() {
 		})
 
 		It("should return error when policy is set for single subscriber", func() {
-			_, err := nMap.newSubscriber(sID, handler, SubscriberWithSelectionPolicy(selection.MakePolicy(selection.CountingWindow, 0, 0, time.Now(), time.Nanosecond, time.Nanosecond)))
+			_, err := nMap.newSubscriber(sID, handler, SubscriberWithSelectionPolicy(events.MakePolicy(events.CountingWindow, 0, 0, time.Now(), time.Nanosecond, time.Nanosecond)))
 			Expect(err).To(Equal(ErrSubscriberPolicy))
 		})
 	})
