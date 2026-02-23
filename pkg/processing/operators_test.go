@@ -23,10 +23,10 @@ var _ = Describe("OperatorRepository", func() {
 		sidin, _ = pubsub.GetOrAddStream[int]("in")
 		sidout, _ = pubsub.GetOrAddStream[int]("out")
 
-		d := processing.NewOperatorDescription(processing.PIPELINE_OPERATOR,
+		d := processing.MakeOperatorConfig(processing.PIPELINE_OPERATOR,
 			processing.WithOutput(sidout),
 			processing.WithAutoStart(true),
-			processing.WithInput(processing.InputDescription{
+			processing.WithInput(processing.InputConfig{
 				Stream: sidin,
 				InputPolicy: events.PolicyDescription{
 					Active: true,
@@ -122,10 +122,10 @@ var _ = Describe("FilterOperatorEngine", func() {
 	BeforeEach(func() {
 		sidin, _ = pubsub.GetOrAddStream[int]("in-filter")
 		sidout, _ = pubsub.GetOrAddStream[int]("out-filter")
-		d := processing.NewOperatorDescription(processing.FILTER_OPERATOR,
+		d := processing.MakeOperatorConfig(processing.FILTER_OPERATOR,
 			processing.WithOutput(sidout),
 			processing.WithAutoStart(true),
-			processing.WithInput(processing.InputDescription{
+			processing.WithInput(processing.InputConfig{
 				Stream: sidin,
 				InputPolicy: events.PolicyDescription{
 					Type: events.SelectNext,
@@ -190,10 +190,10 @@ var _ = Describe("MapOperatorEngine", func() {
 	BeforeEach(func() {
 		sidin, _ = pubsub.GetOrAddStream[int]("in-map")
 		sidout, _ = pubsub.GetOrAddStream[int]("out-map")
-		d := processing.NewOperatorDescription(processing.MAP_OPERATOR,
+		d := processing.MakeOperatorConfig(processing.MAP_OPERATOR,
 			processing.WithOutput(sidout),
 			processing.WithAutoStart(true),
-			processing.WithInput(processing.InputDescription{
+			processing.WithInput(processing.InputConfig{
 				Stream: sidin,
 				// InputPolicy is ignored for MapOperator
 			}))
@@ -256,10 +256,10 @@ var _ = Describe("FanOutOperatorEngine", func() {
 		sidin, _ = pubsub.GetOrAddStream[int]("in-fanout")
 		sidout1, _ = pubsub.GetOrAddStream[int]("out-fanout-1")
 		sidout2, _ = pubsub.GetOrAddStream[int]("out-fanout-2")
-		d := processing.NewOperatorDescription(processing.FANOUT_OPERATOR,
+		d := processing.MakeOperatorConfig(processing.FANOUT_OPERATOR,
 			processing.WithOutput(sidout1, sidout2),
 			processing.WithAutoStart(true),
-			processing.WithInput(processing.InputDescription{
+			processing.WithInput(processing.InputConfig{
 				Stream: sidin,
 			}))
 

@@ -23,7 +23,7 @@ func ContinuousBatchSum[TEvent number](policy events.PolicyDescription) func(in 
 			return []TEvent{result}
 		}
 
-		config := NewOperatorDescription(
+		config := MakeOperatorConfig(
 			PIPELINE_OPERATOR,
 		)
 
@@ -43,9 +43,9 @@ func ContinuousBatchCount[TEvent any, TOut number](policy events.PolicyDescripti
 			return []TOut{result}
 		}
 
-		config := NewOperatorDescription(
+		config := MakeOperatorConfig(
 			PIPELINE_OPERATOR,
-			WithInput(InputDescriptions(in, policy)...),
+			WithInput(MakeInputConfigs(in, policy)...),
 			WithOutput(out...),
 		)
 
@@ -61,9 +61,9 @@ func ContinuousGreater[T number](greaterThan T) func(in []pubsub.StreamID, out [
 			return input.GetContent() > greaterThan
 		}
 
-		config := NewOperatorDescription(
+		config := MakeOperatorConfig(
 			FILTER_OPERATOR,
-			WithInput(InputDescriptions(in, events.PolicyDescription{})...),
+			WithInput(MakeInputConfigs(in, events.PolicyDescription{})...),
 			WithOutput(out...),
 		)
 
@@ -80,9 +80,9 @@ func ContinuousSmaller[T number](than T) func(in []pubsub.StreamID, out []pubsub
 			return input.GetContent() < than
 		}
 
-		config := NewOperatorDescription(
+		config := MakeOperatorConfig(
 			FILTER_OPERATOR,
-			WithInput(InputDescriptions(in, events.PolicyDescription{})...),
+			WithInput(MakeInputConfigs(in, events.PolicyDescription{})...),
 			WithOutput(out...),
 		)
 
@@ -98,9 +98,9 @@ func ContinuousConvert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubs
 			return TOut(input.GetContent())
 		}
 
-		config := NewOperatorDescription(
+		config := MakeOperatorConfig(
 			MAP_OPERATOR,
-			WithInput(InputDescriptions(in, events.PolicyDescription{})...),
+			WithInput(MakeInputConfigs(in, events.PolicyDescription{})...),
 			WithOutput(out...),
 		)
 
@@ -111,9 +111,9 @@ func ContinuousConvert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubs
 // ContinuousFanOut creates a query that broadcasts events to multiple output streams.
 func ContinuousFanOut[T any]() func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
-		config := NewOperatorDescription(
+		config := MakeOperatorConfig(
 			FANOUT_OPERATOR,
-			WithInput(InputDescriptions(in, events.PolicyDescription{})...),
+			WithInput(MakeInputConfigs(in, events.PolicyDescription{})...),
 			WithOutput(out...),
 		)
 		return NewOperator[T, T](nil, config, id)

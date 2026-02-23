@@ -22,7 +22,7 @@ var (
 	ErrOperatorAlreadyExists       = errors.New("operator already exists")
 )
 
-func NewOperator[TIn, Tout any](operation any, d *OperatorDescription, id OperatorID) (OperatorID, error) {
+func NewOperator[TIn, Tout any](operation any, d OperatorConfig, id OperatorID) (OperatorID, error) {
 	if id != NilOperatorID() {
 		d.ID = id
 	}
