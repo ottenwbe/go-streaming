@@ -10,8 +10,8 @@ type number interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64
 }
 
-// ContinuousBatchSum creates a query that sums numeric events over a window defined by the selection policy.
-func ContinuousBatchSum[TEvent number](policy events.PolicyDescription) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+// BatchSum creates a query that sums numeric events over a window defined by the selection policy.
+func BatchSum[TEvent number](policy events.PolicyDescription) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
@@ -25,6 +25,8 @@ func ContinuousBatchSum[TEvent number](policy events.PolicyDescription) func(in 
 
 		config := MakeOperatorConfig(
 			PIPELINE_OPERATOR,
+			WithInput(MakeInputConfigs(in, policy)...),
+			WithOutput(out...),
 		)
 
 		op, err := NewOperator[TEvent, TEvent](batchSumF, config, id)
@@ -33,8 +35,8 @@ func ContinuousBatchSum[TEvent number](policy events.PolicyDescription) func(in 
 	}
 }
 
-// ContinuousBatchCount creates a query that counts events over a window defined by the selection policy.
-func ContinuousBatchCount[TEvent any, TOut number](policy events.PolicyDescription) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+// BatchCount creates a query that counts events over a window defined by the selection policy.
+func BatchCount[TEvent any, TOut number](policy events.PolicyDescription) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
@@ -53,8 +55,8 @@ func ContinuousBatchCount[TEvent any, TOut number](policy events.PolicyDescripti
 	}
 }
 
-// ContinuousGreater creates a query that filters events greater than a specified value.
-func ContinuousGreater[T number](greaterThan T) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+// Greater creates a query that filters events greater than a specified value.
+func Greater[T number](greaterThan T) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 		greater := func(input events.Event[T]) bool {
@@ -71,8 +73,8 @@ func ContinuousGreater[T number](greaterThan T) func(in []pubsub.StreamID, out [
 	}
 }
 
-// ContinuousSmaller creates a query that filters events smaller than a specified value.
-func ContinuousSmaller[T number](than T) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+// Smaller creates a query that filters events smaller than a specified value.
+func Smaller[T number](than T) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
@@ -90,8 +92,8 @@ func ContinuousSmaller[T number](than T) func(in []pubsub.StreamID, out []pubsub
 	}
 }
 
-// ContinuousConvert creates a query that converts events from one numeric type to another.
-func ContinuousConvert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+// Convert creates a query that converts events from one numeric type to another.
+func Convert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 		convert := func(input events.Event[TIn]) TOut {
@@ -108,14 +110,39 @@ func ContinuousConvert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubs
 	}
 }
 
-// ContinuousFanOut creates a query that broadcasts events to multiple output streams.
-func ContinuousFanOut[T any]() func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+// SelectFromMap creates an operator that selects a value from a map by key and forwards it.
+// The input stream must contain events of type `map[string]any`. The output will be of type `any`.
+// If the key is not found, the operator forwards an event with nil content.
+func SelectFromMap(key string) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+
+		mapper := func(event events.Event[map[string]any]) any {
+			if content := event.GetContent(); content != nil {
+				if value, ok := content[key]; ok {
+					return value
+				}
+			}
+			return nil
+		}
+
 		config := MakeOperatorConfig(
-			FANOUT_OPERATOR,
+			MAP_OPERATOR,
 			WithInput(MakeInputConfigs(in, events.PolicyDescription{})...),
 			WithOutput(out...),
 		)
-		return NewOperator[T, T](nil, config, id)
+
+		return NewOperator[map[string]any, any](mapper, config, id)
+	}
+}
+
+// Map creates a query that maps events from one type to another using a provided mapper function.
+func Map[TIn, TOut any](mapper func(events.Event[TIn]) TOut) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+		config := MakeOperatorConfig(
+			MAP_OPERATOR,
+			WithInput(MakeInputConfigs(in, events.PolicyDescription{})...),
+			WithOutput(out...),
+		)
+		return NewOperator[TIn, TOut](mapper, config, id)
 	}
 }

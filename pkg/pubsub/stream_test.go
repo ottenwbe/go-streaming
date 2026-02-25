@@ -247,7 +247,7 @@ var _ = Describe("Stream", func() {
 					<-start // wait to receive events until all events are published
 					received = append(received, e)
 					wg.Done()
-				})
+				}, pubsub.SubscriberIsSync(true))
 				defer pubsub.Unsubscribe(sub)
 
 				tmpEvents = append(tmpEvents, sendEvents...)
@@ -262,9 +262,12 @@ var _ = Describe("Stream", func() {
 				}
 
 				close(start)
+				// Start the stream processing after all events are in the buffer
+				pubsub.StartStream(streamID)
 
 				wg.Wait()
 				Expect(received).To(HaveExactElements(sendEvents))
+				Expect(received).To(Equal(sendEvents))
 			})
 		})
 	})

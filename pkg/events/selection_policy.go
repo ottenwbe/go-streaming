@@ -268,3 +268,144 @@ func PolicyDescriptionFromYML(b []byte) (PolicyDescription, error) {
 func (d PolicyDescription) ToYML() ([]byte, error) {
 	return yaml.Marshal(d)
 }
+
+// MultiEventSelection represents a map of buffer indices to their selected ranges.
+type MultiEventSelection map[int]EventSelection
+
+// MultiPolicy defines how events are selected from multiple buffers
+type MultiPolicy[T any] interface {
+	NextSelectionReady() bool
+	NextSelection() MultiEventSelection
+	UpdateSelection()
+	Shift()
+	Offset(bufferIndex int, offset int)
+	ID() PolicyID
+	SetBuffers(readers map[int]BufferReader[T])
+	Description() PolicyDescription
+	AddCallback(callback func(map[int][]Event[T]))
+}
+
+// MultiTemporalWindowPolicy selects events based on a time window across multiple buffers.
+type MultiTemporalWindowPolicy[T any] struct {
+	PolicyID
+	buffers      map[int]BufferReader[T]
+	currentRange MultiEventSelection
+	windowStart  time.Time
+	windowEnd    time.Time
+	windowLength time.Duration
+	windowShift  time.Duration
+	callbacks    []func(map[int][]Event[T])
+	fired        bool
+}
+
+func (s *MultiTemporalWindowPolicy[T]) AddCallback(callback func(map[int][]Event[T])) {
+	s.callbacks = append(s.callbacks, callback)
+}
+
+func (s *MultiTemporalWindowPolicy[T]) SetBuffers(buffers map[int]BufferReader[T]) {
+	s.buffers = buffers
+	s.currentRange = make(MultiEventSelection)
+	for id := range buffers {
+		s.currentRange[id] = EventSelection{0, -1}
+	}
+}
+
+func (s *MultiTemporalWindowPolicy[T]) NextSelection() MultiEventSelection {
+	return s.currentRange
+}
+
+func (s *MultiTemporalWindowPolicy[T]) NextSelectionReady() bool {
+	if len(s.buffers) == 0 {
+		return false
+	}
+	for _, buffer := range s.buffers {
+		if buffer.Len() == 0 {
+			return false
+		}
+		if !buffer.Get(buffer.Len() - 1).GetStamp().StartTime.After(s.windowEnd) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *MultiTemporalWindowPolicy[T]) UpdateSelection() {
+	for id, buffer := range s.buffers {
+		sel := s.currentRange[id]
+		startScan := sel.End + 1
+		for i := startScan; i < buffer.Len(); i++ {
+			ts := buffer.Get(i).GetStamp().StartTime
+
+			if ts.Before(s.windowStart) {
+				sel.Start = i + 1
+				sel.End = i
+			} else if ts.After(s.windowEnd) || ts.Equal(s.windowEnd) {
+				break
+			} else {
+				sel.End = i
+			}
+		}
+		s.currentRange[id] = sel
+	}
+
+	if s.NextSelectionReady() {
+		s.triggerCallbacks()
+	}
+}
+
+func (s *MultiTemporalWindowPolicy[T]) triggerCallbacks() {
+	if s.fired || len(s.callbacks) == 0 {
+		return
+	}
+	s.fired = true
+
+	events := make(map[int][]Event[T])
+	for id, sel := range s.currentRange {
+		for i := sel.Start; i <= sel.End; i++ {
+			events[id] = append(events[id], s.buffers[id].Get(i))
+		}
+	}
+	for _, cb := range s.callbacks {
+		cb(events)
+	}
+}
+
+func (s *MultiTemporalWindowPolicy[T]) Shift() {
+	s.windowStart = s.windowStart.Add(s.windowShift)
+	s.windowEnd = s.windowStart.Add(s.windowLength)
+	for id := range s.currentRange {
+		sel := s.currentRange[id]
+		sel.End = sel.Start - 1
+		s.currentRange[id] = sel
+	}
+	s.fired = false
+}
+
+func (s *MultiTemporalWindowPolicy[T]) Offset(bufferIndex int, offset int) {
+	if sel, ok := s.currentRange[bufferIndex]; ok {
+		sel.Start = max(-1, sel.Start-offset)
+		sel.End = max(-1, sel.End-offset)
+		s.currentRange[bufferIndex] = sel
+	}
+}
+
+func (s *MultiTemporalWindowPolicy[T]) Description() PolicyDescription {
+	return PolicyDescription{
+		Type:         TemporalWindow,
+		WindowStart:  s.windowStart,
+		WindowLength: s.windowLength,
+		WindowShift:  s.windowShift,
+	}
+}
+
+// NewMultiTemporalWindowPolicy creates a new MultiTemporalWindowPolicy
+func NewMultiTemporalWindowPolicy[T any](startingTime time.Time, windowLength time.Duration, windowShift time.Duration) MultiPolicy[T] {
+	return &MultiTemporalWindowPolicy[T]{
+		PolicyID:     PolicyID(uuid.New()),
+		currentRange: make(MultiEventSelection),
+		windowStart:  startingTime,
+		windowEnd:    startingTime.Add(windowLength),
+		windowLength: windowLength,
+		windowShift:  windowShift,
+	}
+}

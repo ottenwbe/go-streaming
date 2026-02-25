@@ -29,8 +29,8 @@ var _ = Describe("Builder API", func() {
 			// Source -> Greater(10) -> Output
 			b := query.NewBuilder[int]()
 			b.From(query.Source[int]("builder-source-1")).
-				Process(query.Operator[int](
-					query.ContinuousGreater[int](10),
+				Process(query.Operator[int]( //nolint:staticcheck
+					query.Greater[int](10),
 				))
 
 			q, err = b.Build(true)
@@ -71,7 +71,7 @@ var _ = Describe("Builder API", func() {
 			// No From() called
 
 			// Process requires input
-			b.Process(query.Operator[int](query.ContinuousGreater[int](10)))
+			b.Process(query.Operator[int](query.Greater[int](10)))
 
 			_, err := b.Build(false)
 			Expect(err).To(HaveOccurred())

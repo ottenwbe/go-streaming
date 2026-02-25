@@ -2,6 +2,7 @@ package processing_test
 
 import (
 	"errors"
+	"sync"
 	"sync/atomic"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -24,7 +25,7 @@ var _ = Describe("Continuous Query", func() {
 		q, err =
 			query.Query[int](
 				query.Process[int](
-					query.ContinuousSmaller[int](5),
+					query.Smaller[int](5),
 					query.FromSourceStream[int]("test"),
 				),
 			)
@@ -39,7 +40,7 @@ var _ = Describe("Continuous Query", func() {
 	})
 
 	AfterEach(func() {
-		query.Close(q)
+		_ = query.Close(q)
 	})
 
 	Context("Query filtering all events < 5", func() {
@@ -67,7 +68,7 @@ var _ = Describe("Continuous Query", func() {
 			pubsub.InstantPublishByTopic(topic, 1)
 			Eventually(count.Load).Should(Equal(int32(1)))
 
-			query.Close(q)
+			_ = query.Close(q)
 			pubsub.InstantPublishByTopic(topic, 2)
 			Consistently(count.Load).Should(Equal(int32(1)))
 		})
@@ -85,14 +86,14 @@ var _ = Describe("Continuous Query", func() {
 				query.WithRepository(repo1),
 			)
 			Expect(err1).To(BeNil())
-			defer query.Close(q1)
+			defer func() { _ = query.Close(q1) }()
 
 			q2, err2 := query.Query[int](
 				query.FromSourceStream[int](topic),
 				query.WithRepository(repo2),
 			)
 			Expect(err2).To(BeNil())
-			defer query.Close(q2)
+			defer func() { _ = query.Close(q2) }()
 
 			// Subscribe to both
 			var received1, received2 atomic.Int32
@@ -120,7 +121,7 @@ var _ = Describe("Continuous Query", func() {
 				query.WithNewRepository(),
 			)
 			Expect(err).To(BeNil())
-			defer query.Close(q)
+			defer func() { _ = query.Close(q) }()
 
 			// The default repository should NOT have this stream
 			_, err = pubsub.GetConfiguration(pubsub.MakeStreamID[int](topic))
@@ -142,6 +143,109 @@ var _ = Describe("Continuous Query", func() {
 			)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("op failed"))
+		})
+
+	})
+
+	Describe("Default Operators", func() {
+		Context("SelectFromMap", func() {
+			It("should select a key from a map and forward its value", func() {
+				topic := "map-select-topic"
+				q, err := query.Query[any](
+					query.Process[any](
+						query.SelectFromMap("city"),
+						query.FromSourceStream[map[string]any](topic),
+					),
+				)
+				Expect(err).To(BeNil())
+
+				var receivedValue any
+				var wg sync.WaitGroup
+				wg.Add(1)
+
+				err = q.Subscribe(func(e events.Event[any]) {
+					receivedValue = e.GetContent()
+					wg.Done()
+				})
+				Expect(err).To(BeNil())
+				err = q.Run()
+				Expect(err).To(BeNil())
+				defer query.Close(q)
+
+				pubsub.InstantPublishByTopic(topic, map[string]any{"name": "John", "city": "New York"})
+
+				wg.Wait()
+				Expect(receivedValue).To(Equal("New York"))
+			})
+
+			It("should forward nil if key is not found", func() {
+				topic := "map-select-fail-topic"
+				q, err := query.Query[any](
+					query.Process[any](
+						query.SelectFromMap("city"),
+						query.FromSourceStream[map[string]any](topic),
+					),
+				)
+				Expect(err).To(BeNil())
+
+				var receivedValue any
+				var wg sync.WaitGroup
+				wg.Add(1)
+
+				err = q.Subscribe(func(e events.Event[any]) {
+					receivedValue = e.GetContent()
+					wg.Done()
+				})
+				Expect(err).To(BeNil())
+				err = q.Run()
+				Expect(err).To(BeNil())
+				defer query.Close(q)
+
+				// Publish map without "city" key
+				pubsub.InstantPublishByTopic(topic, map[string]any{"name": "Jane", "country": "USA"})
+
+				wg.Wait()
+				Expect(receivedValue).To(BeNil())
+			})
+		})
+
+		Context("Map", func() {
+			It("should map events using a custom function", func() {
+				topic := "generic-map-topic"
+				mapper := func(e events.Event[int]) string {
+					if e.GetContent()%2 == 0 {
+						return "even"
+					}
+					return "odd"
+				}
+
+				q, err := query.Query[string](
+					query.Process[string](
+						query.Map(mapper),
+						query.FromSourceStream[int](topic),
+					),
+				)
+				Expect(err).To(BeNil())
+
+				var results []string
+				var wg sync.WaitGroup
+				wg.Add(2)
+
+				err = q.Subscribe(func(e events.Event[string]) {
+					results = append(results, e.GetContent())
+					wg.Done()
+				})
+				Expect(err).To(BeNil())
+				err = q.Run()
+				Expect(err).To(BeNil())
+				defer query.Close(q)
+
+				pubsub.InstantPublishByTopic(topic, 1)
+				pubsub.InstantPublishByTopic(topic, 2)
+
+				wg.Wait()
+				Expect(results).To(ContainElements("odd", "even"))
+			})
 		})
 	})
 })

@@ -14,7 +14,7 @@ var (
 	ErrAmbiguousOutput = errors.New("builder: query results in multiple output streams, cannot determine main output")
 )
 
-// Default Builder
+// Default Builder (Builder1):
 
 // Builder provides an API to construct ContinuousQueries.
 type Builder struct {
@@ -225,6 +225,26 @@ func (b *Builder) Build(run bool) (ContinuousQuery, error) {
 	}
 
 	return b.query, nil
+}
+
+// Builder 2:
+
+func FromSourceStream[T any](topic string, options ...pubsub.StreamOption) func(q ContinuousQuery) StreamWError {
+
+	return func(q ContinuousQuery) StreamWError {
+		if q == nil {
+			return StreamWError{pubsub.NilStreamID(), ErrQueryNil}
+		}
+
+		sid, err := pubsub.GetOrAddStreamOnRepository[T](q.repository(), topic, append(options, pubsub.WithAutoStart(false))...)
+		if err != nil {
+			return StreamWError{pubsub.NilStreamID(), err}
+		}
+
+		q.addStreams(sid)
+
+		return StreamWError{sid, err}
+	}
 }
 
 func Process[T any](

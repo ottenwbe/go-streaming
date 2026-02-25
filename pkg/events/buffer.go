@@ -33,7 +33,7 @@ type Buffer[T any] interface {
 	GetAndRemoveNextEvent() Event[T]
 }
 
-type iterator[T any] struct {
+type Iterator[T any] struct {
 	x      int
 	buffer Buffer[T]
 }
@@ -49,8 +49,8 @@ type asyncBuffer[T any] struct {
 }
 
 // SimpleAsyncBuffer allows to sync exactly one reader and n writer.
-// The Read operations GetNextEvent and RemoveNextEvent either return the next event,
-// if any is available in the buffer or wait until next event is available.
+// The Read operations GetNextEvent and RemoveNextEvent either return the Next event,
+// if any is available in the buffer or wait until Next event is available.
 type SimpleAsyncBuffer[T any] struct {
 	*asyncBuffer[T]
 }
@@ -74,8 +74,8 @@ type LimitedConsumableAsyncBuffer[T any] struct {
 }
 
 // ConsumableAsyncBuffer allows to sync exactly one reader and n writer.
-// The Read operations PeekNextEvent and RemoveNextEvent either return the next event,
-// if any is available in the buffer or wait until next event is available based on a selection policy.
+// The Read operations PeekNextEvent and RemoveNextEvent either return the Next event,
+// if any is available in the buffer or wait until Next event is available based on a selection policy.
 // see selection.Policy[T]
 type ConsumableAsyncBuffer[T any] struct {
 	*asyncBuffer[T]
@@ -184,7 +184,7 @@ func (s *asyncBuffer[T]) Dump() []Event[T] {
 	return destination
 }
 
-// PeekNextEvent returns the next buffered event, but no event will be removed from the buffer.
+// PeekNextEvent returns the Next buffered event, but no event will be removed from the buffer.
 // Blocks until at least one event buffered.
 // When stopped, returns nil.
 func (s *asyncBuffer[T]) PeekNextEvent() Event[T] {
@@ -221,7 +221,7 @@ func (s *asyncBuffer[T]) GetAndRemoveNextEvent() Event[T] {
 	return nil
 }
 
-// GetAndConsumeNextEvents returns the next event from the buffer and removes it.
+// GetAndConsumeNextEvents returns the Next event from the buffer and removes it.
 func (s *SimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []Event[T] {
 	e := s.asyncBuffer.GetAndRemoveNextEvent()
 	if e != nil {
@@ -317,7 +317,7 @@ func (s *SortedSimpleAsyncBuffer[T]) AddEvent(event Event[T]) error {
 	return nil
 }
 
-// GetAndConsumeNextEvents returns the next event from the buffer and removes it.
+// GetAndConsumeNextEvents returns the Next event from the buffer and removes it.
 func (s *SortedSimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []Event[T] {
 	nextEvents := s.SimpleAsyncBuffer.GetAndConsumeNextEvents()
 	if s.limit > 0 && len(nextEvents) > 0 {
@@ -326,7 +326,7 @@ func (s *SortedSimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []Event[T] {
 	return nextEvents
 }
 
-// GetAndRemoveNextEvent returns the next event from the buffer and removes it.
+// GetAndRemoveNextEvent returns the Next event from the buffer and removes it.
 func (s *SortedSimpleAsyncBuffer[T]) GetAndRemoveNextEvent() Event[T] {
 	event := s.SimpleAsyncBuffer.GetAndRemoveNextEvent()
 	if s.limit > 0 && event != nil {
@@ -335,7 +335,7 @@ func (s *SortedSimpleAsyncBuffer[T]) GetAndRemoveNextEvent() Event[T] {
 	return event
 }
 
-// GetAndConsumeNextEvents returns the next buffered events and removes this event from the buffer.
+// GetAndConsumeNextEvents returns the Next buffered events and removes this event from the buffer.
 // Blocks until at least one event buffered.
 // When stopped, returns nil.
 func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []Event[T] {
@@ -454,7 +454,7 @@ func (s *LimitedSimpleAsyncBuffer[T]) AddEvent(event Event[T]) error {
 	return nil
 }
 
-// GetAndConsumeNextEvents returns the next event from the buffer and removes it.
+// GetAndConsumeNextEvents returns the Next event from the buffer and removes it.
 func (s *LimitedSimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []Event[T] {
 	nextEvents := s.SimpleAsyncBuffer.GetAndConsumeNextEvents()
 
@@ -464,7 +464,7 @@ func (s *LimitedSimpleAsyncBuffer[T]) GetAndConsumeNextEvents() []Event[T] {
 	return nextEvents
 }
 
-// GetAndRemoveNextEvent returns the next event from the buffer and removes it.
+// GetAndRemoveNextEvent returns the Next event from the buffer and removes it.
 func (s *LimitedSimpleAsyncBuffer[T]) GetAndRemoveNextEvent() Event[T] {
 	event := s.SimpleAsyncBuffer.GetAndRemoveNextEvent()
 	if event != nil {
@@ -516,7 +516,7 @@ func (s *LimitedConsumableAsyncBuffer[T]) AddEvent(event Event[T]) error {
 	return nil
 }
 
-// GetAndConsumeNextEvents returns the next event from the buffer and removes it.
+// GetAndConsumeNextEvents returns the Next event from the buffer and removes it.
 func (s *LimitedConsumableAsyncBuffer[T]) GetAndConsumeNextEvents() []Event[T] {
 	nextEvents := s.ConsumableAsyncBuffer.GetAndConsumeNextEvents()
 
@@ -532,18 +532,18 @@ func (s *LimitedConsumableAsyncBuffer[T]) GetAndRemoveNextEvent() Event[T] {
 	return e
 }
 
-func (i *iterator[T]) hasNext() bool {
+func (i *Iterator[T]) HasNext() bool {
 	return i.x < i.buffer.Len()
 }
 
-func (i *iterator[T]) next() Event[T] {
+func (i *Iterator[T]) Next() Event[T] {
 	e := i.buffer.Get(i.x)
 	i.x++
 	return e
 }
 
-func newIterator[T any](buffer Buffer[T]) *iterator[T] {
-	return &iterator[T]{
+func NewIterator[T any](buffer Buffer[T]) *Iterator[T] {
+	return &Iterator[T]{
 		x:      0,
 		buffer: buffer,
 	}

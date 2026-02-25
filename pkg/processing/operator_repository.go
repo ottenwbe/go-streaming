@@ -10,16 +10,17 @@ import (
 )
 
 var (
-	ErrPipelineOperatorInputOutput = errors.New("pipeline operator needs exactly length 1 for inputs and outputs")
+	ErrPipelineOperatorInputOutput = errors.New("pipeline operator needs exactly 1 input and at least 1 output")
 	ErrInvalidPipelineOperation    = errors.New("invalid operation type for pipeline operator, expected func([]events.Event[TIn]) []Tout")
-	ErrFilterOperatorInputOutput   = errors.New("filter operator needs exactly 1 input and 1 output")
+	ErrFilterOperatorInputOutput   = errors.New("filter operator needs exactly 1 input and at least 1 output")
 	ErrInvalidFilterPredicate      = errors.New("invalid predicate type for filter operator, expected func(events.Event[TIn]) bool")
 	ErrUnknownOperatorType         = errors.New("unknown operator type")
-	ErrMapOperatorInputOutput      = errors.New("map operator needs exactly 1 input and 1 output")
+	ErrMapOperatorInputOutput      = errors.New("map operator needs exactly 1 input and at least 1 output")
 	ErrInvalidMapOperation         = errors.New("invalid operation type for map operator, expected func(events.Event[TIn]) Tout")
 	ErrNilOperator                 = errors.New("operator is considered nil (either id or operator is nil)")
-	ErrFanoutOperatorInputOutput   = errors.New("fanout operator needs exactly 1 input and at least 1 output")
 	ErrOperatorAlreadyExists       = errors.New("operator already exists")
+	ErrJoinOperatorInputOutput     = errors.New("join operator needs at least 2 inputs and at least 1 output")
+	ErrInvalidJoinOperation        = errors.New("invalid operation type for join operator, expected func(map[int][]events.Event[TIn]) []Tout")
 )
 
 func NewOperator[TIn, Tout any](operation any, d OperatorConfig, id OperatorID) (OperatorID, error) {
@@ -32,7 +33,7 @@ func NewOperator[TIn, Tout any](operation any, d OperatorConfig, id OperatorID) 
 	switch d.Type {
 	case PIPELINE_OPERATOR:
 		// validate
-		if len(d.Outputs) != 1 || len(d.Inputs) != 1 {
+		if len(d.Outputs) < 1 || len(d.Inputs) != 1 {
 			return NilOperatorID(), ErrPipelineOperatorInputOutput
 		}
 
@@ -50,7 +51,7 @@ func NewOperator[TIn, Tout any](operation any, d OperatorConfig, id OperatorID) 
 		}
 	case FILTER_OPERATOR:
 		// validate
-		if len(d.Outputs) != 1 || len(d.Inputs) != 1 {
+		if len(d.Outputs) < 1 || len(d.Inputs) != 1 {
 			return NilOperatorID(), ErrFilterOperatorInputOutput
 		}
 
@@ -68,7 +69,7 @@ func NewOperator[TIn, Tout any](operation any, d OperatorConfig, id OperatorID) 
 		}
 	case MAP_OPERATOR:
 		// validate
-		if len(d.Outputs) != 1 || len(d.Inputs) != 1 {
+		if len(d.Outputs) < 1 || len(d.Inputs) != 1 {
 			return NilOperatorID(), ErrMapOperatorInputOutput
 		}
 
@@ -84,13 +85,19 @@ func NewOperator[TIn, Tout any](operation any, d OperatorConfig, id OperatorID) 
 			},
 			mapper: mapper,
 		}
-	case FANOUT_OPERATOR:
+	case JOIN_OPERATOR:
 		// validate
-		if len(d.Inputs) != 1 || len(d.Outputs) < 1 {
-			return NilOperatorID(), ErrFanoutOperatorInputOutput
+		if len(d.Inputs) < 2 || len(d.Outputs) < 1 {
+			return NilOperatorID(), ErrJoinOperatorInputOutput
 		}
-		o = &FanOutOperatorEngine[TIn]{
-			config: d,
+		op, ok := operation.(func(map[int][]events.Event[TIn]) []Tout)
+		if !ok {
+			return NilOperatorID(), ErrInvalidJoinOperation
+		}
+
+		o = &JoinOperatorEngine[TIn, Tout]{
+			baseOperatorEngine: baseOperatorEngine[TIn, Tout]{config: d},
+			joinFunction:       op,
 		}
 	default:
 		return NilOperatorID(), fmt.Errorf("%w: %s", ErrUnknownOperatorType, d.Type)
@@ -103,16 +110,22 @@ func NewOperator[TIn, Tout any](operation any, d OperatorConfig, id OperatorID) 
 
 	if d.AutoStart {
 		err = o.Start()
+		if err != nil {
+			OperatorRepository().remove(o)
+			return NilOperatorID(), err
+		}
 	}
 	return o.ID(), err
 }
 
-func RemoveOperator(oid OperatorID) {
+func RemoveOperator(oid OperatorID) error {
 	o, found := OperatorRepository().Get(oid)
 	if found {
-		_ = o.Stop()
+		err := o.Stop()
 		OperatorRepository().remove(o)
+		return err
 	}
+	return nil
 }
 
 type ORepository interface {
