@@ -73,11 +73,13 @@ func (o *baseOperatorEngine[TIN, TOUT]) start(processFunc func(in ...events.Even
 	for _, outID := range o.config.Outputs {
 		pub, err := pubsub.RegisterPublisher[TOUT](outID)
 		if err != nil {
+			var errs []error
+			errs = append(errs, err)
 			for _, p := range o.Outputs {
-				_ = pubsub.UnRegisterPublisher(p)
+				errs = append(errs, pubsub.UnRegisterPublisher(p))
 			}
 			o.active.Store(false)
-			return err
+			return errors.Join(errs...)
 		}
 		o.Outputs = append(o.Outputs, pub)
 	}
@@ -90,11 +92,13 @@ func (o *baseOperatorEngine[TIN, TOUT]) start(processFunc func(in ...events.Even
 		pubsub.SubscriberWithSelectionPolicy(policy))
 
 	if err != nil {
+		var errs []error
+		errs = append(errs, err)
 		for _, p := range o.Outputs {
-			_ = pubsub.UnRegisterPublisher(p)
+			errs = append(errs, pubsub.UnRegisterPublisher(p))
 		}
 		o.active.Store(false)
-		return err
+		return errors.Join(errs...)
 	}
 
 	return nil
@@ -175,12 +179,14 @@ func (o *FanInOperatorEngine[TIn, TOut]) Start() error {
 	for _, outID := range o.config.Outputs {
 		pub, err := pubsub.RegisterPublisher[TOut](outID)
 		if err != nil {
+			var errs []error
+			errs = append(errs, err)
 			// if we fail, unregister any publishers we already created
 			for _, p := range o.Outputs {
-				_ = pubsub.UnRegisterPublisher(p)
+				errs = append(errs, pubsub.UnRegisterPublisher(p))
 			}
 			o.active.Store(false)
-			return err
+			return errors.Join(errs...)
 		}
 		o.Outputs = append(o.Outputs, pub)
 	}
@@ -206,15 +212,17 @@ func (o *FanInOperatorEngine[TIn, TOut]) Start() error {
 			o.processInput(idx, e)
 		})
 		if err != nil {
+			var errs []error
+			errs = append(errs, err)
 			// if we fail, clean up everything we've created so far
 			for _, p := range o.Outputs {
-				_ = pubsub.UnRegisterPublisher(p)
+				errs = append(errs, pubsub.UnRegisterPublisher(p))
 			}
 			for _, s := range o.inputs {
-				_ = pubsub.Unsubscribe(s)
+				errs = append(errs, pubsub.Unsubscribe(s))
 			}
 			o.active.Store(false)
-			return err
+			return errors.Join(errs...)
 		}
 		o.inputs = append(o.inputs, sub)
 	}
@@ -318,11 +326,13 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) Start() error {
 	for _, outID := range o.config.Outputs {
 		pub, err := pubsub.RegisterPublisher[TOut](outID)
 		if err != nil {
+			var errs []error
+			errs = append(errs, err)
 			for _, p := range o.outputs {
-				_ = pubsub.UnRegisterPublisher(p)
+				errs = append(errs, pubsub.UnRegisterPublisher(p))
 			}
 			o.active.Store(false)
-			return err
+			return errors.Join(errs...)
 		}
 		o.outputs = append(o.outputs, pub)
 	}
@@ -334,11 +344,12 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) Start() error {
 	if pDesc.Type == events.TemporalWindow {
 		o.policy = events.NewDuoTemporalWindowPolicy[TLeft, TRight](pDesc.WindowStart, pDesc.WindowLength, pDesc.WindowShift)
 	} else {
+		var errs []error
 		for _, p := range o.outputs {
-			_ = pubsub.UnRegisterPublisher(p)
+			errs = append(errs, pubsub.UnRegisterPublisher(p))
 		}
 		o.active.Store(false)
-		return fmt.Errorf("unsupported policy for join: %s", pDesc.Type)
+		return errors.Join(append(errs, fmt.Errorf("unsupported policy for join: %s", pDesc.Type))...)
 	}
 
 	o.policy.SetBuffers(o.bufferLeft, o.bufferRight)
@@ -451,11 +462,13 @@ func (o *MapOperatorEngine[TIN, TOUT]) Start() error {
 	for _, outID := range o.config.Outputs {
 		pub, err := pubsub.RegisterPublisher[TOUT](outID)
 		if err != nil {
+			var errs []error
+			errs = append(errs, err)
 			for _, p := range o.Outputs {
-				_ = pubsub.UnRegisterPublisher(p)
+				errs = append(errs, pubsub.UnRegisterPublisher(p))
 			}
 			o.active.Store(false)
-			return err
+			return errors.Join(errs...)
 		}
 		o.Outputs = append(o.Outputs, pub)
 	}
@@ -466,12 +479,14 @@ func (o *MapOperatorEngine[TIN, TOUT]) Start() error {
 		o.ProcessSingleEvent,
 		pubsub.SubscriberIsSync(false))
 	if err != nil {
+		var errs []error
+		errs = append(errs, err)
 		// if subscription fails, we need to clean up the publishers we just created
 		for _, p := range o.Outputs {
-			_ = pubsub.UnRegisterPublisher(p)
+			errs = append(errs, pubsub.UnRegisterPublisher(p))
 		}
 		o.active.Store(false)
-		return err
+		return errors.Join(errs...)
 	}
 	return nil
 }
