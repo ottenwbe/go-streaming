@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/log"
 	"github.com/ottenwbe/go-streaming/pkg/processing"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"go.uber.org/zap"
@@ -15,13 +16,13 @@ var (
 )
 
 func main() {
+	log.SetLogger(zap.S())
 	// define the query
-	q, err := processing.Query[int](
-		processing.Process[int](
-			processing.ContinuousGreater[int](50),
-			processing.FromSourceStream[int]("in", pubsub.WithAsynchronousStream(true)),
-		),
-	)
+	b := processing.NewBuilder[int]()
+	b.From(processing.Source[int]("in", pubsub.WithAsynchronousStream(true))).
+		Process(processing.Operator[int](processing.Greater[int](50)))
+
+	q, err := b.Build(false)
 	if err != nil {
 		zap.S().Fatal("could not create query", zap.Error(err))
 	}

@@ -19,7 +19,7 @@ type ContinuousQuery interface {
 	addStreams(streams ...pubsub.StreamID)
 	addOperations(operators ...OperatorID)
 	ID() ID
-	close()
+	close() error
 	Run() error
 	Subscribe(callback any, options ...pubsub.SubscriberOption) error
 	out(from pubsub.StreamID)
@@ -34,17 +34,17 @@ type TypedContinuousQuery[T any] struct {
 	streams   []pubsub.StreamID
 	outStream pubsub.StreamID
 
-	subscriptions []pubsub.Subscriber[T]
+	subscriptions []pubsub.TypedSubscriber[T]
 	closeOnce     sync.Once
 	repo          *pubsub.StreamRepository
 }
 
 // Close stops the query and unsubscribes the output receiver.
-func Close(qs ContinuousQuery) {
+func Close(qs ContinuousQuery) error {
 	if qs == nil {
-		return
+		return nil
 	}
-	qs.close()
+	return qs.close()
 }
 
 // ID returns the unique identifier of the query.
@@ -78,35 +78,45 @@ func (c *TypedContinuousQuery[T]) Subscribe(
 func (c *TypedContinuousQuery[T]) Run() error {
 	var err error
 	for _, sid := range c.streams {
-		_ = c.repo.StartStream(sid)
+		if e := c.repo.StartStream(sid); e != nil {
+			err = errors.Join(err, e)
+		}
 	}
 
 	for _, oid := range c.operators {
 		op, exists := OperatorRepository().Get(oid)
 		if exists {
-			err = op.Start()
+			if e := op.Start(); e != nil {
+				err = errors.Join(err, e)
+			}
 		}
 	}
 	if err != nil {
+		_ = c.close()
 		return err
 	}
 	return QueryRepository().put(c)
 }
 
-func (c *TypedContinuousQuery[T]) close() {
-
+func (c *TypedContinuousQuery[T]) close() error {
+	var errs error
 	c.closeOnce.Do(func() {
 		for _, sub := range c.subscriptions {
-			pubsub.UnsubscribeOnRepository(c.repo, sub)
+			if err := pubsub.UnsubscribeOnRepository(c.repo, sub); err != nil {
+				errs = errors.Join(errs, err)
+			}
 		}
 
 		for _, o := range c.operators {
-			RemoveOperator(o)
+			if err := RemoveOperator(o); err != nil {
+				errs = errors.Join(errs, err)
+			}
 		}
 		c.repo.TryRemoveStreams(c.streams...)
 
 		QueryRepository().remove(c.id)
 	})
+	return errs
 }
 
 func newContinuousQuery[T any](opts ...QueryOption) ContinuousQuery {
@@ -141,22 +151,4 @@ func in(streams []pubsub.StreamID, id pubsub.StreamID) bool {
 		}
 	}
 	return false
-}
-
-func FromSourceStream[T any](topic string, options ...pubsub.StreamOption) func(q ContinuousQuery) StreamWError {
-
-	return func(q ContinuousQuery) StreamWError {
-		if q == nil {
-			return StreamWError{pubsub.NilStreamID(), ErrQueryNil}
-		}
-
-		sid, err := pubsub.GetOrAddStreamOnRepository[T](q.repository(), topic, append(options, pubsub.WithAutoStart(false))...)
-		if err != nil {
-			return StreamWError{pubsub.NilStreamID(), err}
-		}
-
-		q.addStreams(sid)
-
-		return StreamWError{sid, err}
-	}
 }

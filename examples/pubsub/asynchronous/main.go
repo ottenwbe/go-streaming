@@ -25,8 +25,8 @@ func main() {
 	defer pubsub.TryRemoveStreams(intStreamID)
 
 	// 2. Subscribe to the topic 'Some Integers'
-	startSubscriber("Subscriber 1", intStreamID, 2*time.Microsecond)
-	startSubscriber("Subscriber 2", intStreamID, time.Microsecond)
+	startSubscriber("TypedSubscriber 1", intStreamID, 2*time.Microsecond)
+	startSubscriber("TypedSubscriber 2", intStreamID, time.Microsecond)
 
 	// 3. PublishContent events to the topic 'Some Integers'
 	startPublisher(intStreamID, &wg)
@@ -69,7 +69,7 @@ func unregister(streamID pubsub.StreamID, publisher pubsub.Publisher[int]) {
 	}
 }
 
-func unsubscribe(name string, streamID pubsub.StreamID, subscriber pubsub.Subscriber[int]) {
+func unsubscribe(name string, streamID pubsub.StreamID, subscriber pubsub.TypedSubscriber[int]) {
 	err := pubsub.Unsubscribe(subscriber)
 	if err != nil {
 		zap.S().Fatalf("%v could not unsubscribe from %v", name, streamID)

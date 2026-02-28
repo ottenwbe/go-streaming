@@ -14,7 +14,7 @@ var (
 	ErrAmbiguousOutput = errors.New("builder: query results in multiple output streams, cannot determine main output")
 )
 
-// Default Builder
+// Default Builder (Builder1):
 
 // Builder provides an API to construct ContinuousQueries.
 type Builder struct {
@@ -78,7 +78,13 @@ func (b *Builder) From(createFunc StreamCreationOptions) *Builder {
 	return b
 }
 
-func (b *Builder) Join(b2 *Builder) *Builder {
+// AddInput adds a stream to the query. It is an alias for From.
+func (b *Builder) AddInput(createFunc StreamCreationOptions) *Builder {
+	return b.From(createFunc)
+}
+
+// Merge merges the state of another builder into this one.
+func (b *Builder) Merge(b2 *Builder) *Builder {
 	if b.err != nil {
 		return b
 	}
@@ -192,6 +198,9 @@ func (b *Builder) Build(run bool) (ContinuousQuery, error) {
 	if len(b.current) == 0 {
 		return nil, ErrOutputUndefined
 	}
+	if len(b.current) > 1 {
+		return nil, ErrAmbiguousOutput
+	}
 	b.query.out(b.current[0])
 
 	// create all streams
@@ -227,6 +236,28 @@ func (b *Builder) Build(run bool) (ContinuousQuery, error) {
 	return b.query, nil
 }
 
+// Builder 2:
+
+// Deprecated: Use NewBuilder() and Builder.From() instead.
+func FromSourceStream[T any](topic string, options ...pubsub.StreamOption) func(q ContinuousQuery) StreamWError {
+
+	return func(q ContinuousQuery) StreamWError {
+		if q == nil {
+			return StreamWError{pubsub.NilStreamID(), ErrQueryNil}
+		}
+
+		sid, err := pubsub.GetOrAddStreamOnRepository[T](q.repository(), topic, append(options, pubsub.WithAutoStart(false))...)
+		if err != nil {
+			return StreamWError{pubsub.NilStreamID(), err}
+		}
+
+		q.addStreams(sid)
+
+		return StreamWError{sid, err}
+	}
+}
+
+// Deprecated: Use NewBuilder() and Builder.Process() instead.
 func Process[T any](
 	operatorCreationFunc func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error),
 	fromF func(q ContinuousQuery) StreamWError,
@@ -259,6 +290,7 @@ func Process[T any](
 	}
 }
 
+// Deprecated: Use NewBuilder() instead.
 func Query[T any](
 	fromF func(q ContinuousQuery) StreamWError,
 	opts ...QueryOption,
@@ -279,10 +311,12 @@ func Query[T any](
 	return q, from.error
 }
 
+// Deprecated: Use NewBuilder() instead.
 func OnStream[T any](stream StreamWError) StreamWError {
 	return stream
 }
 
+// Deprecated: Use NewBuilder() instead.
 type StreamWError struct {
 	streamID pubsub.StreamID
 	error    error

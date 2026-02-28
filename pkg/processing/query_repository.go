@@ -3,6 +3,7 @@ package processing
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/google/uuid"
 )
@@ -31,42 +32,59 @@ type (
 	}
 )
 
-type concreteQueryRepository map[ID]ContinuousQuery
+type concreteQueryRepository struct {
+	queries map[ID]ContinuousQuery
+	mutex   sync.RWMutex
+}
 
-func (c concreteQueryRepository) String() string {
+func (c *concreteQueryRepository) String() string {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 
 	s := "ContinuousQueryRepository {"
-	for id := range c.List() {
+	for id := range c.queries {
 		s = fmt.Sprintf("%v %v, \n", s, id)
 	}
 	s += "}"
 	return s
 }
 
-func (c concreteQueryRepository) Get(id ID) (q ContinuousQuery, ok bool) {
-	q, ok = c[id]
+func (c *concreteQueryRepository) Get(id ID) (q ContinuousQuery, ok bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	q, ok = c.queries[id]
 	return
 }
 
-func (c concreteQueryRepository) remove(id ID) {
-	delete(c, id)
+func (c *concreteQueryRepository) remove(id ID) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	delete(c.queries, id)
 }
 
-func (c concreteQueryRepository) put(q ContinuousQuery) error {
+func (c *concreteQueryRepository) put(q ContinuousQuery) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if q.ID() == ID(uuid.Nil) {
 		return ErrInvalidQueryID
 	}
-	if _, ok := c.Get(q.ID()); ok {
+	if _, ok := c.queries[q.ID()]; ok {
 		return ErrQueryAlreadyExists
 	}
 
-	c[q.ID()] = q
+	c.queries[q.ID()] = q
 
 	return nil
 }
 
-func (c concreteQueryRepository) List() map[ID]ContinuousQuery {
-	return c
+func (c *concreteQueryRepository) List() map[ID]ContinuousQuery {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	res := make(map[ID]ContinuousQuery, len(c.queries))
+	for k, v := range c.queries {
+		res[k] = v
+	}
+	return res
 }
 
 var (
@@ -79,5 +97,7 @@ func QueryRepository() Repository {
 }
 
 func init() {
-	queryRepository = concreteQueryRepository{}
+	queryRepository = &concreteQueryRepository{
+		queries: make(map[ID]ContinuousQuery),
+	}
 }

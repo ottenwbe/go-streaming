@@ -9,7 +9,8 @@ const (
 	PIPELINE_OPERATOR = "PIPELINE_OPERATOR"
 	FILTER_OPERATOR   = "FILTER_OPERATOR"
 	MAP_OPERATOR      = "MAP_OPERATOR"
-	FANOUT_OPERATOR   = "FANOUT_OPERATOR"
+	FANIN_OPERATOR    = "FANIN_OPERATOR" // For homogeneous multi-stream operations
+	JOIN_OPERATOR     = "JOIN_OPERATOR"  // For heterogeneous 2-stream joins
 )
 
 type InputConfig struct {

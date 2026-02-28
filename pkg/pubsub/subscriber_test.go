@@ -13,7 +13,7 @@ import (
 
 var handler = func(event events.Event[string]) {}
 
-var _ = Describe("Subscriber", func() {
+var _ = Describe("TypedSubscriber", func() {
 
 	Describe("SubscriberID", func() {
 		It("should return its string representation", func() {
@@ -73,7 +73,7 @@ var _ = Describe("Subscriber", func() {
 
 	Describe("bufferedSubscriber", func() {
 		var (
-			rec      Subscriber[string]
+			rec      TypedSubscriber[string]
 			streamID StreamID
 			nMap     *notificationMap[string]
 			result   events.Event[string]
@@ -111,7 +111,7 @@ var _ = Describe("Subscriber", func() {
 
 	Describe("bufferedSubscriber with limit", func() {
 		var (
-			rec      Subscriber[string]
+			rec      TypedSubscriber[string]
 			streamID StreamID
 			nMap     *notificationMap[string]
 			result   events.Event[string]

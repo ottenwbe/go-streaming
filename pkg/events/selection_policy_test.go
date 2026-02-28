@@ -1,6 +1,7 @@
 package events_test
 
 import (
+	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -19,9 +20,9 @@ var _ = Describe("Policy", func() {
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")
 
-				b.AddEvents(events.Arr(e1, e2, e3))
+				b.AddEvents(context.Background(), events.Arr(e1, e2, e3))
 
-				es := b.GetAndConsumeNextEvents()
+				es, _ := b.GetAndConsumeNextEvents(context.Background())
 
 				Expect(es).To(Equal([]events.Event[string]{e1, e2}))
 			})
@@ -32,11 +33,11 @@ var _ = Describe("Policy", func() {
 				e3 := events.NewEvent("e3")
 				e4 := events.NewEvent("e4")
 
-				b.AddEvents(events.Arr(e1, e2, e3, e4))
+				b.AddEvents(context.Background(), events.Arr(e1, e2, e3, e4))
 
-				es1 := b.GetAndConsumeNextEvents()
-				es2 := b.GetAndConsumeNextEvents()
-				es3 := b.GetAndConsumeNextEvents()
+				es1, _ := b.GetAndConsumeNextEvents(context.Background())
+				es2, _ := b.GetAndConsumeNextEvents(context.Background())
+				es3, _ := b.GetAndConsumeNextEvents(context.Background())
 
 				Expect(es1).To(Equal([]events.Event[string]{e1, e2}))
 				Expect(es2).To(Equal([]events.Event[string]{e2, e3}))
@@ -48,17 +49,18 @@ var _ = Describe("Policy", func() {
 
 				e1 := events.NewEvent("e1")
 				e2 := events.NewEvent("e2")
-				b.AddEvents(events.Arr(e1, e2))
+				b.AddEvents(context.Background(), events.Arr(e1, e2))
 
 				done := make(chan []events.Event[string])
 				go func() {
 					defer GinkgoRecover()
-					done <- b.GetAndConsumeNextEvents()
+					res, _ := b.GetAndConsumeNextEvents(context.Background())
+					done <- res
 				}()
 
 				Consistently(done).ShouldNot(Receive())
 
-				b.AddEvent(events.NewEvent("e3"))
+				b.AddEvent(context.Background(), events.NewEvent("e3"))
 				Eventually(done).Should(Receive(HaveLen(3)))
 			})
 			It("handles shifts larger than size (skipping events)", func() {
@@ -67,10 +69,10 @@ var _ = Describe("Policy", func() {
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")
 
-				b.AddEvents(events.Arr(e1, e2, e3))
+				b.AddEvents(context.Background(), events.Arr(e1, e2, e3))
 
-				es1 := b.GetAndConsumeNextEvents()
-				es2 := b.GetAndConsumeNextEvents()
+				es1, _ := b.GetAndConsumeNextEvents(context.Background())
+				es2, _ := b.GetAndConsumeNextEvents(context.Background())
 
 				Expect(es1).To(Equal([]events.Event[string]{e1}))
 				Expect(es2).To(Equal([]events.Event[string]{e3}))
@@ -82,10 +84,10 @@ var _ = Describe("Policy", func() {
 				e3 := events.NewEvent("e3")
 				e4 := events.NewEvent("e4")
 
-				b.AddEvents(events.Arr(e1, e2, e3, e4))
+				b.AddEvents(context.Background(), events.Arr(e1, e2, e3, e4))
 
-				es1 := b.GetAndConsumeNextEvents()
-				es2 := b.GetAndConsumeNextEvents()
+				es1, _ := b.GetAndConsumeNextEvents(context.Background())
+				es2, _ := b.GetAndConsumeNextEvents(context.Background())
 
 				Expect(es1).To(Equal([]events.Event[string]{e1, e2, e3}))
 				Expect(es2).To(Equal([]events.Event[string]{e2, e3, e4}))
@@ -132,10 +134,10 @@ var _ = Describe("Policy", func() {
 				w := events.NewTemporalWindowPolicy[string](e1.GetStamp().StartTime, time.Hour, time.Minute*10)
 				b := events.NewConsumableAsyncBuffer(w)
 
-				b.AddEvents(events.Arr[string](e1, e2, e3, e4))
+				b.AddEvents(context.Background(), events.Arr[string](e1, e2, e3, e4))
 
-				es1 := b.GetAndConsumeNextEvents()
-				es2 := b.GetAndConsumeNextEvents()
+				es1, _ := b.GetAndConsumeNextEvents(context.Background())
+				es2, _ := b.GetAndConsumeNextEvents(context.Background())
 
 				Expect(es1).To(Equal(events.Arr[string](e1, e2)))
 				Expect(es2).To(Equal(events.Arr[string](e2, e3)))
@@ -186,11 +188,11 @@ var _ = Describe("Policy", func() {
 				w := events.NewTemporalWindowPolicy[string](e1.GetStamp().StartTime, time.Minute*30, time.Minute*30)
 				b := events.NewConsumableAsyncBuffer(w)
 
-				b.AddEvents(events.Arr[string](e1, e2, e3, e4, e5))
+				b.AddEvents(context.Background(), events.Arr[string](e1, e2, e3, e4, e5))
 
-				es1 := b.GetAndConsumeNextEvents()
-				es2 := b.GetAndConsumeNextEvents()
-				es3 := b.GetAndConsumeNextEvents()
+				es1, _ := b.GetAndConsumeNextEvents(context.Background())
+				es2, _ := b.GetAndConsumeNextEvents(context.Background())
+				es3, _ := b.GetAndConsumeNextEvents(context.Background())
 
 				Expect(es1).To(Equal(events.Arr[string](e1, e2, e3)))
 				Expect(es2).To(Equal(events.Arr[string]()))
@@ -219,10 +221,10 @@ var _ = Describe("Policy", func() {
 				w := events.NewTemporalWindowPolicy[string](startTime, time.Minute*10, time.Minute*10)
 				b := events.NewConsumableAsyncBuffer(w)
 
-				b.AddEvents(events.Arr[string](e1, e2, e3, e4))
+				b.AddEvents(context.Background(), events.Arr[string](e1, e2, e3, e4))
 
-				es1 := b.GetAndConsumeNextEvents()
-				es2 := b.GetAndConsumeNextEvents()
+				es1, _ := b.GetAndConsumeNextEvents(context.Background())
+				es2, _ := b.GetAndConsumeNextEvents(context.Background())
 
 				Expect(es1).To(Equal(events.Arr[string](e1, e2)))
 				Expect(es2).To(Equal(events.Arr[string](e3)))
@@ -237,9 +239,9 @@ var _ = Describe("Policy", func() {
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")
 
-				b.AddEvents(events.Arr(e1, e2, e3))
+				b.AddEvents(context.Background(), events.Arr(e1, e2, e3))
 
-				es := b.GetAndConsumeNextEvents()
+				es, _ := b.GetAndConsumeNextEvents(context.Background())
 
 				Expect(es).To(Equal(events.Arr(e1)))
 			})
@@ -249,11 +251,11 @@ var _ = Describe("Policy", func() {
 				e2 := events.NewEvent("e2")
 				e3 := events.NewEvent("e3")
 
-				b.AddEvents([]events.Event[string]{e1, e2, e3})
+				b.AddEvents(context.Background(), []events.Event[string]{e1, e2, e3})
 
-				es1 := b.GetAndConsumeNextEvents()
-				es2 := b.GetAndConsumeNextEvents()
-				es3 := b.GetAndConsumeNextEvents()
+				es1, _ := b.GetAndConsumeNextEvents(context.Background())
+				es2, _ := b.GetAndConsumeNextEvents(context.Background())
+				es3, _ := b.GetAndConsumeNextEvents(context.Background())
 
 				Expect(es1).To(Equal(events.Arr(e1)))
 				Expect(es2).To(Equal(events.Arr(e2)))

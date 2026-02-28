@@ -128,29 +128,29 @@ func (r *StreamRepository) StartStream(id StreamID) error {
 }
 
 // SubscribeByTopic to get a stream for this topic with type T
-func SubscribeByTopic[T any](topic string, callback func(event events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+func SubscribeByTopic[T any](topic string, callback func(event events.Event[T]), opts ...SubscriberOption) (TypedSubscriber[T], error) {
 	return SubscribeByTopicOnRepository[T](defaultStreamRepository, topic, callback, opts...)
 }
 
-func SubscribeByTopicOnRepository[T any](r *StreamRepository, topic string, callback func(event events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+func SubscribeByTopicOnRepository[T any](r *StreamRepository, topic string, callback func(event events.Event[T]), opts ...SubscriberOption) (TypedSubscriber[T], error) {
 	return SubscribeByTopicIDOnRepository[T](r, MakeStreamID[T](topic), callback, opts...)
 }
 
 // SubscribeBatchByTopic to get a stream for this topic with type T returning a batch subscriber
-func SubscribeBatchByTopic[T any](topic string, callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+func SubscribeBatchByTopic[T any](topic string, callback func(events ...events.Event[T]), opts ...SubscriberOption) (TypedSubscriber[T], error) {
 	return SubscribeBatchByTopicOnRepository[T](defaultStreamRepository, topic, callback, opts...)
 }
 
-func SubscribeBatchByTopicOnRepository[T any](r *StreamRepository, topic string, callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+func SubscribeBatchByTopicOnRepository[T any](r *StreamRepository, topic string, callback func(events ...events.Event[T]), opts ...SubscriberOption) (TypedSubscriber[T], error) {
 	return SubscribeBatchByTopicIDOnRepository[T](r, MakeStreamID[T](topic), callback, opts...)
 }
 
 // SubscribeByTopicID to a stream by the stream's id
-func SubscribeByTopicID[T any](id StreamID, callback func(event events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+func SubscribeByTopicID[T any](id StreamID, callback func(event events.Event[T]), opts ...SubscriberOption) (TypedSubscriber[T], error) {
 	return SubscribeByTopicIDOnRepository[T](defaultStreamRepository, id, callback, opts...)
 }
 
-func SubscribeByTopicIDOnRepository[T any](b *StreamRepository, id StreamID, callback func(event events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+func SubscribeByTopicIDOnRepository[T any](b *StreamRepository, id StreamID, callback func(event events.Event[T]), opts ...SubscriberOption) (TypedSubscriber[T], error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 	if stream, err := getOrAddStreamByID[T](b, id); err == nil {
@@ -161,11 +161,11 @@ func SubscribeByTopicIDOnRepository[T any](b *StreamRepository, id StreamID, cal
 }
 
 // SubscribeBatchByTopicID to a stream by the stream's id returning a batch subscriber
-func SubscribeBatchByTopicID[T any](id StreamID, callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+func SubscribeBatchByTopicID[T any](id StreamID, callback func(events ...events.Event[T]), opts ...SubscriberOption) (TypedSubscriber[T], error) {
 	return SubscribeBatchByTopicIDOnRepository[T](defaultStreamRepository, id, callback, opts...)
 }
 
-func SubscribeBatchByTopicIDOnRepository[T any](b *StreamRepository, id StreamID, callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+func SubscribeBatchByTopicIDOnRepository[T any](b *StreamRepository, id StreamID, callback func(events ...events.Event[T]), opts ...SubscriberOption) (TypedSubscriber[T], error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 	if stream, err := getOrAddStreamByID[T](b, id); err == nil {
@@ -176,11 +176,11 @@ func SubscribeBatchByTopicIDOnRepository[T any](b *StreamRepository, id StreamID
 }
 
 // Unsubscribe removes a subscriber from a stream.
-func Unsubscribe[T any](rec Subscriber[T]) error {
+func Unsubscribe[T any](rec TypedSubscriber[T]) error {
 	return UnsubscribeOnRepository[T](defaultStreamRepository, rec)
 }
 
-func UnsubscribeOnRepository[T any](b *StreamRepository, rec Subscriber[T]) error {
+func UnsubscribeOnRepository[T any](b *StreamRepository, rec TypedSubscriber[T]) error {
 	var (
 		autoCleanup = false
 		id          StreamID

@@ -1,6 +1,7 @@
 # Go Streaming Library
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/ottenwbe/go-streaming/blob/main/LICENSE)
 [![Go](https://github.com/ottenwbe/go-streaming/actions/workflows/go.yml/badge.svg)](https://github.com/ottenwbe/go-streaming/actions/workflows/go.yml)
+[![Known Vulnerabilities](https://snyk.io/test/github/ottenwbe/go-streaming/badge.svg)](https://snyk.io/test/github/ottenwbe/go-streaming)
 
 This is a basic event streaming and processing library.
 The processing engine is mainly designed for flexibility and extendability  .
@@ -21,7 +22,6 @@ Hence, also no specific language like CQL is supported and optimizations are not
 ## Limitations
 
 - **Operator Support**: The primary supported operator types are the `PIPELINE_OPERATOR`, `FILTER` and `MAP` for batch processing. -  **Standard Operators**: The set of standard, built-in operators is minimal and will need to be expanded for more complex use cases.
-- **Joins and Multi-Stream Windows**: The current DSL and engine do not support operators with multiple input streams (e.g., joins) or windowing across them.
 - **Builder API**: The Query creation using a fluent builder pattern for query construction is experimental.
 
 ## Usage
