@@ -30,7 +30,7 @@ type OperatorEngine interface {
 	ID() OperatorID
 	Start() error
 	Stop() error
-	InStream(from pubsub.StreamID, description events.PolicyDescription)
+	InStream(from pubsub.StreamID, description events.SelectionPolicyConfig)
 	OutStream(to pubsub.StreamID)
 }
 
@@ -50,7 +50,7 @@ func (o *baseOperatorEngine[TIN, TOUT]) ID() OperatorID {
 	return o.config.ID
 }
 
-func (o *baseOperatorEngine[TIN, TOUT]) InStream(in pubsub.StreamID, p events.PolicyDescription) {
+func (o *baseOperatorEngine[TIN, TOUT]) InStream(in pubsub.StreamID, p events.SelectionPolicyConfig) {
 	o.config.Inputs = append(o.config.Inputs, InputConfig{
 		in,
 		p,
@@ -73,11 +73,13 @@ func (o *baseOperatorEngine[TIN, TOUT]) start(processFunc func(in ...events.Even
 	for _, outID := range o.config.Outputs {
 		pub, err := pubsub.RegisterPublisher[TOUT](outID)
 		if err != nil {
+			var errs []error
+			errs = append(errs, err)
 			for _, p := range o.Outputs {
-				_ = pubsub.UnRegisterPublisher(p)
+				errs = append(errs, pubsub.UnRegisterPublisher(p))
 			}
 			o.active.Store(false)
-			return err
+			return errors.Join(errs...)
 		}
 		o.Outputs = append(o.Outputs, pub)
 	}
@@ -90,11 +92,13 @@ func (o *baseOperatorEngine[TIN, TOUT]) start(processFunc func(in ...events.Even
 		pubsub.SubscriberWithSelectionPolicy(policy))
 
 	if err != nil {
+		var errs []error
+		errs = append(errs, err)
 		for _, p := range o.Outputs {
-			_ = pubsub.UnRegisterPublisher(p)
+			errs = append(errs, pubsub.UnRegisterPublisher(p))
 		}
 		o.active.Store(false)
-		return err
+		return errors.Join(errs...)
 	}
 
 	return nil
@@ -160,7 +164,7 @@ func (o *FilterOperatorEngine[TIN]) Process(in ...events.Event[TIN]) {
 type FanInOperatorEngine[TIn any, TOut any] struct {
 	baseOperatorEngine[TIn, TOut]
 	fanInFunction func(map[int][]events.Event[TIn]) []TOut
-	policy        events.MultiPolicy[TIn]
+	policy        events.MultiSelectionPolicy[TIn]
 	buffers       map[int]*events.EventBuffer[TIn]
 	inputs        []pubsub.TypedSubscriber[TIn]
 	mutex         sync.Mutex
@@ -175,12 +179,14 @@ func (o *FanInOperatorEngine[TIn, TOut]) Start() error {
 	for _, outID := range o.config.Outputs {
 		pub, err := pubsub.RegisterPublisher[TOut](outID)
 		if err != nil {
+			var errs []error
+			errs = append(errs, err)
 			// if we fail, unregister any publishers we already created
 			for _, p := range o.Outputs {
-				_ = pubsub.UnRegisterPublisher(p)
+				errs = append(errs, pubsub.UnRegisterPublisher(p))
 			}
 			o.active.Store(false)
-			return err
+			return errors.Join(errs...)
 		}
 		o.Outputs = append(o.Outputs, pub)
 	}
@@ -206,15 +212,17 @@ func (o *FanInOperatorEngine[TIn, TOut]) Start() error {
 			o.processInput(idx, e)
 		})
 		if err != nil {
+			var errs []error
+			errs = append(errs, err)
 			// if we fail, clean up everything we've created so far
 			for _, p := range o.Outputs {
-				_ = pubsub.UnRegisterPublisher(p)
+				errs = append(errs, pubsub.UnRegisterPublisher(p))
 			}
 			for _, s := range o.inputs {
-				_ = pubsub.Unsubscribe(s)
+				errs = append(errs, pubsub.Unsubscribe(s))
 			}
 			o.active.Store(false)
-			return err
+			return errors.Join(errs...)
 		}
 		o.inputs = append(o.inputs, sub)
 	}
@@ -299,7 +307,7 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) ID() OperatorID {
 	return o.config.ID
 }
 
-func (o *JoinOperatorEngine[TLeft, TRight, TOut]) InStream(from pubsub.StreamID, description events.PolicyDescription) {
+func (o *JoinOperatorEngine[TLeft, TRight, TOut]) InStream(from pubsub.StreamID, description events.SelectionPolicyConfig) {
 	o.config.Inputs = append(o.config.Inputs, InputConfig{
 		from,
 		description,
@@ -318,11 +326,13 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) Start() error {
 	for _, outID := range o.config.Outputs {
 		pub, err := pubsub.RegisterPublisher[TOut](outID)
 		if err != nil {
+			var errs []error
+			errs = append(errs, err)
 			for _, p := range o.outputs {
-				_ = pubsub.UnRegisterPublisher(p)
+				errs = append(errs, pubsub.UnRegisterPublisher(p))
 			}
 			o.active.Store(false)
-			return err
+			return errors.Join(errs...)
 		}
 		o.outputs = append(o.outputs, pub)
 	}
@@ -334,11 +344,12 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) Start() error {
 	if pDesc.Type == events.TemporalWindow {
 		o.policy = events.NewDuoTemporalWindowPolicy[TLeft, TRight](pDesc.WindowStart, pDesc.WindowLength, pDesc.WindowShift)
 	} else {
+		var errs []error
 		for _, p := range o.outputs {
-			_ = pubsub.UnRegisterPublisher(p)
+			errs = append(errs, pubsub.UnRegisterPublisher(p))
 		}
 		o.active.Store(false)
-		return fmt.Errorf("unsupported policy for join: %s", pDesc.Type)
+		return errors.Join(append(errs, fmt.Errorf("unsupported policy for join: %s", pDesc.Type))...)
 	}
 
 	o.policy.SetBuffers(o.bufferLeft, o.bufferRight)
@@ -451,11 +462,13 @@ func (o *MapOperatorEngine[TIN, TOUT]) Start() error {
 	for _, outID := range o.config.Outputs {
 		pub, err := pubsub.RegisterPublisher[TOUT](outID)
 		if err != nil {
+			var errs []error
+			errs = append(errs, err)
 			for _, p := range o.Outputs {
-				_ = pubsub.UnRegisterPublisher(p)
+				errs = append(errs, pubsub.UnRegisterPublisher(p))
 			}
 			o.active.Store(false)
-			return err
+			return errors.Join(errs...)
 		}
 		o.Outputs = append(o.Outputs, pub)
 	}
@@ -466,12 +479,14 @@ func (o *MapOperatorEngine[TIN, TOUT]) Start() error {
 		o.ProcessSingleEvent,
 		pubsub.SubscriberIsSync(false))
 	if err != nil {
+		var errs []error
+		errs = append(errs, err)
 		// if subscription fails, we need to clean up the publishers we just created
 		for _, p := range o.Outputs {
-			_ = pubsub.UnRegisterPublisher(p)
+			errs = append(errs, pubsub.UnRegisterPublisher(p))
 		}
 		o.active.Store(false)
-		return err
+		return errors.Join(errs...)
 	}
 	return nil
 }

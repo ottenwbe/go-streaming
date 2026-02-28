@@ -9,7 +9,7 @@ import (
 	"github.com/ottenwbe/go-streaming/pkg/events"
 )
 
-var _ = Describe("Policy", func() {
+var _ = Describe("SelectionPolicy", func() {
 	Describe("CountingWindowPolicy", func() {
 		Context("Select Events", func() {
 			It("can read n events at the time", func() {
@@ -263,9 +263,9 @@ var _ = Describe("Policy", func() {
 			})
 		})
 	})
-	Describe("PolicyDescription", func() {
+	Describe("SelectionPolicyConfig", func() {
 		It("can create a CountingWindowPolicy", func() {
-			desc := events.PolicyDescription{
+			desc := events.SelectionPolicyConfig{
 				Type:  events.CountingWindow,
 				Size:  5,
 				Slide: 1,
@@ -275,7 +275,7 @@ var _ = Describe("Policy", func() {
 			Expect(p).NotTo(BeNil())
 		})
 		It("can create a SelectNextPolicy", func() {
-			desc := events.PolicyDescription{
+			desc := events.SelectionPolicyConfig{
 				Type: events.SelectNext,
 			}
 			p, err := events.NewPolicyFromDescription[int](desc)
@@ -283,7 +283,7 @@ var _ = Describe("Policy", func() {
 			Expect(p).NotTo(BeNil())
 		})
 		It("can create a TemporalWindowPolicy", func() {
-			desc := events.PolicyDescription{
+			desc := events.SelectionPolicyConfig{
 				Type:         events.TemporalWindow,
 				WindowStart:  time.Now(),
 				WindowLength: time.Minute,
@@ -315,13 +315,13 @@ slide: 1
 			Expect(desc.Slide).To(Equal(1))
 		})
 		It("can be marshalled to JSON", func() {
-			desc := events.PolicyDescription{Type: events.CountingWindow, Size: 5, Slide: 1}
+			desc := events.SelectionPolicyConfig{Type: events.CountingWindow, Size: 5, Slide: 1}
 			jsonBytes, err := desc.ToJSON()
 			Expect(err).To(BeNil())
 			Expect(string(jsonBytes)).To(ContainSubstring(`"type":"counting"`))
 		})
 		It("can be marshalled to YAML", func() {
-			desc := events.PolicyDescription{Type: events.CountingWindow, Size: 5, Slide: 1}
+			desc := events.SelectionPolicyConfig{Type: events.CountingWindow, Size: 5, Slide: 1}
 			ymlBytes, err := desc.ToYML()
 			Expect(err).To(BeNil())
 			Expect(string(ymlBytes)).To(ContainSubstring("type: counting"))

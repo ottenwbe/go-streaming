@@ -196,19 +196,19 @@ func (r *bufferedSubscriber[T]) notifyNext() {
 }
 
 type notificationMap[T any] struct {
-	description SubscriberConfig
-	receiver    map[SubscriberID]TypedSubscriber[T]
-	active      bool
-	metrics     *StreamMetrics
-	mutex       sync.RWMutex
+	configuration SubscriberConfig
+	receiver      map[SubscriberID]TypedSubscriber[T]
+	active        bool
+	metrics       *StreamMetrics
+	mutex         sync.RWMutex
 }
 
-func newNotificationMap[T any](description SubscriberConfig, metrics *StreamMetrics) *notificationMap[T] {
+func newNotificationMap[T any](subscriberConfig SubscriberConfig, metrics *StreamMetrics) *notificationMap[T] {
 	m := &notificationMap[T]{
-		description: description,
-		receiver:    make(map[SubscriberID]TypedSubscriber[T]),
-		active:      false,
-		metrics:     metrics,
+		configuration: subscriberConfig,
+		receiver:      make(map[SubscriberID]TypedSubscriber[T]),
+		active:        false,
+		metrics:       metrics,
 	}
 	return m
 }
@@ -217,20 +217,20 @@ func (m *notificationMap[T]) newSubscriber(streamID StreamID, callback func(even
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	var description = m.description
+	var subscriberConfig = m.configuration
 	if len(options) > 0 {
-		EnrichSubscriberConfig(&description, options...)
+		EnrichSubscriberConfig(&subscriberConfig, options...)
 
-		// validate description
-		if description.BufferPolicySelection.Active {
+		// validate configuration
+		if subscriberConfig.BufferPolicySelection.Active {
 			return nil, ErrSubscriberPolicy
 		}
 	}
 
 	// subscribe
 	var rec TypedSubscriber[T]
-	if !description.Synchronous {
-		rec = newBufferedSubscriber[T](streamID, newBufferForSubscriber[T](description, nil), callback, nil)
+	if !subscriberConfig.Synchronous {
+		rec = newBufferedSubscriber[T](streamID, newBufferForSubscriber[T](subscriberConfig, nil), callback, nil)
 	} else {
 		rec = newDefaultSubscriber[T](streamID, callback)
 	}
@@ -244,12 +244,12 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	var description = m.description
+	var subscriberConfig = m.configuration
 	if len(options) > 0 {
-		EnrichSubscriberConfig(&description, options...)
+		EnrichSubscriberConfig(&subscriberConfig, options...)
 
-		// validate description
-		if description.Synchronous {
+		// validate configuration
+		if subscriberConfig.Synchronous {
 			return nil, ErrBatchSubscriberSync
 		}
 	}
@@ -257,15 +257,15 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 	var rec TypedSubscriber[T]
 	var buf events.Buffer[T]
 
-	if description.BufferPolicySelection.Active {
-		p, err := events.NewPolicyFromDescription[T](description.BufferPolicySelection)
+	if subscriberConfig.BufferPolicySelection.Active {
+		p, err := events.NewPolicyFromDescription[T](subscriberConfig.BufferPolicySelection)
 		if err != nil {
 			return nil, err
 		}
-		buf = newBufferForSubscriber[T](description, p)
+		buf = newBufferForSubscriber[T](subscriberConfig, p)
 	} else {
 		// Default batch subscriber (no policy, just buffering)
-		buf = newBufferForSubscriber[T](description, nil)
+		buf = newBufferForSubscriber[T](subscriberConfig, nil)
 	}
 	rec = newBufferedSubscriber[T](streamID, buf, nil, callback)
 
@@ -274,16 +274,16 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 	return rec, nil
 }
 
-func newBufferForSubscriber[T any](description SubscriberConfig, p events.Policy[T]) events.Buffer[T] {
+func newBufferForSubscriber[T any](subscriberConfig SubscriberConfig, p events.SelectionPolicy[T]) events.Buffer[T] {
 	if p != nil { // policy based
-		if description.BufferCapacity > 0 {
-			return events.NewLimitedConsumableAsyncBuffer[T](p, description.BufferCapacity)
+		if subscriberConfig.BufferCapacity > 0 {
+			return events.NewLimitedConsumableAsyncBuffer[T](p, subscriberConfig.BufferCapacity)
 		}
 		return events.NewConsumableAsyncBuffer[T](p)
 	}
 	// simple buffer
-	if description.BufferCapacity > 0 {
-		return events.NewLimitedSimpleAsyncBuffer[T](description.BufferCapacity)
+	if subscriberConfig.BufferCapacity > 0 {
+		return events.NewLimitedSimpleAsyncBuffer[T](subscriberConfig.BufferCapacity)
 	}
 	return events.NewSimpleAsyncBuffer[T]()
 }

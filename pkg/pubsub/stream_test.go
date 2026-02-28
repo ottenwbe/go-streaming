@@ -30,7 +30,7 @@ var _ = Describe("Stream", func() {
 			pubsub.ForceRemoveStream(streamID)
 		})
 
-		Context("description", func() {
+		Context("configuration", func() {
 			It("should be retrievable", func() {
 				retrievedDesc, err := pubsub.GetConfiguration(streamID)
 				Expect(err).To(BeNil())
@@ -92,7 +92,7 @@ var _ = Describe("Stream", func() {
 			pubsub.ForceRemoveStream(streamID)
 		})
 
-		Context("description", func() {
+		Context("configuration", func() {
 			It("should be retrievable", func() {
 				retrievedDesc, err := pubsub.GetConfiguration(streamID)
 				Expect(err).To(BeNil())

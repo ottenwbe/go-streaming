@@ -24,16 +24,16 @@ var _ = Describe("Descriptions", func() {
 	})
 
 	Describe("MakeSubscriberConfig", func() {
-		It("creates a description with defaults", func() {
+		It("creates a configuration with defaults", func() {
 			d := pubsub.MakeSubscriberConfig()
 			Expect(d.Synchronous).To(BeFalse())
 			Expect(d.BufferCapacity).To(Equal(0))
-			Expect(d.BufferPolicySelection).To(Equal(events.PolicyDescription{}))
+			Expect(d.BufferPolicySelection).To(Equal(events.SelectionPolicyConfig{}))
 		})
 	})
 
 	Describe("MakeStreamConfig", func() {
-		It("creates a description with defaults", func() {
+		It("creates a configuration with defaults", func() {
 			d := pubsub.MakeStreamConfig[int]("topic")
 			Expect(d.ID.Topic).To(Equal("topic"))
 			Expect(d.Asynchronous).To(BeFalse())
@@ -60,7 +60,7 @@ var _ = Describe("Descriptions", func() {
 	})
 
 	Describe("MakeStreamConfigByID", func() {
-		It("creates a description from ID with options", func() {
+		It("creates a configuration from ID with options", func() {
 			id := pubsub.MakeStreamID[string]("topic-id")
 			d := pubsub.MakeStreamConfigByID(id, pubsub.WithAsynchronousStream(true))
 			Expect(d.ID).To(Equal(id))
@@ -68,7 +68,7 @@ var _ = Describe("Descriptions", func() {
 		})
 	})
 
-	Describe("stream Description", func() {
+	Describe("stream Config", func() {
 		Context("Parsing YAML", func() {
 			It("can be parsed correctly with all fields", func() {
 
