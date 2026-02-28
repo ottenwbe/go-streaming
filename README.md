@@ -1,6 +1,7 @@
 # Go Streaming Library
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/ottenwbe/go-streaming/blob/main/LICENSE)
 [![Go](https://github.com/ottenwbe/go-streaming/actions/workflows/go.yml/badge.svg)](https://github.com/ottenwbe/go-streaming/actions/workflows/go.yml)
+[![Known Vulnerabilities](https://snyk.io/test/github/ottenwbe/go-streaming/badge.svg)](https://snyk.io/test/github/ottenwbe/go-streaming)
 
 This is a basic event streaming and processing library.
 The processing engine is mainly designed for flexibility and extendability  .
