@@ -15,16 +15,13 @@ var (
 )
 
 func main() {
-	// Define the query using the functional API
+	// Define the query using the Fluent Builder API
 	// This constructs a pipeline: Source("in") -> GreaterThan(0.5) -> Output
-	q, err := processing.Query[float64](
-		processing.Process[float64](
-			processing.ContinuousGreater[float64](
-				0.5,
-			),
-			processing.FromSourceStream[float64]("in", pubsub.WithAsynchronousStream(true)),
-		),
-	)
+	b := processing.NewBuilder[float64]()
+	b.From(processing.Source[float64]("in", pubsub.WithAsynchronousStream(true))).
+		Process(processing.Operator[float64](processing.Greater[float64](0.5)))
+
+	q, err := b.Build(false)
 	if err != nil {
 		zap.S().Fatal(err)
 	}

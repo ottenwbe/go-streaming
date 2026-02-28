@@ -148,19 +148,7 @@ func (s *TemporalWindowPolicy[T]) Description() PolicyDescription {
 
 // UpdateSelection updates the window based on the new event's timestamp
 func (s *TemporalWindowPolicy[T]) UpdateSelection() {
-	startScan := s.currentRange.End + 1
-	for i := startScan; i < s.buffer.Len(); i++ {
-		ts := s.buffer.Get(i).GetStamp().StartTime
-
-		if ts.Before(s.windowStart) {
-			s.currentRange.Start = i + 1
-			s.currentRange.End = i
-		} else if ts.After(s.windowEnd) || ts.Equal(s.windowEnd) {
-			break
-		} else {
-			s.currentRange.End = i
-		}
-	}
+	updateSelectionForBuffer(s.buffer, &s.currentRange, s.windowStart, s.windowEnd)
 }
 
 // Shift is not relevant for time-based window and is left empty
@@ -332,19 +320,7 @@ func (s *MultiTemporalWindowPolicy[T]) NextSelectionReady() bool {
 func (s *MultiTemporalWindowPolicy[T]) UpdateSelection() {
 	for id, buffer := range s.buffers {
 		sel := s.currentRange[id]
-		startScan := sel.End + 1
-		for i := startScan; i < buffer.Len(); i++ {
-			ts := buffer.Get(i).GetStamp().StartTime
-
-			if ts.Before(s.windowStart) {
-				sel.Start = i + 1
-				sel.End = i
-			} else if ts.After(s.windowEnd) || ts.Equal(s.windowEnd) {
-				break
-			} else {
-				sel.End = i
-			}
-		}
+		updateSelectionForBuffer(buffer, &sel, s.windowStart, s.windowEnd)
 		s.currentRange[id] = sel
 	}
 
@@ -407,5 +383,141 @@ func NewMultiTemporalWindowPolicy[T any](startingTime time.Time, windowLength ti
 		windowEnd:    startingTime.Add(windowLength),
 		windowLength: windowLength,
 		windowShift:  windowShift,
+	}
+}
+
+// DuoPolicy defines how events are selected from two buffers of different types
+type DuoPolicy[TLeft, TRight any] interface {
+	NextSelectionReady() bool
+	NextSelection() (EventSelection, EventSelection)
+	UpdateSelection()
+	Shift()
+	Offset(leftOffset, rightOffset int)
+	ID() PolicyID
+	SetBuffers(left BufferReader[TLeft], right BufferReader[TRight])
+	Description() PolicyDescription
+	AddCallback(callback func([]Event[TLeft], []Event[TRight]))
+}
+
+// DuoTemporalWindowPolicy selects events based on a time window across two buffers.
+type DuoTemporalWindowPolicy[TLeft, TRight any] struct {
+	PolicyID
+	bufferLeft   BufferReader[TLeft]
+	bufferRight  BufferReader[TRight]
+	rangeLeft    EventSelection
+	rangeRight   EventSelection
+	windowStart  time.Time
+	windowEnd    time.Time
+	windowLength time.Duration
+	windowShift  time.Duration
+	callbacks    []func([]Event[TLeft], []Event[TRight])
+	fired        bool
+}
+
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) SetBuffers(left BufferReader[TLeft], right BufferReader[TRight]) {
+	s.bufferLeft = left
+	s.bufferRight = right
+	s.rangeLeft = EventSelection{0, -1}
+	s.rangeRight = EventSelection{0, -1}
+}
+
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) NextSelectionReady() bool {
+	if s.bufferLeft == nil || s.bufferRight == nil {
+		return false
+	}
+	if s.bufferLeft.Len() == 0 || s.bufferRight.Len() == 0 {
+		return false
+	}
+	leftReady := s.bufferLeft.Get(s.bufferLeft.Len() - 1).GetStamp().StartTime.After(s.windowEnd)
+	rightReady := s.bufferRight.Get(s.bufferRight.Len() - 1).GetStamp().StartTime.After(s.windowEnd)
+	return leftReady && rightReady
+}
+
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) NextSelection() (EventSelection, EventSelection) {
+	return s.rangeLeft, s.rangeRight
+}
+
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) UpdateSelection() {
+	updateSelectionForBuffer(s.bufferLeft, &s.rangeLeft, s.windowStart, s.windowEnd)
+	updateSelectionForBuffer(s.bufferRight, &s.rangeRight, s.windowStart, s.windowEnd)
+
+	if s.NextSelectionReady() {
+		s.triggerCallbacks()
+	}
+}
+
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) triggerCallbacks() {
+	if s.fired || len(s.callbacks) == 0 {
+		return
+	}
+	s.fired = true
+
+	leftEvents := make([]Event[TLeft], 0)
+	for i := s.rangeLeft.Start; i <= s.rangeLeft.End; i++ {
+		leftEvents = append(leftEvents, s.bufferLeft.Get(i))
+	}
+
+	rightEvents := make([]Event[TRight], 0)
+	for i := s.rangeRight.Start; i <= s.rangeRight.End; i++ {
+		rightEvents = append(rightEvents, s.bufferRight.Get(i))
+	}
+
+	for _, cb := range s.callbacks {
+		cb(leftEvents, rightEvents)
+	}
+}
+
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) Shift() {
+	s.windowStart = s.windowStart.Add(s.windowShift)
+	s.windowEnd = s.windowStart.Add(s.windowLength)
+	s.rangeLeft.End = s.rangeLeft.Start - 1
+	s.rangeRight.End = s.rangeRight.Start - 1
+	s.fired = false
+}
+
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) Offset(leftOffset, rightOffset int) {
+	s.rangeLeft.Start = max(-1, s.rangeLeft.Start-leftOffset)
+	s.rangeLeft.End = max(-1, s.rangeLeft.End-leftOffset)
+	s.rangeRight.Start = max(-1, s.rangeRight.Start-rightOffset)
+	s.rangeRight.End = max(-1, s.rangeRight.End-rightOffset)
+}
+
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) Description() PolicyDescription {
+	return PolicyDescription{
+		Type:         TemporalWindow,
+		WindowStart:  s.windowStart,
+		WindowLength: s.windowLength,
+		WindowShift:  s.windowShift,
+	}
+}
+
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) AddCallback(callback func([]Event[TLeft], []Event[TRight])) {
+	s.callbacks = append(s.callbacks, callback)
+}
+
+func NewDuoTemporalWindowPolicy[TLeft, TRight any](startingTime time.Time, windowLength time.Duration, windowShift time.Duration) DuoPolicy[TLeft, TRight] {
+	return &DuoTemporalWindowPolicy[TLeft, TRight]{
+		PolicyID:     PolicyID(uuid.New()),
+		windowStart:  startingTime,
+		windowEnd:    startingTime.Add(windowLength),
+		windowLength: windowLength,
+		windowShift:  windowShift,
+		rangeLeft:    EventSelection{0, -1},
+		rangeRight:   EventSelection{0, -1},
+	}
+}
+
+func updateSelectionForBuffer[T any](buffer BufferReader[T], currentRange *EventSelection, windowStart, windowEnd time.Time) {
+	startScan := currentRange.End + 1
+	for i := startScan; i < buffer.Len(); i++ {
+		ts := buffer.Get(i).GetStamp().StartTime
+		if ts.Before(windowStart) {
+			currentRange.Start = i + 1
+			currentRange.End = i
+		} else if ts.After(windowEnd) || ts.Equal(windowEnd) {
+			break
+		} else {
+			currentRange.End = i
+		}
 	}
 }

@@ -16,19 +16,19 @@ var (
 )
 
 type subscribers[T any] interface {
-	newSubscriber(streamID StreamID, callback func(event events.Event[T]), options ...SubscriberOption) (Subscriber[T], error)
-	newBatchSubscriber(streamID StreamID, callback func(events ...events.Event[T]), options ...SubscriberOption) (Subscriber[T], error)
+	newSubscriber(streamID StreamID, callback func(event events.Event[T]), options ...SubscriberOption) (TypedSubscriber[T], error)
+	newBatchSubscriber(streamID StreamID, callback func(events ...events.Event[T]), options ...SubscriberOption) (TypedSubscriber[T], error)
 	close() error
 	remove(id SubscriberID)
 	notify(event events.Event[T]) error
-	snapshot() []Subscriber[T]
+	snapshot() []TypedSubscriber[T]
 	copyFrom(old *notificationMap[T])
 	start()
 }
 
 type SubscribersManagement[T any] interface {
-	subscribe(callback func(event events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error)
-	subscribeBatch(callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error)
+	subscribe(callback func(event events.Event[T]), opts ...SubscriberOption) (TypedSubscriber[T], error)
+	subscribeBatch(callback func(events ...events.Event[T]), opts ...SubscriberOption) (TypedSubscriber[T], error)
 	unsubscribe(id SubscriberID)
 	subscribers() subscribers[T]
 }
@@ -41,12 +41,22 @@ func (i SubscriberID) String() string {
 	return uuid.UUID(i).String()
 }
 
-// Subscriber allows subscribers to get notified about events published in the streams
-type Subscriber[T any] interface {
+// NilSubscriberID return a nil representation of the id
+func NilSubscriberID() SubscriberID {
+	return SubscriberID(uuid.Nil)
+}
+
+// Subscriber generic interface
+type Subscriber interface {
 	StreamID() StreamID
 	ID() SubscriberID
-	doNotify(e events.Event[T]) error
 	close()
+}
+
+// TypedSubscriber allows subscribers to get notified about events published in the streams
+type TypedSubscriber[T any] interface {
+	Subscriber
+	doNotify(e events.Event[T]) error
 }
 
 type defaultSubscriber[T any] struct {
@@ -66,7 +76,7 @@ type bufferedSubscriber[T any] struct {
 	wg          sync.WaitGroup
 }
 
-func newDefaultSubscriber[T any](streamID StreamID, callback func(event events.Event[T])) Subscriber[T] {
+func newDefaultSubscriber[T any](streamID StreamID, callback func(event events.Event[T])) TypedSubscriber[T] {
 	rec := &defaultSubscriber[T]{
 		streamID: streamID,
 		iD:       SubscriberID(uuid.New()),
@@ -76,7 +86,7 @@ func newDefaultSubscriber[T any](streamID StreamID, callback func(event events.E
 	return rec
 }
 
-func newBufferedSubscriber[T any](streamID StreamID, buf events.Buffer[T], callback func(event events.Event[T]), callbackBatch func(events ...events.Event[T])) Subscriber[T] {
+func newBufferedSubscriber[T any](streamID StreamID, buf events.Buffer[T], callback func(event events.Event[T]), callbackBatch func(events ...events.Event[T])) TypedSubscriber[T] {
 	rec := &bufferedSubscriber[T]{
 		streamID:    streamID,
 		iD:          SubscriberID(uuid.New()),
@@ -179,7 +189,7 @@ func (r *bufferedSubscriber[T]) notifyNext() {
 
 type notificationMap[T any] struct {
 	description SubscriberConfig
-	receiver    map[SubscriberID]Subscriber[T]
+	receiver    map[SubscriberID]TypedSubscriber[T]
 	active      bool
 	metrics     *StreamMetrics
 	mutex       sync.RWMutex
@@ -188,14 +198,14 @@ type notificationMap[T any] struct {
 func newNotificationMap[T any](description SubscriberConfig, metrics *StreamMetrics) *notificationMap[T] {
 	m := &notificationMap[T]{
 		description: description,
-		receiver:    make(map[SubscriberID]Subscriber[T]),
+		receiver:    make(map[SubscriberID]TypedSubscriber[T]),
 		active:      false,
 		metrics:     metrics,
 	}
 	return m
 }
 
-func (m *notificationMap[T]) newSubscriber(streamID StreamID, callback func(event events.Event[T]), options ...SubscriberOption) (Subscriber[T], error) {
+func (m *notificationMap[T]) newSubscriber(streamID StreamID, callback func(event events.Event[T]), options ...SubscriberOption) (TypedSubscriber[T], error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -210,7 +220,7 @@ func (m *notificationMap[T]) newSubscriber(streamID StreamID, callback func(even
 	}
 
 	// subscribe
-	var rec Subscriber[T]
+	var rec TypedSubscriber[T]
 	if !description.Synchronous {
 		rec = newBufferedSubscriber[T](streamID, newBufferForSubscriber[T](description, nil), callback, nil)
 	} else {
@@ -222,7 +232,7 @@ func (m *notificationMap[T]) newSubscriber(streamID StreamID, callback func(even
 	return rec, nil
 }
 
-func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func(events ...events.Event[T]), options ...SubscriberOption) (Subscriber[T], error) {
+func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func(events ...events.Event[T]), options ...SubscriberOption) (TypedSubscriber[T], error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -236,7 +246,7 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 		}
 	}
 
-	var rec Subscriber[T]
+	var rec TypedSubscriber[T]
 	var buf events.Buffer[T]
 
 	if description.BufferPolicySelection.Active {
@@ -327,10 +337,10 @@ func (m *notificationMap[T]) notify(event events.Event[T]) error {
 //	}
 //}
 
-func (m *notificationMap[T]) snapshot() []Subscriber[T] {
+func (m *notificationMap[T]) snapshot() []TypedSubscriber[T] {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	copyOfSubscribers := make([]Subscriber[T], 0, len(m.receiver))
+	copyOfSubscribers := make([]TypedSubscriber[T], 0, len(m.receiver))
 	for _, notifier := range m.receiver {
 		copyOfSubscribers = append(copyOfSubscribers, notifier)
 	}
@@ -353,7 +363,7 @@ func (m *notificationMap[T]) copyFrom(old *notificationMap[T]) {
 	for id, sub := range old.receiver {
 		m.receiver[id] = sub
 	}
-	old.receiver = make(map[SubscriberID]Subscriber[T])
+	old.receiver = make(map[SubscriberID]TypedSubscriber[T])
 }
 
 func (m *notificationMap[T]) start() {

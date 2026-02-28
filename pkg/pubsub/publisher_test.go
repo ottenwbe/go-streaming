@@ -13,7 +13,7 @@ type mockStream[T any] struct {
 	publishedEvents []events.Event[T]
 }
 
-func (m *mockStream[T]) subscribeBatch(opts ...SubscriberOption) (Subscriber[T], error) {
+func (m *mockStream[T]) subscribeBatch(opts ...SubscriberOption) (TypedSubscriber[T], error) {
 	return nil, nil
 }
 func (m *mockStream[T]) publishers() publisherManager[T] { return nil }
@@ -36,11 +36,11 @@ func (m *mockStream[T]) publish(e events.Event[T]) error {
 	m.publishedEvents = append(m.publishedEvents, e)
 	return nil
 }
-func (m *mockStream[T]) subscribe() (Subscriber[T], error)   { return nil, nil }
-func (m *mockStream[T]) unsubscribe(id SubscriberID)         {}
-func (m *mockStream[T]) newPublisher() (Publisher[T], error) { return nil, nil }
-func (m *mockStream[T]) removePublisher(id PublisherID)      {}
-func (m *mockStream[T]) subscribers() *notificationMap[T]    { return nil }
+func (m *mockStream[T]) subscribe() (TypedSubscriber[T], error) { return nil, nil }
+func (m *mockStream[T]) unsubscribe(id SubscriberID)            {}
+func (m *mockStream[T]) newPublisher() (Publisher[T], error)    { return nil, nil }
+func (m *mockStream[T]) removePublisher(id PublisherID)         {}
+func (m *mockStream[T]) subscribers() *notificationMap[T]       { return nil }
 
 func (m *mockStream[T]) events() events.Buffer[T] { return nil }
 

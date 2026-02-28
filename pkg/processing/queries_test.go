@@ -22,13 +22,10 @@ var _ = Describe("Continuous Query", func() {
 
 	BeforeEach(func() {
 		count = atomic.Int32{}
-		q, err =
-			query.Query[int](
-				query.Process[int](
-					query.Smaller[int](5),
-					query.FromSourceStream[int]("test"),
-				),
-			)
+		b := query.NewBuilder[int]()
+		b.From(query.Source[int]("test")).
+			Process(query.Operator[int](query.Smaller[int](5)))
+		q, err = b.Build(false)
 		Expect(err).To(BeNil())
 		err = q.Subscribe(
 			func(event events.Event[int]) {
@@ -58,7 +55,9 @@ var _ = Describe("Continuous Query", func() {
 	Describe("Query Lifecycle", func() {
 		It("stops processing events after Close() is called", func() {
 			topic := "lifecycle-test"
-			q, err := query.Query[int](query.FromSourceStream[int](topic))
+			b := query.NewBuilder[int]()
+			b.From(query.Source[int](topic))
+			q, err := b.Build(false)
 			Expect(err).To(BeNil())
 
 			var count atomic.Int32
@@ -81,17 +80,15 @@ var _ = Describe("Continuous Query", func() {
 			topic := "isolated-topic"
 
 			// Create two queries on different repositories listening to the same topic name
-			q1, err1 := query.Query[int](
-				query.FromSourceStream[int](topic),
-				query.WithRepository(repo1),
-			)
+			b1 := query.NewBuilder[int](query.WithRepository(repo1))
+			b1.From(query.Source[int](topic))
+			q1, err1 := b1.Build(false)
 			Expect(err1).To(BeNil())
 			defer func() { _ = query.Close(q1) }()
 
-			q2, err2 := query.Query[int](
-				query.FromSourceStream[int](topic),
-				query.WithRepository(repo2),
-			)
+			b2 := query.NewBuilder[int](query.WithRepository(repo2))
+			b2.From(query.Source[int](topic))
+			q2, err2 := b2.Build(false)
 			Expect(err2).To(BeNil())
 			defer func() { _ = query.Close(q2) }()
 
@@ -116,10 +113,9 @@ var _ = Describe("Continuous Query", func() {
 
 		It("WithNewRepository creates a private repository hidden from default", func() {
 			topic := "private-topic"
-			q, err := query.Query[int](
-				query.FromSourceStream[int](topic),
-				query.WithNewRepository(),
-			)
+			b := query.NewBuilder[int](query.WithNewRepository())
+			b.From(query.Source[int](topic))
+			q, err := b.Build(false)
 			Expect(err).To(BeNil())
 			defer func() { _ = query.Close(q) }()
 
@@ -135,12 +131,10 @@ var _ = Describe("Continuous Query", func() {
 				return query.OperatorID{}, errors.New("op failed")
 			}
 
-			_, err := query.Query[int](
-				query.Process[int](
-					errOp,
-					query.FromSourceStream[int]("topic"),
-				),
-			)
+			b := query.NewBuilder[int]()
+			b.From(query.Source[int]("topic")).
+				Process(query.Operator[int](errOp))
+			_, err := b.Build(false)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("op failed"))
 		})
@@ -151,12 +145,10 @@ var _ = Describe("Continuous Query", func() {
 		Context("SelectFromMap", func() {
 			It("should select a key from a map and forward its value", func() {
 				topic := "map-select-topic"
-				q, err := query.Query[any](
-					query.Process[any](
-						query.SelectFromMap("city"),
-						query.FromSourceStream[map[string]any](topic),
-					),
-				)
+				b := query.NewBuilder[any]()
+				b.From(query.Source[map[string]any](topic)).
+					Process(query.Operator[any](query.SelectFromMap("city")))
+				q, err := b.Build(false)
 				Expect(err).To(BeNil())
 
 				var receivedValue any
@@ -180,12 +172,10 @@ var _ = Describe("Continuous Query", func() {
 
 			It("should forward nil if key is not found", func() {
 				topic := "map-select-fail-topic"
-				q, err := query.Query[any](
-					query.Process[any](
-						query.SelectFromMap("city"),
-						query.FromSourceStream[map[string]any](topic),
-					),
-				)
+				b := query.NewBuilder[any]()
+				b.From(query.Source[map[string]any](topic)).
+					Process(query.Operator[any](query.SelectFromMap("city")))
+				q, err := b.Build(false)
 				Expect(err).To(BeNil())
 
 				var receivedValue any
@@ -219,12 +209,10 @@ var _ = Describe("Continuous Query", func() {
 					return "odd"
 				}
 
-				q, err := query.Query[string](
-					query.Process[string](
-						query.Map(mapper),
-						query.FromSourceStream[int](topic),
-					),
-				)
+				b := query.NewBuilder[string]()
+				b.From(query.Source[int](topic)).
+					Process(query.Operator[string](query.Map(mapper)))
+				q, err := b.Build(false)
 				Expect(err).To(BeNil())
 
 				var results []string

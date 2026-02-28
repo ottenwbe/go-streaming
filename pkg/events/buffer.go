@@ -16,6 +16,48 @@ var (
 	ErrLimitExceeded = errors.New("buffer: limit exceeded")
 )
 
+// EventBuffer is a simple, non-concurrent, in-memory buffer for events.
+// It is not safe for concurrent use without external locking. It implements BufferReader.
+type EventBuffer[T any] struct {
+	events []Event[T]
+}
+
+// NewEventBuffer creates a new, empty EventBuffer.
+func NewEventBuffer[T any]() *EventBuffer[T] {
+	return &EventBuffer[T]{
+		events: make([]Event[T], 0),
+	}
+}
+
+// Get returns the event at the given index.
+func (b *EventBuffer[T]) Get(i int) Event[T] {
+	return b.events[i]
+}
+
+// Len returns the number of events in the buffer.
+func (b *EventBuffer[T]) Len() int {
+	return len(b.events)
+}
+
+// Add appends an event to the buffer.
+func (b *EventBuffer[T]) Add(e Event[T]) {
+	b.events = append(b.events, e)
+}
+
+// Remove removes the first n events from the buffer.
+func (b *EventBuffer[T]) Remove(n int) {
+	if n <= 0 {
+		return
+	}
+	if n > len(b.events) {
+		n = len(b.events)
+	}
+	for i := 0; i < n; i++ {
+		b.events[i] = nil
+	}
+	b.events = b.events[n:]
+}
+
 // basicBuffer is an (internal) alias for an event array
 type basicBuffer[T any] []Event[T]
 

@@ -19,8 +19,8 @@ var (
 	ErrInvalidMapOperation         = errors.New("invalid operation type for map operator, expected func(events.Event[TIn]) Tout")
 	ErrNilOperator                 = errors.New("operator is considered nil (either id or operator is nil)")
 	ErrOperatorAlreadyExists       = errors.New("operator already exists")
-	ErrJoinOperatorInputOutput     = errors.New("join operator needs at least 2 inputs and at least 1 output")
-	ErrInvalidJoinOperation        = errors.New("invalid operation type for join operator, expected func(map[int][]events.Event[TIn]) []Tout")
+	ErrFanInOperatorInputOutput    = errors.New("fan-in operator needs at least 2 inputs and at least 1 output")
+	ErrInvalidFanInOperation       = errors.New("invalid operation type for fan-in operator, expected func(map[int][]events.Event[TIn]) []Tout")
 )
 
 func NewOperator[TIn, Tout any](operation any, d OperatorConfig, id OperatorID) (OperatorID, error) {
@@ -85,19 +85,19 @@ func NewOperator[TIn, Tout any](operation any, d OperatorConfig, id OperatorID) 
 			},
 			mapper: mapper,
 		}
-	case JOIN_OPERATOR:
+	case FANIN_OPERATOR:
 		// validate
 		if len(d.Inputs) < 2 || len(d.Outputs) < 1 {
-			return NilOperatorID(), ErrJoinOperatorInputOutput
+			return NilOperatorID(), ErrFanInOperatorInputOutput
 		}
 		op, ok := operation.(func(map[int][]events.Event[TIn]) []Tout)
 		if !ok {
-			return NilOperatorID(), ErrInvalidJoinOperation
+			return NilOperatorID(), ErrInvalidFanInOperation
 		}
 
-		o = &JoinOperatorEngine[TIn, Tout]{
+		o = &FanInOperatorEngine[TIn, Tout]{
 			baseOperatorEngine: baseOperatorEngine[TIn, Tout]{config: d},
-			joinFunction:       op,
+			fanInFunction:      op,
 		}
 	default:
 		return NilOperatorID(), fmt.Errorf("%w: %s", ErrUnknownOperatorType, d.Type)
@@ -116,6 +116,38 @@ func NewOperator[TIn, Tout any](operation any, d OperatorConfig, id OperatorID) 
 		}
 	}
 	return o.ID(), err
+}
+
+// NewJoinOperator is a blueprint for a factory function to create a heterogeneous JoinOperatorEngine.
+func NewJoinOperator[TLeft, TRight, TOut any](
+	config OperatorConfig,
+	joinFunc func(left []events.Event[TLeft], right []events.Event[TRight]) []TOut,
+) (OperatorID, error) {
+
+	if len(config.Inputs) != 2 {
+		return NilOperatorID(), errors.New("join operator requires exactly two input streams")
+	}
+	if len(config.Outputs) < 1 {
+		return NilOperatorID(), errors.New("join operator requires at least one output stream")
+	}
+
+	engine := &JoinOperatorEngine[TLeft, TRight, TOut]{
+		config:       config,
+		joinFunction: joinFunc,
+	}
+
+	if err := OperatorRepository().put(engine); err != nil {
+		return NilOperatorID(), err
+	}
+
+	if config.AutoStart {
+		if err := engine.Start(); err != nil {
+			OperatorRepository().remove(engine)
+			return NilOperatorID(), err
+		}
+	}
+
+	return engine.ID(), nil
 }
 
 func RemoveOperator(oid OperatorID) error {

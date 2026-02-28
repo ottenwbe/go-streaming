@@ -1,8 +1,16 @@
 package processing
 
 import (
+	"errors"
+	"maps"
+
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
+)
+
+var (
+	ErrJoinRequiresTwoInputs     = errors.New("Join operator requires exactly two input streams")
+	ErrLeftJoinRequiresTwoInputs = errors.New("LeftJoin operator requires exactly two input streams")
 )
 
 // Constraint to limit the type parameter to numeric types
@@ -144,5 +152,110 @@ func Map[TIn, TOut any](mapper func(events.Event[TIn]) TOut) func(in []pubsub.St
 			WithOutput(out...),
 		)
 		return NewOperator[TIn, TOut](mapper, config, id)
+	}
+}
+
+// Join creates a join operator that performs an inner join on two streams of maps.
+// It joins on the provided key and merges the two event maps.
+func Join(
+	key string,
+	policy events.PolicyDescription,
+) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+		if len(in) != 2 {
+			return NilOperatorID(), ErrJoinRequiresTwoInputs
+		}
+
+		joinFunc := func(inputs map[int][]events.Event[map[string]any]) []map[string]any {
+			stream0Events := inputs[0]
+			stream1Events := inputs[1]
+
+			// matching events from the right stream
+			stream1Map := make(map[any][]events.Event[map[string]any])
+			for _, event := range stream1Events {
+				if val, ok := event.GetContent()[key]; ok {
+					stream1Map[val] = append(stream1Map[val], event)
+				}
+			}
+
+			var results []map[string]any
+			// Iterate through the left stream and find matches in the right stream's map
+			for _, event0 := range stream0Events {
+				if val0, ok := event0.GetContent()[key]; ok {
+					if matchingEvents, found := stream1Map[val0]; found {
+						for _, event1 := range matchingEvents {
+							merged := make(map[string]any)
+							maps.Copy(merged, event0.GetContent())
+							maps.Copy(merged, event1.GetContent())
+							results = append(results, merged)
+						}
+					}
+				}
+			}
+			return results
+		}
+
+		config := MakeOperatorConfig(
+			FANIN_OPERATOR,
+			WithInput(MakeInputConfigs(in, policy)...),
+			WithOutput(out...),
+		)
+
+		return NewOperator[map[string]any, map[string]any](joinFunc, config, id)
+	}
+}
+
+// LeftJoin creates a join operator that performs a left outer join on two streams of maps.
+func LeftJoin(
+	key string,
+	policy events.PolicyDescription,
+) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+		if len(in) != 2 {
+			return NilOperatorID(), ErrLeftJoinRequiresTwoInputs
+		}
+
+		joinFunc := func(inputs map[int][]events.Event[map[string]any]) []map[string]any {
+			stream0Events := inputs[0]
+			stream1Events := inputs[1]
+
+			stream1Map := make(map[any][]events.Event[map[string]any])
+			for _, event := range stream1Events {
+				if val, ok := event.GetContent()[key]; ok {
+					stream1Map[val] = append(stream1Map[val], event)
+				}
+			}
+
+			var results []map[string]any
+			for _, event0 := range stream0Events {
+				val0, ok0 := event0.GetContent()[key]
+				matched := false
+				if ok0 {
+					if matchingEvents, ok := stream1Map[val0]; ok {
+						for _, event1 := range matchingEvents {
+							merged := make(map[string]any)
+							maps.Copy(merged, event0.GetContent())
+							maps.Copy(merged, event1.GetContent())
+							results = append(results, merged)
+							matched = true
+						}
+					}
+				}
+				if !matched {
+					merged := make(map[string]any)
+					maps.Copy(merged, event0.GetContent())
+					results = append(results, merged)
+				}
+			}
+			return results
+		}
+
+		config := MakeOperatorConfig(
+			FANIN_OPERATOR,
+			WithInput(MakeInputConfigs(in, policy)...),
+			WithOutput(out...),
+		)
+
+		return NewOperator[map[string]any, map[string]any](joinFunc, config, id)
 	}
 }

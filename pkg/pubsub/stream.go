@@ -358,7 +358,7 @@ func (b *baseStream[T]) unsubscribe(id SubscriberID) {
 	b.subscriberMap.remove(id)
 }
 
-func (b *baseStream[T]) subscribe(callback func(event events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+func (b *baseStream[T]) subscribe(callback func(event events.Event[T]), opts ...SubscriberOption) (TypedSubscriber[T], error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
@@ -369,7 +369,7 @@ func (b *baseStream[T]) subscribe(callback func(event events.Event[T]), opts ...
 	return nil, ErrStreamInactive
 }
 
-func (b *baseStream[T]) subscribeBatch(callback func(events ...events.Event[T]), opts ...SubscriberOption) (Subscriber[T], error) {
+func (b *baseStream[T]) subscribeBatch(callback func(events ...events.Event[T]), opts ...SubscriberOption) (TypedSubscriber[T], error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 

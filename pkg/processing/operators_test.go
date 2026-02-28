@@ -293,7 +293,7 @@ var _ = Describe("MapOperatorEngine", func() {
 	})
 })
 
-var _ = Describe("JoinOperatorEngine", func() {
+var _ = Describe("FanInOperatorEngine", func() {
 	var (
 		oid            processing.OperatorID
 		err            error
@@ -316,7 +316,7 @@ var _ = Describe("JoinOperatorEngine", func() {
 			WindowShift:  time.Second,
 		}
 
-		d := processing.MakeOperatorConfig(processing.JOIN_OPERATOR,
+		d := processing.MakeOperatorConfig(processing.FANIN_OPERATOR,
 			processing.WithOutput(sidout),
 			processing.WithAutoStart(true),
 			processing.WithInput(
@@ -325,7 +325,7 @@ var _ = Describe("JoinOperatorEngine", func() {
 			),
 		)
 
-		joinOp := func(inputs map[int][]events.Event[int]) []int {
+		fanInOp := func(inputs map[int][]events.Event[int]) []int {
 			sum := 0
 			for _, evs := range inputs {
 				for _, e := range evs {
@@ -335,7 +335,7 @@ var _ = Describe("JoinOperatorEngine", func() {
 			return []int{sum}
 		}
 
-		oid, err = processing.NewOperator[int, int](joinOp, d, processing.NilOperatorID())
+		oid, err = processing.NewOperator[int, int](fanInOp, d, processing.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 
@@ -398,5 +398,134 @@ var _ = Describe("JoinOperatorEngine", func() {
 		mutex.Lock()
 		defer mutex.Unlock()
 		Expect(receivedEvents[0].GetContent()).To(Equal(3))
+	})
+})
+
+var _ = Describe("Join Operators", func() {
+	var (
+		oid                     processing.OperatorID
+		err                     error
+		entryStream, exitStream pubsub.StreamID
+		sidout                  pubsub.StreamID
+		baseTime                time.Time
+		policy                  events.PolicyDescription
+		results                 []events.Event[map[string]any]
+		resultsMu               sync.Mutex
+	)
+
+	BeforeEach(func() {
+		entryStream, _ = pubsub.GetOrAddStream[map[string]any]("entry_cam")
+		exitStream, _ = pubsub.GetOrAddStream[map[string]any]("exit_cam")
+		sidout, _ = pubsub.GetOrAddStream[map[string]any]("out-join")
+		baseTime = time.Now()
+		policy = events.MakePolicy(events.TemporalWindow, 0, 0, baseTime, time.Second, time.Second)
+		results = make([]events.Event[map[string]any], 0)
+		resultsMu = sync.Mutex{}
+	})
+
+	AfterEach(func() {
+		if oid != processing.NilOperatorID() {
+			processing.RemoveOperator(oid)
+		}
+		pubsub.TryRemoveStreams(entryStream, exitStream, sidout)
+	})
+
+	publishTestEvents := func() {
+		entryPub, err := pubsub.RegisterPublisher[map[string]any](entryStream)
+		Expect(err).To(BeNil())
+		defer pubsub.UnRegisterPublisher(entryPub)
+
+		exitPub, err := pubsub.RegisterPublisher[map[string]any](exitStream)
+		Expect(err).To(BeNil())
+		defer pubsub.UnRegisterPublisher(exitPub)
+
+		// events matching window
+		_ = entryPub.Publish(&events.TemporalEvent[map[string]any]{Stamp: events.TimeStamp{StartTime: baseTime.Add(100 * time.Millisecond)}, Content: map[string]any{"vehicle_id": 1, "entry_loc": "A"}})
+		_ = exitPub.Publish(&events.TemporalEvent[map[string]any]{Stamp: events.TimeStamp{StartTime: baseTime.Add(200 * time.Millisecond)}, Content: map[string]any{"vehicle_id": 1, "exit_loc": "B"}})
+		_ = entryPub.Publish(&events.TemporalEvent[map[string]any]{Stamp: events.TimeStamp{StartTime: baseTime.Add(300 * time.Millisecond)}, Content: map[string]any{"vehicle_id": 2, "entry_loc": "A"}})
+
+		// trigger the window shift
+		_ = entryPub.Publish(&events.TemporalEvent[map[string]any]{Stamp: events.TimeStamp{StartTime: baseTime.Add(1100 * time.Millisecond)}, Content: map[string]any{"vehicle_id": 3, "entry_loc": "A"}})
+		_ = exitPub.Publish(&events.TemporalEvent[map[string]any]{Stamp: events.TimeStamp{StartTime: baseTime.Add(1200 * time.Millisecond)}, Content: map[string]any{"vehicle_id": 99, "exit_loc": "B"}})
+	}
+
+	It("should perform an inner join on two map streams (Section Control)", func() {
+		joinOpFunc := processing.Join("vehicle_id", policy)
+		oid, err = joinOpFunc([]pubsub.StreamID{entryStream, exitStream}, []pubsub.StreamID{sidout}, processing.NilOperatorID())
+		Expect(err).To(BeNil())
+
+		op, exists := processing.OperatorRepository().Get(oid)
+		Expect(exists).To(BeTrue())
+		err = op.Start()
+		Expect(err).To(BeNil())
+
+		sub, err := pubsub.SubscribeByTopicID[map[string]any](sidout, func(e events.Event[map[string]any]) {
+			resultsMu.Lock()
+			defer resultsMu.Unlock()
+			results = append(results, e)
+		})
+		Expect(err).To(BeNil())
+		defer pubsub.Unsubscribe(sub)
+
+		publishTestEvents()
+
+		Eventually(func() []events.Event[map[string]any] {
+			resultsMu.Lock()
+			defer resultsMu.Unlock()
+			return results
+		}).Should(HaveLen(1))
+
+		resultsMu.Lock()
+		res := results[0]
+		resultsMu.Unlock()
+		Expect(res.GetContent()).To(SatisfyAll(HaveKeyWithValue("vehicle_id", 1), HaveKeyWithValue("entry_loc", "A"), HaveKeyWithValue("exit_loc", "B")))
+	})
+
+	It("should perform a left join on two map streams (Section Control)", func() {
+		leftJoinOpFunc := processing.LeftJoin("vehicle_id", policy)
+		oid, err = leftJoinOpFunc([]pubsub.StreamID{entryStream, exitStream}, []pubsub.StreamID{sidout}, processing.NilOperatorID())
+		Expect(err).To(BeNil())
+
+		op, exists := processing.OperatorRepository().Get(oid)
+		Expect(exists).To(BeTrue())
+		err = op.Start()
+		Expect(err).To(BeNil())
+
+		sub, err := pubsub.SubscribeByTopicID[map[string]any](sidout, func(e events.Event[map[string]any]) {
+			resultsMu.Lock()
+			defer resultsMu.Unlock()
+			results = append(results, e)
+		})
+		Expect(err).To(BeNil())
+		defer pubsub.Unsubscribe(sub)
+
+		publishTestEvents()
+
+		Eventually(func() []events.Event[map[string]any] {
+			resultsMu.Lock()
+			defer resultsMu.Unlock()
+			return results
+		}).Should(HaveLen(2))
+
+		// Find the matched and unmatched results (order is not guaranteed)
+		resultsMu.Lock()
+		resCopy := make([]events.Event[map[string]any], len(results))
+		copy(resCopy, results)
+		resultsMu.Unlock()
+		var matched, unmatched events.Event[map[string]any]
+		for _, r := range resCopy {
+			if _, ok := r.GetContent()["exit_loc"]; ok {
+				matched = r
+			} else {
+				unmatched = r
+			}
+		}
+
+		Expect(matched).NotTo(BeNil(), "Expected to find a matched event")
+		Expect(matched.GetContent()).To(SatisfyAll(HaveKeyWithValue("vehicle_id", 1), HaveKeyWithValue("entry_loc", "A"), HaveKeyWithValue("exit_loc", "B")))
+
+		Expect(unmatched).NotTo(BeNil(), "Expected to find an unmatched event")
+		Expect(unmatched.GetContent()).To(SatisfyAll(HaveKeyWithValue("vehicle_id", 2), HaveKeyWithValue("entry_loc", "A")))
+		Expect(unmatched.GetContent()).NotTo(HaveKey("exit_loc"))
 	})
 })

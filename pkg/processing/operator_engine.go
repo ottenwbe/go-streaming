@@ -42,7 +42,7 @@ type baseOperatorEngine[TIN any, TOUT any] struct {
 	config  OperatorConfig
 	active  atomic.Bool
 	Outputs []pubsub.Publisher[TOUT]
-	Input   pubsub.Subscriber[TIN]
+	Input   pubsub.TypedSubscriber[TIN]
 }
 
 func (o *baseOperatorEngine[TIN, TOUT]) ID() OperatorID {
@@ -156,39 +156,16 @@ func (o *FilterOperatorEngine[TIN]) Process(in ...events.Event[TIN]) {
 	}
 }
 
-type JoinOperatorEngine[TIn any, TOut any] struct {
+type FanInOperatorEngine[TIn any, TOut any] struct {
 	baseOperatorEngine[TIn, TOut]
-	joinFunction func(map[int][]events.Event[TIn]) []TOut
-	policy       events.MultiPolicy[TIn]
-	buffers      map[int]*joinBuffer[TIn]
-	inputs       []pubsub.Subscriber[TIn]
-	mutex        sync.Mutex
+	fanInFunction func(map[int][]events.Event[TIn]) []TOut
+	policy        events.MultiPolicy[TIn]
+	buffers       map[int]*events.EventBuffer[TIn]
+	inputs        []pubsub.TypedSubscriber[TIn]
+	mutex         sync.Mutex
 }
 
-type joinBuffer[T any] struct {
-	events []events.Event[T]
-}
-
-func (j *joinBuffer[T]) Get(i int) events.Event[T] {
-	return j.events[i]
-}
-
-func (j *joinBuffer[T]) Len() int {
-	return len(j.events)
-}
-
-func (j *joinBuffer[T]) Add(e events.Event[T]) {
-	j.events = append(j.events, e)
-}
-
-func (j *joinBuffer[T]) Remove(n int) {
-	for i := 0; i < n; i++ {
-		j.events[i] = nil
-	}
-	j.events = j.events[n:]
-}
-
-func (o *JoinOperatorEngine[TIn, TOut]) Start() error {
+func (o *FanInOperatorEngine[TIn, TOut]) Start() error {
 	if !o.active.CompareAndSwap(false, true) {
 		return nil
 	}
@@ -207,20 +184,20 @@ func (o *JoinOperatorEngine[TIn, TOut]) Start() error {
 		o.Outputs = append(o.Outputs, pub)
 	}
 
-	o.buffers = make(map[int]*joinBuffer[TIn])
+	o.buffers = make(map[int]*events.EventBuffer[TIn])
 	readers := make(map[int]events.BufferReader[TIn])
 
 	// Initialize policy based on the first input's configuration
-	// We assume all inputs share the same windowing logic for the join
+	// We assume all inputs share the same windowing logic for the fan-in
 	pDesc := o.config.Inputs[0].InputPolicy
 	if pDesc.Type == events.TemporalWindow {
 		o.policy = events.NewMultiTemporalWindowPolicy[TIn](pDesc.WindowStart, pDesc.WindowLength, pDesc.WindowShift)
 	} else {
-		return fmt.Errorf("unsupported policy for join: %s", pDesc.Type)
+		return fmt.Errorf("unsupported policy for fan-in: %s", pDesc.Type)
 	}
 
 	for i, inputConfig := range o.config.Inputs {
-		o.buffers[i] = &joinBuffer[TIn]{}
+		o.buffers[i] = events.NewEventBuffer[TIn]()
 		readers[i] = o.buffers[i]
 
 		idx := i
@@ -247,7 +224,7 @@ func (o *JoinOperatorEngine[TIn, TOut]) Start() error {
 	return nil
 }
 
-func (o *JoinOperatorEngine[TIn, TOut]) Stop() error {
+func (o *FanInOperatorEngine[TIn, TOut]) Stop() error {
 	o.active.Store(false)
 	var errs []error
 	for _, sub := range o.inputs {
@@ -263,7 +240,7 @@ func (o *JoinOperatorEngine[TIn, TOut]) Stop() error {
 	return errors.Join(errs...)
 }
 
-func (o *JoinOperatorEngine[TIn, TOut]) processInput(idx int, e events.Event[TIn]) {
+func (o *FanInOperatorEngine[TIn, TOut]) processInput(idx int, e events.Event[TIn]) {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 	if !o.active.Load() {
@@ -274,18 +251,18 @@ func (o *JoinOperatorEngine[TIn, TOut]) processInput(idx int, e events.Event[TIn
 	o.policy.UpdateSelection()
 }
 
-func (o *JoinOperatorEngine[TIn, TOut]) onWindowReady(data map[int][]events.Event[TIn]) {
+func (o *FanInOperatorEngine[TIn, TOut]) onWindowReady(data map[int][]events.Event[TIn]) {
 	var inputEvents []events.Event[TIn]
 	for _, evs := range data {
 		inputEvents = append(inputEvents, evs...)
 	}
 
-	results := o.joinFunction(data)
+	results := o.fanInFunction(data)
 	for _, res := range results {
 		ce := events.NewEventFromOthers(res, events.GetTimeStamps(inputEvents...)...)
 		for _, pub := range o.Outputs {
 			if err := pub.Publish(ce); err != nil {
-				// events.Errorf("JoinOperator %s failed to publish: %v", o.ID(), err)
+				// events.Errorf("FanInOperator %s failed to publish: %v", o.ID(), err)
 			}
 		}
 	}
@@ -300,6 +277,160 @@ func (o *JoinOperatorEngine[TIn, TOut]) onWindowReady(data map[int][]events.Even
 		}
 	}
 
+	o.policy.Shift()
+}
+
+// JoinOperatorEngine is a blueprint for a specialized engine to join two streams of potentially different types.
+type JoinOperatorEngine[TLeft, TRight, TOut any] struct {
+	config       OperatorConfig
+	active       atomic.Bool
+	outputs      []pubsub.Publisher[TOut]
+	subLeft      pubsub.TypedSubscriber[TLeft]
+	subRight     pubsub.TypedSubscriber[TRight]
+	joinFunction func(left []events.Event[TLeft], right []events.Event[TRight]) []TOut
+	policy       events.DuoPolicy[TLeft, TRight]
+	bufferLeft   *events.EventBuffer[TLeft]
+	bufferRight  *events.EventBuffer[TRight]
+	mutex        sync.Mutex
+}
+
+func (o *JoinOperatorEngine[TLeft, TRight, TOut]) ID() OperatorID {
+	return o.config.ID
+}
+
+func (o *JoinOperatorEngine[TLeft, TRight, TOut]) InStream(from pubsub.StreamID, description events.PolicyDescription) {
+	o.config.Inputs = append(o.config.Inputs, InputConfig{
+		from,
+		description,
+	})
+}
+func (o *JoinOperatorEngine[TLeft, TRight, TOut]) OutStream(to pubsub.StreamID) {
+	o.config.Outputs = append(o.config.Outputs, to)
+}
+
+func (o *JoinOperatorEngine[TLeft, TRight, TOut]) Start() error {
+	if !o.active.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	o.outputs = make([]pubsub.Publisher[TOut], 0, len(o.config.Outputs))
+	for _, outID := range o.config.Outputs {
+		pub, err := pubsub.RegisterPublisher[TOut](outID)
+		if err != nil {
+			for _, p := range o.outputs {
+				_ = pubsub.UnRegisterPublisher(p)
+			}
+			o.active.Store(false)
+			return err
+		}
+		o.outputs = append(o.outputs, pub)
+	}
+
+	o.bufferLeft = events.NewEventBuffer[TLeft]()
+	o.bufferRight = events.NewEventBuffer[TRight]()
+
+	pDesc := o.config.Inputs[0].InputPolicy
+	if pDesc.Type == events.TemporalWindow {
+		o.policy = events.NewDuoTemporalWindowPolicy[TLeft, TRight](pDesc.WindowStart, pDesc.WindowLength, pDesc.WindowShift)
+	} else {
+		for _, p := range o.outputs {
+			_ = pubsub.UnRegisterPublisher(p)
+		}
+		o.active.Store(false)
+		return fmt.Errorf("unsupported policy for join: %s", pDesc.Type)
+	}
+
+	o.policy.SetBuffers(o.bufferLeft, o.bufferRight)
+	o.policy.AddCallback(o.onWindowReady)
+
+	var err error
+	o.subLeft, err = pubsub.SubscribeByTopicID[TLeft](o.config.Inputs[0].Stream, func(e events.Event[TLeft]) {
+		o.processLeft(e)
+	})
+	if err != nil {
+		o.Stop()
+		return err
+	}
+
+	o.subRight, err = pubsub.SubscribeByTopicID[TRight](o.config.Inputs[1].Stream, func(e events.Event[TRight]) {
+		o.processRight(e)
+	})
+	if err != nil {
+		o.Stop()
+		return err
+	}
+
+	return nil
+}
+
+func (o *JoinOperatorEngine[TLeft, TRight, TOut]) Stop() error {
+	o.active.Store(false)
+	var errs []error
+	if o.subLeft != nil {
+		errs = append(errs, pubsub.Unsubscribe(o.subLeft))
+	}
+	if o.subRight != nil {
+		errs = append(errs, pubsub.Unsubscribe(o.subRight))
+	}
+	for _, pub := range o.outputs {
+		if err := pubsub.UnRegisterPublisher(pub); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (o *JoinOperatorEngine[TLeft, TRight, TOut]) processLeft(e events.Event[TLeft]) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	if !o.active.Load() {
+		return
+	}
+	o.bufferLeft.Add(e)
+	o.policy.UpdateSelection()
+}
+
+func (o *JoinOperatorEngine[TLeft, TRight, TOut]) processRight(e events.Event[TRight]) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	if !o.active.Load() {
+		return
+	}
+	o.bufferRight.Add(e)
+	o.policy.UpdateSelection()
+}
+
+func (o *JoinOperatorEngine[TLeft, TRight, TOut]) onWindowReady(left []events.Event[TLeft], right []events.Event[TRight]) {
+	results := o.joinFunction(left, right)
+
+	var allStamps []events.TimeStamp
+	for _, e := range left {
+		allStamps = append(allStamps, e.GetStamp())
+	}
+	for _, e := range right {
+		allStamps = append(allStamps, e.GetStamp())
+	}
+
+	for _, res := range results {
+		ce := events.NewEventFromOthers(res, allStamps...)
+		for _, pub := range o.outputs {
+			_ = pub.Publish(ce)
+		}
+	}
+
+	selLeft, selRight := o.policy.NextSelection()
+
+	removeLeft := selLeft.Start
+	if removeLeft > 0 {
+		o.bufferLeft.Remove(removeLeft)
+	}
+
+	removeRight := selRight.Start
+	if removeRight > 0 {
+		o.bufferRight.Remove(removeRight)
+	}
+
+	o.policy.Offset(removeLeft, removeRight)
 	o.policy.Shift()
 }
 

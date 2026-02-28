@@ -34,7 +34,7 @@ type TypedContinuousQuery[T any] struct {
 	streams   []pubsub.StreamID
 	outStream pubsub.StreamID
 
-	subscriptions []pubsub.Subscriber[T]
+	subscriptions []pubsub.TypedSubscriber[T]
 	closeOnce     sync.Once
 	repo          *pubsub.StreamRepository
 }
