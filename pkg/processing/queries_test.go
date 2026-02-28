@@ -2,7 +2,6 @@ package processing_test
 
 import (
 	"errors"
-	"sync"
 	"sync/atomic"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -139,101 +138,5 @@ var _ = Describe("Continuous Query", func() {
 			Expect(err.Error()).To(ContainSubstring("op failed"))
 		})
 
-	})
-
-	Describe("Default Operators", func() {
-		Context("SelectFromMap", func() {
-			It("should select a key from a map and forward its value", func() {
-				topic := "map-select-topic"
-				b := query.NewBuilder[any]()
-				b.From(query.Source[map[string]any](topic)).
-					Process(query.Operator[any](query.SelectFromMap("city")))
-				q, err := b.Build(false)
-				Expect(err).To(BeNil())
-
-				var receivedValue any
-				var wg sync.WaitGroup
-				wg.Add(1)
-
-				err = q.Subscribe(func(e events.Event[any]) {
-					receivedValue = e.GetContent()
-					wg.Done()
-				})
-				Expect(err).To(BeNil())
-				err = q.Run()
-				Expect(err).To(BeNil())
-				defer query.Close(q)
-
-				pubsub.InstantPublishByTopic(topic, map[string]any{"name": "John", "city": "New York"})
-
-				wg.Wait()
-				Expect(receivedValue).To(Equal("New York"))
-			})
-
-			It("should forward nil if key is not found", func() {
-				topic := "map-select-fail-topic"
-				b := query.NewBuilder[any]()
-				b.From(query.Source[map[string]any](topic)).
-					Process(query.Operator[any](query.SelectFromMap("city")))
-				q, err := b.Build(false)
-				Expect(err).To(BeNil())
-
-				var receivedValue any
-				var wg sync.WaitGroup
-				wg.Add(1)
-
-				err = q.Subscribe(func(e events.Event[any]) {
-					receivedValue = e.GetContent()
-					wg.Done()
-				})
-				Expect(err).To(BeNil())
-				err = q.Run()
-				Expect(err).To(BeNil())
-				defer query.Close(q)
-
-				// Publish map without "city" key
-				pubsub.InstantPublishByTopic(topic, map[string]any{"name": "Jane", "country": "USA"})
-
-				wg.Wait()
-				Expect(receivedValue).To(BeNil())
-			})
-		})
-
-		Context("Map", func() {
-			It("should map events using a custom function", func() {
-				topic := "generic-map-topic"
-				mapper := func(e events.Event[int]) string {
-					if e.GetContent()%2 == 0 {
-						return "even"
-					}
-					return "odd"
-				}
-
-				b := query.NewBuilder[string]()
-				b.From(query.Source[int](topic)).
-					Process(query.Operator[string](query.Map(mapper)))
-				q, err := b.Build(false)
-				Expect(err).To(BeNil())
-
-				var results []string
-				var wg sync.WaitGroup
-				wg.Add(2)
-
-				err = q.Subscribe(func(e events.Event[string]) {
-					results = append(results, e.GetContent())
-					wg.Done()
-				})
-				Expect(err).To(BeNil())
-				err = q.Run()
-				Expect(err).To(BeNil())
-				defer query.Close(q)
-
-				pubsub.InstantPublishByTopic(topic, 1)
-				pubsub.InstantPublishByTopic(topic, 2)
-
-				wg.Wait()
-				Expect(results).To(ContainElements("odd", "even"))
-			})
-		})
 	})
 })

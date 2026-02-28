@@ -1,12 +1,14 @@
 package pubsub
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/log"
 )
 
 var (
@@ -74,6 +76,8 @@ type bufferedSubscriber[T any] struct {
 	notify      func(event events.Event[T])
 	notifyBatch func(events ...events.Event[T])
 	wg          sync.WaitGroup
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 func newDefaultSubscriber[T any](streamID StreamID, callback func(event events.Event[T])) TypedSubscriber[T] {
@@ -94,6 +98,7 @@ func newBufferedSubscriber[T any](streamID StreamID, buf events.Buffer[T], callb
 		notify:      nil,
 		notifyBatch: nil,
 	}
+	rec.ctx, rec.cancel = context.WithCancel(context.Background())
 
 	rec.active.Store(true)
 
@@ -116,7 +121,9 @@ func (r *defaultSubscriber[T]) close() {
 
 func (r *defaultSubscriber[T]) doNotify(event events.Event[T]) error {
 	defer func() {
-		_ = recover()
+		if r := recover(); r != nil {
+			log.Errorf("subscriber panic recovered: %v", r)
+		}
 	}()
 	if r.active.Load() {
 		r.notify(event)
@@ -137,7 +144,7 @@ func (r *defaultSubscriber[T]) ID() SubscriberID {
 }
 
 func (r *bufferedSubscriber[T]) doNotify(event events.Event[T]) error {
-	return r.buffer.AddEvent(event)
+	return r.buffer.AddEvent(r.ctx, event)
 }
 
 func (r *bufferedSubscriber[T]) drainCallbackBatch(...events.Event[T]) {
@@ -151,6 +158,7 @@ func (r *bufferedSubscriber[T]) drainCallback(events.Event[T]) {
 func (r *bufferedSubscriber[T]) close() {
 	r.active.Store(false)
 	r.buffer.StopBlocking()
+	r.cancel()
 	r.wg.Wait()
 }
 
@@ -166,7 +174,7 @@ func (r *bufferedSubscriber[T]) notifyNextBatch() {
 	r.wg.Add(1)
 	defer r.wg.Done()
 	for r.active.Load() {
-		e := r.buffer.GetAndConsumeNextEvents()
+		e, _ := r.buffer.GetAndConsumeNextEvents(r.ctx)
 		if e != nil {
 			r.notifyBatch(e...)
 		}
@@ -177,7 +185,7 @@ func (r *bufferedSubscriber[T]) notifyNext() {
 	r.wg.Add(1)
 	defer r.wg.Done()
 	for r.active.Load() {
-		e := r.buffer.GetAndRemoveNextEvent()
+		e, _ := r.buffer.GetAndRemoveNextEvent(r.ctx)
 		if e != nil {
 			r.notify(e)
 		} else {

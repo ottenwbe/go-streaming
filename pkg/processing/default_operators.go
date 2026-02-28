@@ -259,3 +259,58 @@ func LeftJoin(
 		return NewOperator[map[string]any, map[string]any](joinFunc, config, id)
 	}
 }
+
+// Filter creates a query that filters events based on a provided predicate.
+func Filter[T any](predicate func(events.Event[T]) bool) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+		config := MakeOperatorConfig(
+			FILTER_OPERATOR,
+			WithInput(MakeInputConfigs(in, events.PolicyDescription{})...),
+			WithOutput(out...),
+		)
+		return NewOperator[T, T](predicate, config, id)
+	}
+}
+
+// FlatMap creates a query that maps one input event to zero or more output events.
+func FlatMap[TIn, TOut any](mapper func(events.Event[TIn]) []TOut) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+
+		batchMapper := func(input []events.Event[TIn]) []TOut {
+			var result []TOut
+			for _, event := range input {
+				result = append(result, mapper(event)...)
+			}
+			return result
+		}
+
+		policy := events.PolicyDescription{Type: events.SelectNext, Active: true}
+
+		config := MakeOperatorConfig(
+			PIPELINE_OPERATOR,
+			WithInput(MakeInputConfigs(in, policy)...),
+			WithOutput(out...),
+		)
+
+		return NewOperator[TIn, TOut](batchMapper, config, id)
+	}
+}
+
+// Observe creates an operator that executes a side-effect for each event but passes it through unchanged.
+func Observe[T any](callback func(events.Event[T])) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+
+		mapper := func(event events.Event[T]) T {
+			callback(event)
+			return event.GetContent()
+		}
+
+		config := MakeOperatorConfig(
+			MAP_OPERATOR,
+			WithInput(MakeInputConfigs(in, events.PolicyDescription{})...),
+			WithOutput(out...),
+		)
+
+		return NewOperator[T, T](mapper, config, id)
+	}
+}

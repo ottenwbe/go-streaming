@@ -1,11 +1,13 @@
 package pubsub
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"sync/atomic"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/log"
 )
 
 var ErrStreamInactive = errors.New("streams: stream not active")
@@ -207,6 +209,8 @@ type localAsyncSortingStream[T any] struct {
 	closed        sync.WaitGroup
 	subscriberMap subscribers[T]
 	active        atomic.Bool
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
 // newStreamFromDescription creates and returns a typedStream of a given stream type T
@@ -274,12 +278,15 @@ func newLocalAsyncStream[T any](subscribers subscribers[T], description StreamCo
 
 // newLocalAsyncSortedStream is created w/ sorted event buffering
 func newLocalAsyncSortedStream[T any](subscribers subscribers[T], description StreamConfig) *localAsyncSortingStream[T] {
+	ctx, cancel := context.WithCancel(context.Background())
 
 	a := &localAsyncSortingStream[T]{
 		subscriberMap: subscribers,
 		closed:        sync.WaitGroup{},
 		streamBuf:     events.NewSortedSimpleAsyncBuffer[T](description.BufferCapacity),
 		active:        atomic.Bool{},
+		ctx:           ctx,
+		cancel:        cancel,
 	}
 	return a
 }
@@ -288,11 +295,12 @@ func (s *localSyncStream[T]) close() {
 }
 
 func (l *localAsyncSortingStream[T]) publish(e events.Event[T]) error {
-	return l.streamBuf.AddEvent(e)
+	return l.streamBuf.AddEvent(l.ctx, e)
 }
 
 func (l *localAsyncSortingStream[T]) close() {
 	l.active.Store(false)
+	l.cancel()
 	l.streamBuf.StopBlocking()
 	l.closed.Wait()
 }
@@ -302,7 +310,7 @@ func (l *localAsyncSortingStream[T]) run() {
 	l.closed.Go(func() {
 
 		for l.active.Load() {
-			e := l.streamBuf.GetAndRemoveNextEvent()
+			e, _ := l.streamBuf.GetAndRemoveNextEvent(l.ctx)
 			if e != nil {
 				_ = l.subscriberMap.notify(e)
 			}
@@ -340,6 +348,12 @@ func (s *localSyncStream[T]) publish(event events.Event[T]) error {
 }
 
 func (l *localAsyncStream[T]) publish(event events.Event[T]) error {
+	defer func() {
+		// Recover from panic if sending to a closed channel
+		if r := recover(); r != nil {
+			log.Error("panic recovered in publish", r)
+		}
+	}()
 	l.streamChan <- event
 	return nil
 }

@@ -1,6 +1,7 @@
 package events_test
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
@@ -34,27 +35,27 @@ var _ = Describe("Buffer", func() {
 
 		Context("Buffer with max length 1", func() {
 			It("should block when a second event is added", func() {
-				err := buf.AddEvent(e1)
+				err := buf.AddEvent(context.Background(), e1)
 				Expect(err).To(BeNil())
 
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					err := buf.AddEvent(e2)
+					err := buf.AddEvent(context.Background(), e2)
 					Expect(err).To(BeNil())
 					close(done)
 				}()
 
 				Consistently(done).ShouldNot(BeClosed())
 
-				buf.GetAndConsumeNextEvents()
+				buf.GetAndConsumeNextEvents(context.Background())
 
 				Eventually(done).Should(BeClosed())
 				Expect(buf.Len()).To(Equal(1))
 			})
 			It("should throw an error when more than two events are added", func() {
 
-				err1 := buf.AddEvents([]events.Event[string]{e1, e2, e3})
+				err1 := buf.AddEvents(context.Background(), []events.Event[string]{e1, e2, e3})
 				Expect(err1).To(HaveOccurred())
 				Expect(errors.Is(err1, events.ErrLimitExceeded)).To(BeTrue())
 			})
@@ -78,8 +79,8 @@ var _ = Describe("Buffer", func() {
 		})
 
 		It("consumes events based on policy", func() {
-			buf.AddEvent(e1)
-			res := buf.GetAndConsumeNextEvents()
+			buf.AddEvent(context.Background(), e1)
+			res, _ := buf.GetAndConsumeNextEvents(context.Background())
 			Expect(res).To(HaveLen(1))
 			Expect(res[0]).To(Equal(e1))
 		})
@@ -88,11 +89,11 @@ var _ = Describe("Buffer", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				buf.GetAndConsumeNextEvents()
+				buf.GetAndConsumeNextEvents(context.Background())
 				close(done)
 			}()
 			Consistently(done).ShouldNot(BeClosed())
-			buf.AddEvent(e1)
+			buf.AddEvent(context.Background(), e1)
 			Eventually(done).Should(BeClosed())
 		})
 
@@ -100,7 +101,7 @@ var _ = Describe("Buffer", func() {
 			done := make(chan struct{})
 			go func() {
 				defer GinkgoRecover()
-				res := buf.GetAndConsumeNextEvents()
+				res, _ := buf.GetAndConsumeNextEvents(context.Background())
 				Expect(res).To(BeEmpty())
 				close(done)
 			}()
@@ -133,9 +134,9 @@ var _ = Describe("Buffer", func() {
 		Context("GetAndConsumeNextEvent", func() {
 			It("reads and deletes in a fifo manner events from a buffer", func() {
 
-				buf.AddEvent(e1)
-				buf.AddEvent(e2)
-				resultEvent := buf.GetAndConsumeNextEvents()
+				buf.AddEvent(context.Background(), e1)
+				buf.AddEvent(context.Background(), e2)
+				resultEvent, _ := buf.GetAndConsumeNextEvents(context.Background())
 
 				Expect(resultEvent[0]).To(Equal(e1))
 				Expect(buf.Len()).To(Equal(1))
@@ -144,8 +145,8 @@ var _ = Describe("Buffer", func() {
 		Context("PeekNextEvent", func() {
 			It("reads events w/o deleting them from a buffer", func() {
 
-				buf.AddEvent(e1)
-				r := buf.PeekNextEvent()
+				buf.AddEvent(context.Background(), e1)
+				r, _ := buf.PeekNextEvent(context.Background())
 
 				Expect(r).To(Equal(e1))
 				Expect(buf.Len()).To(Equal(1))
@@ -157,8 +158,8 @@ var _ = Describe("Buffer", func() {
 				buffer := events.NewSimpleAsyncBuffer[string]()
 				defer buffer.StopBlocking()
 
-				buffer.AddEvent(e1)
-				buffer.AddEvent(e2)
+				buffer.AddEvent(context.Background(), e1)
+				buffer.AddEvent(context.Background(), e2)
 
 				Expect(buffer.Dump()).To(Equal([]events.Event[string]{e1, e2}))
 			})
@@ -166,26 +167,27 @@ var _ = Describe("Buffer", func() {
 		Context("AddEvents", func() {
 			It("adds all buffered events", func() {
 
-				buf.AddEvent(e1)
-				buf.AddEvents([]events.Event[string]{e2, e3})
+				buf.AddEvent(context.Background(), e1)
+				buf.AddEvents(context.Background(), []events.Event[string]{e2, e3})
 
 				Expect(buf.Dump()).To(Equal(events.Arr(e1, e2, e3)))
 			})
 		})
 		Context("AsyncStream PeekNext", func() {
 			It("wait for events if not available in buffer", func() {
-				buf.AddEvent(e1)
-				r1 := buf.GetAndConsumeNextEvents()
+				buf.AddEvent(context.Background(), e1)
+				r1, _ := buf.GetAndConsumeNextEvents(context.Background())
 				Expect(r1[0]).To(Equal(e1))
 
 				done := make(chan events.Event[string])
 				go func() {
 					defer GinkgoRecover()
-					done <- buf.PeekNextEvent()
+					e, _ := buf.PeekNextEvent(context.Background())
+					done <- e
 				}()
 
 				Consistently(done).ShouldNot(Receive())
-				buf.AddEvent(e2)
+				buf.AddEvent(context.Background(), e2)
 				Eventually(done).Should(Receive(Equal(e2)))
 				Expect(buf.Len()).To(Equal(1))
 			})
@@ -195,7 +197,8 @@ var _ = Describe("Buffer", func() {
 				done := make(chan events.Event[string])
 				go func() {
 					defer GinkgoRecover()
-					done <- buf.PeekNextEvent()
+					e, _ := buf.PeekNextEvent(context.Background())
+					done <- e
 				}()
 
 				Consistently(done).ShouldNot(Receive())
@@ -210,15 +213,16 @@ var _ = Describe("Buffer", func() {
 					defer GinkgoRecover()
 					var r []events.Event[string]
 					for i := 0; i < 3; i++ {
-						r = append(r, buf.GetAndConsumeNextEvents()...)
+						e, _ := buf.GetAndConsumeNextEvents(context.Background())
+						r = append(r, e...)
 					}
 					done <- r
 				}()
 
 				Consistently(done).ShouldNot(Receive())
-				buf.AddEvent(e1)
-				buf.AddEvent(e2)
-				buf.AddEvent(e3)
+				buf.AddEvent(context.Background(), e1)
+				buf.AddEvent(context.Background(), e2)
+				buf.AddEvent(context.Background(), e3)
 
 				Eventually(done).Should(Receive(Equal([]events.Event[string]{e1, e2, e3})))
 				Expect(buf.Len()).To(Equal(0))
@@ -238,7 +242,7 @@ var _ = Describe("Buffer", func() {
 						defer GinkgoRecover()
 						<-start
 						for j := 0; j < numEvents; j++ {
-							buf.AddEvent(events.NewEvent("data"))
+							buf.AddEvent(context.Background(), events.NewEvent("data"))
 						}
 					})
 				}
@@ -254,7 +258,7 @@ var _ = Describe("Buffer", func() {
 				done := make(chan struct{})
 				go func() {
 					defer GinkgoRecover()
-					res := buf.GetAndConsumeNextEvents()
+					res, _ := buf.GetAndConsumeNextEvents(context.Background())
 					Expect(res).To(BeNil())
 					close(done)
 				}()
@@ -300,9 +304,9 @@ var _ = Describe("Buffer", func() {
 		Context("Adding events", func() {
 			It("should sort events by timestamp upon insertion", func() {
 				// Add events out of temporal order
-				Expect(buf.AddEvent(e2)).To(Succeed())
-				Expect(buf.AddEvent(e1)).To(Succeed())
-				Expect(buf.AddEvent(e3)).To(Succeed())
+				Expect(buf.AddEvent(context.Background(), e2)).To(Succeed())
+				Expect(buf.AddEvent(context.Background(), e1)).To(Succeed())
+				Expect(buf.AddEvent(context.Background(), e3)).To(Succeed())
 
 				// Dump the buffer and check the order
 				dumpedEvents := buf.Dump()
@@ -311,7 +315,7 @@ var _ = Describe("Buffer", func() {
 
 			It("should sort a batch of events by timestamp", func() {
 				// Add events out of temporal order in a single batch
-				Expect(buf.AddEvents([]events.Event[string]{e2, e1, e3})).To(Succeed())
+				Expect(buf.AddEvents(context.Background(), []events.Event[string]{e2, e1, e3})).To(Succeed())
 
 				// Dump the buffer and check the order
 				dumpedEvents := buf.Dump()
@@ -321,10 +325,13 @@ var _ = Describe("Buffer", func() {
 
 		Context("Consuming events", func() {
 			It("should consume events in sorted timestamp order", func() {
-				Expect(buf.AddEvents([]events.Event[string]{e2, e1, e3})).To(Succeed())
-				Expect(buf.GetAndConsumeNextEvents()).To(Equal([]events.Event[string]{e1}))
-				Expect(buf.GetAndConsumeNextEvents()).To(Equal([]events.Event[string]{e3}))
-				Expect(buf.GetAndConsumeNextEvents()).To(Equal([]events.Event[string]{e2}))
+				Expect(buf.AddEvents(context.Background(), []events.Event[string]{e2, e1, e3})).To(Succeed())
+				e1Res, _ := buf.GetAndConsumeNextEvents(context.Background())
+				Expect(e1Res).To(Equal([]events.Event[string]{e1}))
+				e3Res, _ := buf.GetAndConsumeNextEvents(context.Background())
+				Expect(e3Res).To(Equal([]events.Event[string]{e3}))
+				e2Res, _ := buf.GetAndConsumeNextEvents(context.Background())
+				Expect(e2Res).To(Equal([]events.Event[string]{e2}))
 				Expect(buf.Len()).To(Equal(0))
 			})
 		})

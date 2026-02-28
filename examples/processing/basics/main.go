@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/log"
 	"github.com/ottenwbe/go-streaming/pkg/processing"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"go.uber.org/zap"
@@ -15,6 +16,7 @@ var (
 )
 
 func main() {
+	log.SetLogger(zap.S())
 	// define the query
 	q, err := processing.Query[int](
 		processing.Process[int](

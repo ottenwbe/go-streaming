@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/log"
 	"github.com/ottenwbe/go-streaming/pkg/processing"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
@@ -15,6 +16,7 @@ const (
 )
 
 func main() {
+	log.SetLogger(zap.S())
 	var wg sync.WaitGroup
 
 	q, err := processing.Query[float32](

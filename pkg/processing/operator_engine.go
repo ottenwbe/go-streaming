@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/log"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
 
@@ -129,7 +130,7 @@ func (o *PipelineOperatorEngine[TIN, TOUT]) Process(in ...events.Event[TIN]) {
 		ce := events.NewEventFromOthers(r, events.GetTimeStamps(in...)...)
 		for _, pub := range o.Outputs {
 			if err := pub.Publish(ce); err != nil {
-				// events.Errorf("PipelineOperator %s failed to publish: %v", o.ID(), err)
+				log.Errorf("PipelineOperator %s failed to publish: %v", o.ID(), err)
 			}
 		}
 	}
@@ -149,7 +150,7 @@ func (o *FilterOperatorEngine[TIN]) Process(in ...events.Event[TIN]) {
 		if event != nil && o.predicate(event) {
 			for _, pub := range o.Outputs {
 				if err := pub.Publish(event); err != nil {
-					// events.Errorf("FilterOperator %s failed to publish: %v", o.ID(), err)
+					log.Errorf("FilterOperator %s failed to publish: %v", o.ID(), err)
 				}
 			}
 		}
@@ -262,7 +263,7 @@ func (o *FanInOperatorEngine[TIn, TOut]) onWindowReady(data map[int][]events.Eve
 		ce := events.NewEventFromOthers(res, events.GetTimeStamps(inputEvents...)...)
 		for _, pub := range o.Outputs {
 			if err := pub.Publish(ce); err != nil {
-				// events.Errorf("FanInOperator %s failed to publish: %v", o.ID(), err)
+				log.Errorf("FanInOperator %s failed to publish: %v", o.ID(), err)
 			}
 		}
 	}
@@ -480,7 +481,7 @@ func (o *MapOperatorEngine[TIN, TOUT]) ProcessSingleEvent(event events.Event[TIN
 		out := events.NewEventFromOthers(o.mapper(event), event.GetStamp())
 		for _, pub := range o.Outputs {
 			if err := pub.Publish(out); err != nil {
-				// events.Errorf("MapOperator %s failed to publish: %v", o.ID(), err)
+				log.Errorf("MapOperator %s failed to publish: %v", o.ID(), err)
 			}
 		}
 	}

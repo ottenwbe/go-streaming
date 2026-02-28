@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/log"
 	"github.com/ottenwbe/go-streaming/pkg/processing"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 	"go.uber.org/zap"
@@ -15,6 +16,7 @@ var (
 )
 
 func main() {
+	log.SetLogger(zap.S())
 	// Define the query using the Fluent Builder API
 	// This constructs a pipeline: Source("in") -> GreaterThan(0.5) -> Output
 	b := processing.NewBuilder[float64]()
