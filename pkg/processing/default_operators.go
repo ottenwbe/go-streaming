@@ -19,7 +19,7 @@ type number interface {
 }
 
 // BatchSum creates a query that sums numeric events over a window defined by the selection policy.
-func BatchSum[TEvent number](policy events.PolicyConfig) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+func BatchSum[TEvent number](policy events.SelectionPolicyConfig) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
@@ -44,7 +44,7 @@ func BatchSum[TEvent number](policy events.PolicyConfig) func(in []pubsub.Stream
 }
 
 // BatchCount creates a query that counts events over a window defined by the selection policy.
-func BatchCount[TEvent any, TOut number](policy events.PolicyConfig) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+func BatchCount[TEvent any, TOut number](policy events.SelectionPolicyConfig) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
@@ -73,7 +73,7 @@ func Greater[T number](greaterThan T) func(in []pubsub.StreamID, out []pubsub.St
 
 		config := MakeOperatorConfig(
 			FILTER_OPERATOR,
-			WithInput(MakeInputConfigs(in, events.PolicyConfig{})...),
+			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
 			WithOutput(out...),
 		)
 
@@ -92,7 +92,7 @@ func Smaller[T number](than T) func(in []pubsub.StreamID, out []pubsub.StreamID,
 
 		config := MakeOperatorConfig(
 			FILTER_OPERATOR,
-			WithInput(MakeInputConfigs(in, events.PolicyConfig{})...),
+			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
 			WithOutput(out...),
 		)
 
@@ -110,7 +110,7 @@ func Convert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubsub.StreamI
 
 		config := MakeOperatorConfig(
 			MAP_OPERATOR,
-			WithInput(MakeInputConfigs(in, events.PolicyConfig{})...),
+			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
 			WithOutput(out...),
 		)
 
@@ -135,7 +135,7 @@ func SelectFromMap(key string) func(in []pubsub.StreamID, out []pubsub.StreamID,
 
 		config := MakeOperatorConfig(
 			MAP_OPERATOR,
-			WithInput(MakeInputConfigs(in, events.PolicyConfig{})...),
+			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
 			WithOutput(out...),
 		)
 
@@ -148,7 +148,7 @@ func Map[TIn, TOut any](mapper func(events.Event[TIn]) TOut) func(in []pubsub.St
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 		config := MakeOperatorConfig(
 			MAP_OPERATOR,
-			WithInput(MakeInputConfigs(in, events.PolicyConfig{})...),
+			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
 			WithOutput(out...),
 		)
 		return NewOperator[TIn, TOut](mapper, config, id)
@@ -159,7 +159,7 @@ func Map[TIn, TOut any](mapper func(events.Event[TIn]) TOut) func(in []pubsub.St
 // It joins on the provided key and merges the two event maps.
 func Join(
 	key string,
-	policy events.PolicyConfig,
+	policy events.SelectionPolicyConfig,
 ) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 		if len(in) != 2 {
@@ -208,7 +208,7 @@ func Join(
 // LeftJoin creates a join operator that performs a left outer join on two streams of maps.
 func LeftJoin(
 	key string,
-	policy events.PolicyConfig,
+	policy events.SelectionPolicyConfig,
 ) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 		if len(in) != 2 {
@@ -265,7 +265,7 @@ func Filter[T any](predicate func(events.Event[T]) bool) func(in []pubsub.Stream
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 		config := MakeOperatorConfig(
 			FILTER_OPERATOR,
-			WithInput(MakeInputConfigs(in, events.PolicyConfig{})...),
+			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
 			WithOutput(out...),
 		)
 		return NewOperator[T, T](predicate, config, id)
@@ -284,7 +284,7 @@ func FlatMap[TIn, TOut any](mapper func(events.Event[TIn]) []TOut) func(in []pub
 			return result
 		}
 
-		policy := events.PolicyConfig{Type: events.SelectNext, Active: true}
+		policy := events.SelectionPolicyConfig{Type: events.SelectNext, Active: true}
 
 		config := MakeOperatorConfig(
 			PIPELINE_OPERATOR,
@@ -307,7 +307,7 @@ func Observe[T any](callback func(events.Event[T])) func(in []pubsub.StreamID, o
 
 		config := MakeOperatorConfig(
 			MAP_OPERATOR,
-			WithInput(MakeInputConfigs(in, events.PolicyConfig{})...),
+			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
 			WithOutput(out...),
 		)
 

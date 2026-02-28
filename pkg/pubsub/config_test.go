@@ -28,7 +28,7 @@ var _ = Describe("Descriptions", func() {
 			d := pubsub.MakeSubscriberConfig()
 			Expect(d.Synchronous).To(BeFalse())
 			Expect(d.BufferCapacity).To(Equal(0))
-			Expect(d.BufferPolicySelection).To(Equal(events.PolicyConfig{}))
+			Expect(d.BufferPolicySelection).To(Equal(events.SelectionPolicyConfig{}))
 		})
 	})
 

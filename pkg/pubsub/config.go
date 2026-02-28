@@ -14,9 +14,9 @@ var (
 
 // SubscriberConfig details the subscriber configurations
 type SubscriberConfig struct {
-	Synchronous           bool                `yaml:"synchronous" json:"synchronous"`
-	BufferCapacity        int                 `yaml:"bufferCapacity" json:"bufferCapacity"`
-	BufferPolicySelection events.PolicyConfig `yaml:"selectionPolicy" json:"selectionPolicy"`
+	Synchronous           bool                         `yaml:"synchronous" json:"synchronous"`
+	BufferCapacity        int                          `yaml:"bufferCapacity" json:"bufferCapacity"`
+	BufferPolicySelection events.SelectionPolicyConfig `yaml:"selectionPolicy" json:"selectionPolicy"`
 }
 
 // StreamConfig details the stream configurations
@@ -34,7 +34,7 @@ type StreamConfig struct {
 type SubscriberOption func(*SubscriberConfig)
 
 // SubscriberWithSelectionPolicy allows to provide a selection policy for the subscriber
-func SubscriberWithSelectionPolicy(p events.PolicyConfig) SubscriberOption {
+func SubscriberWithSelectionPolicy(p events.SelectionPolicyConfig) SubscriberOption {
 	return func(s *SubscriberConfig) {
 		s.BufferPolicySelection = p
 	}
@@ -54,7 +54,7 @@ func SubscriberWithBufferCapacity(capacity int) SubscriberOption {
 
 type StreamOption func(*StreamConfig)
 
-func WithSubscriberSelectionPolicy(p events.PolicyConfig) StreamOption {
+func WithSubscriberSelectionPolicy(p events.SelectionPolicyConfig) StreamOption {
 	return func(s *StreamConfig) {
 		s.DefaultSubscribers.BufferPolicySelection = p
 	}

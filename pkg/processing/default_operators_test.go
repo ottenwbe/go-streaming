@@ -244,14 +244,14 @@ var _ = Describe("Default Operators", func() {
 	Context("Join Operators", func() {
 		var (
 			baseTime  time.Time
-			policy    events.PolicyConfig
+			policy    events.SelectionPolicyConfig
 			results   []events.Event[map[string]any]
 			resultsMu sync.Mutex
 		)
 
 		BeforeEach(func() {
 			baseTime = time.Now()
-			policy = events.MakePolicy(events.TemporalWindow, 0, 0, baseTime, time.Second, time.Second)
+			policy = events.MakeSelectionPolicy(events.TemporalWindow, 0, 0, baseTime, time.Second, time.Second)
 			results = make([]events.Event[map[string]any], 0)
 			resultsMu = sync.Mutex{}
 		})

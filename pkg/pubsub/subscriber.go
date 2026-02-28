@@ -274,7 +274,7 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 	return rec, nil
 }
 
-func newBufferForSubscriber[T any](subscriberConfig SubscriberConfig, p events.Policy[T]) events.Buffer[T] {
+func newBufferForSubscriber[T any](subscriberConfig SubscriberConfig, p events.SelectionPolicy[T]) events.Buffer[T] {
 	if p != nil { // policy based
 		if subscriberConfig.BufferCapacity > 0 {
 			return events.NewLimitedConsumableAsyncBuffer[T](p, subscriberConfig.BufferCapacity)

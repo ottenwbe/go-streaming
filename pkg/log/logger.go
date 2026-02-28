@@ -36,7 +36,6 @@ type StdLogger struct {
 }
 
 // NewStdLogger creates a Logger backed by the standard library logger.
-// If l is nil, it uses the default standard logger.
 func NewStdLogger(l *log.Logger) Logger {
 	if l == nil {
 		l = log.Default()

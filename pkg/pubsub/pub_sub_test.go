@@ -398,7 +398,7 @@ var _ = Describe("PubSub", func() {
 	Describe("SubscribeBatchByTopic", func() {
 		It("receives events in batches based on policy", func() {
 			topic := "batch-topic"
-			desc := events.PolicyConfig{Type: events.CountingWindow, Size: 2, Slide: 2}
+			desc := events.SelectionPolicyConfig{Type: events.CountingWindow, Size: 2, Slide: 2}
 
 			sub, err := pubsub.SubscribeBatchByTopicOnRepository[int](repo, topic, func(events ...events.Event[int]) {
 				Expect(len(events)).To(Equal(2))

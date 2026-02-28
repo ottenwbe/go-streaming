@@ -14,8 +14,8 @@ const (
 )
 
 type InputConfig struct {
-	Stream      pubsub.StreamID     `yaml:"stream" json:"stream"`
-	InputPolicy events.PolicyConfig `yaml:"policy" json:"policy"`
+	Stream      pubsub.StreamID              `yaml:"stream" json:"stream"`
+	InputPolicy events.SelectionPolicyConfig `yaml:"policy" json:"policy"`
 }
 
 type OperatorConfig struct {
@@ -46,7 +46,7 @@ func WithOutput(topics ...pubsub.StreamID) OperatorOption {
 	}
 }
 
-func MakeInputConfigs(in []pubsub.StreamID, policy events.PolicyConfig) []InputConfig {
+func MakeInputConfigs(in []pubsub.StreamID, policy events.SelectionPolicyConfig) []InputConfig {
 	res := make([]InputConfig, len(in))
 
 	for i, id := range in {

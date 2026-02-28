@@ -119,10 +119,10 @@ type LimitedConsumableAsyncBuffer[T any] struct {
 // ConsumableAsyncBuffer allows to sync exactly one reader and n writer.
 // The Read operations PeekNextEvent and RemoveNextEvent either return the Next event,
 // if any is available in the buffer or wait until Next event is available based on a selection policy.
-// see selection.Policy[T]
+// see selection.SelectionPolicy[T]
 type ConsumableAsyncBuffer[T any] struct {
 	*asyncBuffer[T]
-	selectionPolicy Policy[T]
+	selectionPolicy SelectionPolicy[T]
 }
 
 func (b basicBuffer[T]) Get(i int) Event[T] {
@@ -176,7 +176,7 @@ func NewLimitedSimpleAsyncBuffer[T any](limit int) Buffer[T] {
 }
 
 // NewLimitedConsumableAsyncBuffer creates a new buffer that consumes events based on a selection policy with a maximum event limit.
-func NewLimitedConsumableAsyncBuffer[T any](policy Policy[T], limit int) Buffer[T] {
+func NewLimitedConsumableAsyncBuffer[T any](policy SelectionPolicy[T], limit int) Buffer[T] {
 	s := &LimitedConsumableAsyncBuffer[T]{
 		ConsumableAsyncBuffer: &ConsumableAsyncBuffer[T]{
 			asyncBuffer:     newAsyncBuffer[T](),
@@ -189,7 +189,7 @@ func NewLimitedConsumableAsyncBuffer[T any](policy Policy[T], limit int) Buffer[
 }
 
 // NewConsumableAsyncBuffer creates a new buffer that consumes events based on a selection policy.
-func NewConsumableAsyncBuffer[T any](policy Policy[T]) Buffer[T] {
+func NewConsumableAsyncBuffer[T any](policy SelectionPolicy[T]) Buffer[T] {
 	s := &ConsumableAsyncBuffer[T]{
 		asyncBuffer:     newAsyncBuffer[T](),
 		selectionPolicy: policy,

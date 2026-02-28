@@ -27,7 +27,7 @@ func (e EventSelection) IsValid() bool {
 	return e.Start <= e.End && e.End > -1 && e.Start > -1
 }
 
-// PolicyID of each individual Policy
+// PolicyID of each individual SelectionPolicy
 type PolicyID uuid.UUID
 
 const (
@@ -36,8 +36,8 @@ const (
 	SelectNext     = "selectNext"
 )
 
-// PolicyConfig is a serializable representation of a selection policy.
-type PolicyConfig struct {
+// SelectionPolicyConfig is a serializable representation of a selection policy.
+type SelectionPolicyConfig struct {
 	Active bool   `json:"active" yaml:"active"`
 	Type   string `json:"type" yaml:"type"`
 	// For CountingWindowPolicy
@@ -50,8 +50,8 @@ type PolicyConfig struct {
 }
 
 type (
-	// Policy defines how events are selected from a buffer
-	Policy[T any] interface {
+	// SelectionPolicy defines how events are selected from a buffer
+	SelectionPolicy[T any] interface {
 		NextSelectionReady() bool
 		NextSelection() EventSelection
 		UpdateSelection()
@@ -59,7 +59,7 @@ type (
 		Offset(offset int)
 		ID() PolicyID
 		SetBuffer(reader BufferReader[T])
-		Description() PolicyConfig
+		Description() SelectionPolicyConfig
 	}
 
 	// CountingWindowPolicy selects a fixed number of events (n) with a sliding window (shift).
@@ -113,11 +113,11 @@ func (s *CountingWindowPolicy[T]) Offset(offset int) {
 	s.currentRange.End -= offset
 }
 
-func (s *CountingWindowPolicy[T]) Description() PolicyConfig {
+func (s *CountingWindowPolicy[T]) Description() SelectionPolicyConfig {
 	if s.n == 1 && s.shift == 1 {
-		return PolicyConfig{Type: SelectNext}
+		return SelectionPolicyConfig{Type: SelectNext}
 	}
-	return PolicyConfig{
+	return SelectionPolicyConfig{
 		Type:  CountingWindow,
 		Size:  s.n,
 		Slide: s.shift,
@@ -137,8 +137,8 @@ func (s *TemporalWindowPolicy[T]) NextSelection() EventSelection {
 	return s.currentRange
 }
 
-func (s *TemporalWindowPolicy[T]) Description() PolicyConfig {
-	return PolicyConfig{
+func (s *TemporalWindowPolicy[T]) Description() SelectionPolicyConfig {
+	return SelectionPolicyConfig{
 		Type:         TemporalWindow,
 		WindowStart:  s.windowStart,
 		WindowLength: s.windowLength,
@@ -176,7 +176,7 @@ func (id PolicyID) String() string {
 }
 
 // NewCountingWindowPolicy creates a new CountingWindowPolicy
-func NewCountingWindowPolicy[T any](n int, shift int) Policy[T] {
+func NewCountingWindowPolicy[T any](n int, shift int) SelectionPolicy[T] {
 	return &CountingWindowPolicy[T]{
 		PolicyID:     PolicyID(uuid.New()),
 		n:            n,
@@ -186,12 +186,12 @@ func NewCountingWindowPolicy[T any](n int, shift int) Policy[T] {
 }
 
 // NewSelectNextPolicy creates a new SelectNextPolicy
-func NewSelectNextPolicy[T any]() Policy[T] {
+func NewSelectNextPolicy[T any]() SelectionPolicy[T] {
 	return NewCountingWindowPolicy[T](1, 1)
 }
 
 // NewTemporalWindowPolicy creates a new TemporalWindowPolicy with the specified window and buffer
-func NewTemporalWindowPolicy[T any](startingTime time.Time, windowLength time.Duration, windowShift time.Duration) Policy[T] {
+func NewTemporalWindowPolicy[T any](startingTime time.Time, windowLength time.Duration, windowShift time.Duration) SelectionPolicy[T] {
 
 	return &TemporalWindowPolicy[T]{
 		PolicyID:     PolicyID(uuid.New()),
@@ -203,8 +203,8 @@ func NewTemporalWindowPolicy[T any](startingTime time.Time, windowLength time.Du
 	}
 }
 
-func MakePolicy(t string, size int, slide int, windowStart time.Time, windowLength time.Duration, windowShift time.Duration) PolicyConfig {
-	return PolicyConfig{
+func MakeSelectionPolicy(t string, size int, slide int, windowStart time.Time, windowLength time.Duration, windowShift time.Duration) SelectionPolicyConfig {
+	return SelectionPolicyConfig{
 		Active:       true,
 		Type:         t,
 		Size:         size,
@@ -215,8 +215,8 @@ func MakePolicy(t string, size int, slide int, windowStart time.Time, windowLeng
 	}
 }
 
-// NewPolicyFromDescription creates a new Policy from a PolicyConfig.
-func NewPolicyFromDescription[T any](desc PolicyConfig) (Policy[T], error) {
+// NewPolicyFromDescription creates a new SelectionPolicy from a SelectionPolicyConfig.
+func NewPolicyFromDescription[T any](desc SelectionPolicyConfig) (SelectionPolicy[T], error) {
 	switch desc.Type {
 	case CountingWindow:
 		return NewCountingWindowPolicy[T](desc.Size, desc.Slide), nil
@@ -229,39 +229,39 @@ func NewPolicyFromDescription[T any](desc PolicyConfig) (Policy[T], error) {
 	}
 }
 
-// PolicyDescriptionFromJSON parses a PolicyConfig from a JSON byte slice.
-func PolicyDescriptionFromJSON(b []byte) (PolicyConfig, error) {
-	var d PolicyConfig
+// PolicyDescriptionFromJSON parses a SelectionPolicyConfig from a JSON byte slice.
+func PolicyDescriptionFromJSON(b []byte) (SelectionPolicyConfig, error) {
+	var d SelectionPolicyConfig
 	if err := json.Unmarshal(b, &d); err != nil {
-		return PolicyConfig{}, err
+		return SelectionPolicyConfig{}, err
 	}
 	return d, nil
 }
 
-// ToJSON converts a PolicyConfig to its JSON representation.
-func (d PolicyConfig) ToJSON() ([]byte, error) {
+// ToJSON converts a SelectionPolicyConfig to its JSON representation.
+func (d SelectionPolicyConfig) ToJSON() ([]byte, error) {
 	return json.Marshal(d)
 }
 
-// PolicyDescriptionFromYML parses a PolicyConfig from a YAML byte slice.
-func PolicyDescriptionFromYML(b []byte) (PolicyConfig, error) {
-	var d PolicyConfig
+// PolicyDescriptionFromYML parses a SelectionPolicyConfig from a YAML byte slice.
+func PolicyDescriptionFromYML(b []byte) (SelectionPolicyConfig, error) {
+	var d SelectionPolicyConfig
 	if err := yaml.Unmarshal(b, &d); err != nil {
-		return PolicyConfig{}, err
+		return SelectionPolicyConfig{}, err
 	}
 	return d, nil
 }
 
-// ToYML converts a PolicyConfig to its YAML representation.
-func (d PolicyConfig) ToYML() ([]byte, error) {
+// ToYML converts a SelectionPolicyConfig to its YAML representation.
+func (d SelectionPolicyConfig) ToYML() ([]byte, error) {
 	return yaml.Marshal(d)
 }
 
 // MultiEventSelection represents a map of buffer indices to their selected ranges.
 type MultiEventSelection map[int]EventSelection
 
-// MultiPolicy defines how events are selected from multiple buffers
-type MultiPolicy[T any] interface {
+// MultiSelectionPolicy defines how events are selected from multiple buffers
+type MultiSelectionPolicy[T any] interface {
 	NextSelectionReady() bool
 	NextSelection() MultiEventSelection
 	UpdateSelection()
@@ -269,7 +269,7 @@ type MultiPolicy[T any] interface {
 	Offset(bufferIndex int, offset int)
 	ID() PolicyID
 	SetBuffers(readers map[int]BufferReader[T])
-	Description() PolicyConfig
+	Description() SelectionPolicyConfig
 	AddCallback(callback func(map[int][]Event[T]))
 }
 
@@ -365,8 +365,8 @@ func (s *MultiTemporalWindowPolicy[T]) Offset(bufferIndex int, offset int) {
 	}
 }
 
-func (s *MultiTemporalWindowPolicy[T]) Description() PolicyConfig {
-	return PolicyConfig{
+func (s *MultiTemporalWindowPolicy[T]) Description() SelectionPolicyConfig {
+	return SelectionPolicyConfig{
 		Type:         TemporalWindow,
 		WindowStart:  s.windowStart,
 		WindowLength: s.windowLength,
@@ -375,7 +375,7 @@ func (s *MultiTemporalWindowPolicy[T]) Description() PolicyConfig {
 }
 
 // NewMultiTemporalWindowPolicy creates a new MultiTemporalWindowPolicy
-func NewMultiTemporalWindowPolicy[T any](startingTime time.Time, windowLength time.Duration, windowShift time.Duration) MultiPolicy[T] {
+func NewMultiTemporalWindowPolicy[T any](startingTime time.Time, windowLength time.Duration, windowShift time.Duration) MultiSelectionPolicy[T] {
 	return &MultiTemporalWindowPolicy[T]{
 		PolicyID:     PolicyID(uuid.New()),
 		currentRange: make(MultiEventSelection),
@@ -395,7 +395,7 @@ type DuoPolicy[TLeft, TRight any] interface {
 	Offset(leftOffset, rightOffset int)
 	ID() PolicyID
 	SetBuffers(left BufferReader[TLeft], right BufferReader[TRight])
-	Description() PolicyConfig
+	Description() SelectionPolicyConfig
 	AddCallback(callback func([]Event[TLeft], []Event[TRight]))
 }
 
@@ -482,8 +482,8 @@ func (s *DuoTemporalWindowPolicy[TLeft, TRight]) Offset(leftOffset, rightOffset 
 	s.rangeRight.End = max(-1, s.rangeRight.End-rightOffset)
 }
 
-func (s *DuoTemporalWindowPolicy[TLeft, TRight]) Description() PolicyConfig {
-	return PolicyConfig{
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) Description() SelectionPolicyConfig {
+	return SelectionPolicyConfig{
 		Type:         TemporalWindow,
 		WindowStart:  s.windowStart,
 		WindowLength: s.windowLength,

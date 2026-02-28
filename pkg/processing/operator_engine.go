@@ -30,7 +30,7 @@ type OperatorEngine interface {
 	ID() OperatorID
 	Start() error
 	Stop() error
-	InStream(from pubsub.StreamID, description events.PolicyConfig)
+	InStream(from pubsub.StreamID, description events.SelectionPolicyConfig)
 	OutStream(to pubsub.StreamID)
 }
 
@@ -50,7 +50,7 @@ func (o *baseOperatorEngine[TIN, TOUT]) ID() OperatorID {
 	return o.config.ID
 }
 
-func (o *baseOperatorEngine[TIN, TOUT]) InStream(in pubsub.StreamID, p events.PolicyConfig) {
+func (o *baseOperatorEngine[TIN, TOUT]) InStream(in pubsub.StreamID, p events.SelectionPolicyConfig) {
 	o.config.Inputs = append(o.config.Inputs, InputConfig{
 		in,
 		p,
@@ -160,7 +160,7 @@ func (o *FilterOperatorEngine[TIN]) Process(in ...events.Event[TIN]) {
 type FanInOperatorEngine[TIn any, TOut any] struct {
 	baseOperatorEngine[TIn, TOut]
 	fanInFunction func(map[int][]events.Event[TIn]) []TOut
-	policy        events.MultiPolicy[TIn]
+	policy        events.MultiSelectionPolicy[TIn]
 	buffers       map[int]*events.EventBuffer[TIn]
 	inputs        []pubsub.TypedSubscriber[TIn]
 	mutex         sync.Mutex
@@ -299,7 +299,7 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) ID() OperatorID {
 	return o.config.ID
 }
 
-func (o *JoinOperatorEngine[TLeft, TRight, TOut]) InStream(from pubsub.StreamID, description events.PolicyConfig) {
+func (o *JoinOperatorEngine[TLeft, TRight, TOut]) InStream(from pubsub.StreamID, description events.SelectionPolicyConfig) {
 	o.config.Inputs = append(o.config.Inputs, InputConfig{
 		from,
 		description,
