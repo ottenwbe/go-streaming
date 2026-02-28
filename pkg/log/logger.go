@@ -9,7 +9,7 @@ type Logger interface {
 	Errorf(format string, args ...any)
 }
 
-// globalLogger is the instance used by the library. Defaults to no-op.
+// Defaults to no-op.
 var globalLogger Logger = &noLog{}
 
 // SetLogger allows the consumer to inject a custom logger, e.g., it allows to set loggers like

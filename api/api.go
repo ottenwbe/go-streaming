@@ -25,7 +25,7 @@ package api
 //			name        = c.Param("stream")
 //		)
 //
-//		description, err = pubsub.GetDescription(pubsub.MakeStreamID[map[string]interface{}](name))
+//		description, err = pubsub.Config(pubsub.MakeStreamID[map[string]interface{}](name))
 //		if err != nil {
 //			zap.S().Error("stream could not be found", zap.String("method", "GET"), zap.String("path", "/pubsub/:stream"), zap.String("module", "api"), zap.Error(err))
 //			c.String(http.StatusNotFound, "stream not found")

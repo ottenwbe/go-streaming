@@ -244,7 +244,7 @@ var _ = Describe("Default Operators", func() {
 	Context("Join Operators", func() {
 		var (
 			baseTime  time.Time
-			policy    events.PolicyDescription
+			policy    events.PolicyConfig
 			results   []events.Event[map[string]any]
 			resultsMu sync.Mutex
 		)

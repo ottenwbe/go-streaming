@@ -29,7 +29,7 @@ var _ = Describe("OperatorRepository", func() {
 			processing.WithAutoStart(true),
 			processing.WithInput(processing.InputConfig{
 				Stream: sidin,
-				InputPolicy: events.PolicyDescription{
+				InputPolicy: events.PolicyConfig{
 					Active: true,
 					Type:   events.CountingWindow,
 					Size:   10,
@@ -122,7 +122,7 @@ var _ = Describe("OperatorRepository", func() {
 			conf := processing.MakeOperatorConfig(processing.PIPELINE_OPERATOR,
 				processing.WithInput(processing.InputConfig{
 					Stream:      intStreamID, // Mismatch T
-					InputPolicy: events.PolicyDescription{Type: events.SelectNext},
+					InputPolicy: events.PolicyConfig{Type: events.SelectNext},
 				}),
 				processing.WithOutput(pubsub.MakeStreamID[string]("out-fail-test")),
 				processing.WithAutoStart(true),
@@ -146,7 +146,7 @@ var _ = Describe("OperatorRepository", func() {
 			conf := processing.MakeOperatorConfig(processing.PIPELINE_OPERATOR,
 				processing.WithInput(processing.InputConfig{
 					Stream:      intStreamID, // Mismatch
-					InputPolicy: events.PolicyDescription{Type: events.SelectNext},
+					InputPolicy: events.PolicyConfig{Type: events.SelectNext},
 				}),
 				processing.WithOutput(pubsub.MakeStreamID[string](topicOut)),
 				processing.WithAutoStart(false),
@@ -183,7 +183,7 @@ var _ = Describe("FilterOperatorEngine", func() {
 			processing.WithAutoStart(true),
 			processing.WithInput(processing.InputConfig{
 				Stream: sidin,
-				InputPolicy: events.PolicyDescription{
+				InputPolicy: events.PolicyConfig{
 					Type: events.SelectNext,
 				},
 			}))
@@ -309,7 +309,7 @@ var _ = Describe("FanInOperatorEngine", func() {
 
 		baseTime = time.Now()
 
-		policy := events.PolicyDescription{
+		policy := events.PolicyConfig{
 			Type:         events.TemporalWindow,
 			WindowStart:  baseTime,
 			WindowLength: time.Second,

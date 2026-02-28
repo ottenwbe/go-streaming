@@ -65,7 +65,7 @@ var _ = Describe("Config", func() {
 				pubsub.MakeStreamID[string]("s1"),
 				pubsub.MakeStreamID[string]("s2"),
 			}
-			policy := events.PolicyDescription{Type: events.SelectNext, Active: true}
+			policy := events.PolicyConfig{Type: events.SelectNext, Active: true}
 
 			inputConfigs := processing.MakeInputConfigs(streams, policy)
 
@@ -77,7 +77,7 @@ var _ = Describe("Config", func() {
 		})
 
 		It("should return an empty slice for no input streams", func() {
-			policy := events.PolicyDescription{Type: events.SelectNext}
+			policy := events.PolicyConfig{Type: events.SelectNext}
 			inputConfigs := processing.MakeInputConfigs([]pubsub.StreamID{}, policy)
 			Expect(inputConfigs).To(BeEmpty())
 		})

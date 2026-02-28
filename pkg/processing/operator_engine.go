@@ -30,7 +30,7 @@ type OperatorEngine interface {
 	ID() OperatorID
 	Start() error
 	Stop() error
-	InStream(from pubsub.StreamID, description events.PolicyDescription)
+	InStream(from pubsub.StreamID, description events.PolicyConfig)
 	OutStream(to pubsub.StreamID)
 }
 
@@ -50,7 +50,7 @@ func (o *baseOperatorEngine[TIN, TOUT]) ID() OperatorID {
 	return o.config.ID
 }
 
-func (o *baseOperatorEngine[TIN, TOUT]) InStream(in pubsub.StreamID, p events.PolicyDescription) {
+func (o *baseOperatorEngine[TIN, TOUT]) InStream(in pubsub.StreamID, p events.PolicyConfig) {
 	o.config.Inputs = append(o.config.Inputs, InputConfig{
 		in,
 		p,
@@ -299,7 +299,7 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) ID() OperatorID {
 	return o.config.ID
 }
 
-func (o *JoinOperatorEngine[TLeft, TRight, TOut]) InStream(from pubsub.StreamID, description events.PolicyDescription) {
+func (o *JoinOperatorEngine[TLeft, TRight, TOut]) InStream(from pubsub.StreamID, description events.PolicyConfig) {
 	o.config.Inputs = append(o.config.Inputs, InputConfig{
 		from,
 		description,

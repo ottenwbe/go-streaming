@@ -47,7 +47,7 @@ var _ = Describe("PubSub", func() {
 			defer repo.TryRemoveStreams(stream1)
 			defer repo.TryRemoveStreams(stream2)
 
-			d, _ := repo.GetDescription(stream2)
+			d, _ := repo.Config(stream2)
 			Expect(d).To(Equal(d1))
 			Expect(d).ToNot(Equal(d2))
 		})
@@ -58,7 +58,7 @@ var _ = Describe("PubSub", func() {
 			s, err := pubsub.GetOrAddStreamOnRepository[string](repo, topic, pubsub.WithAutoCleanup(true))
 			Expect(err).To(BeNil())
 
-			dResult, _ := repo.GetDescription(s)
+			dResult, _ := repo.Config(s)
 			Expect(dResult.AutoCleanup).To(BeTrue())
 
 			sub, err := pubsub.SubscribeByTopicOnRepository[string](repo, topic, func(_ events.Event[string]) {})
@@ -66,7 +66,7 @@ var _ = Describe("PubSub", func() {
 			err = pubsub.UnsubscribeOnRepository[string](repo, sub)
 			Expect(err).To(BeNil())
 
-			_, err = repo.GetDescription(s)
+			_, err = repo.Config(s)
 			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 
@@ -79,7 +79,7 @@ var _ = Describe("PubSub", func() {
 			sID, err := pubsub.AddOrReplaceStreamOnRepository[string](repo, topic)
 			Expect(err).To(BeNil())
 
-			r, e := repo.GetDescription(sID)
+			r, e := repo.Config(sID)
 			Expect(r).To(Equal(d))
 			Expect(e).To(BeNil())
 		})
@@ -108,8 +108,8 @@ var _ = Describe("PubSub", func() {
 			defer repo.ForceRemoveStream(s1ID)
 			defer repo.ForceRemoveStream(s2ID)
 
-			r1, err1 := repo.GetDescription(s1ID)
-			r2, err2 := repo.GetDescription(s2ID)
+			r1, err1 := repo.Config(s1ID)
+			r2, err2 := repo.Config(s2ID)
 
 			Expect(err1).To(BeNil())
 			Expect(err2).To(BeNil())
@@ -125,8 +125,8 @@ var _ = Describe("PubSub", func() {
 			defer repo.TryRemoveStreams(s1ID)
 			defer repo.TryRemoveStreams(s2ID)
 
-			r1, err1 := repo.GetDescription(s1ID)
-			_, err2 := repo.GetDescription(s2ID)
+			r1, err1 := repo.Config(s1ID)
+			_, err2 := repo.Config(s2ID)
 
 			Expect(err1).To(BeNil())
 			Expect(err2).To(BeNil())
@@ -190,7 +190,7 @@ var _ = Describe("PubSub", func() {
 			sID, err := pubsub.AddOrReplaceStreamOnRepository[int](repo, "try-close-1")
 			repo.TryRemoveStreams(sID)
 
-			_, err = repo.GetDescription(sID)
+			_, err = repo.Config(sID)
 			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 		It("is not successful if stream still has publishersMap", func() {
@@ -201,7 +201,7 @@ var _ = Describe("PubSub", func() {
 
 			repo.TryRemoveStreams(sID)
 
-			_, err = repo.GetDescription(sID)
+			_, err = repo.Config(sID)
 			Expect(err).To(BeNil())
 		})
 		It("is not successful if stream still has subscribers", func() {
@@ -213,7 +213,7 @@ var _ = Describe("PubSub", func() {
 			repo.TryRemoveStreams(s)
 			defer repo.ForceRemoveStream(s)
 
-			_, err = repo.GetDescription(s)
+			_, err = repo.Config(s)
 			Expect(err).To(BeNil())
 		})
 	})
@@ -221,7 +221,7 @@ var _ = Describe("PubSub", func() {
 	Describe("GetConfiguration", func() {
 		It("results in an error if non-existing", func() {
 			id := pubsub.RandomStreamID()
-			_, e := repo.GetDescription(id)
+			_, e := repo.Config(id)
 			Expect(e).NotTo(BeNil())
 		})
 	})
@@ -347,7 +347,7 @@ var _ = Describe("PubSub", func() {
 			Expect(err).To(BeNil())
 
 			repo.TryRemoveStreams(sID)
-			_, err = repo.GetDescription(sID)
+			_, err = repo.Config(sID)
 			Expect(err).To(Equal(pubsub.ErrStreamNotFound))
 		})
 
@@ -398,7 +398,7 @@ var _ = Describe("PubSub", func() {
 	Describe("SubscribeBatchByTopic", func() {
 		It("receives events in batches based on policy", func() {
 			topic := "batch-topic"
-			desc := events.PolicyDescription{Type: events.CountingWindow, Size: 2, Slide: 2}
+			desc := events.PolicyConfig{Type: events.CountingWindow, Size: 2, Slide: 2}
 
 			sub, err := pubsub.SubscribeBatchByTopicOnRepository[int](repo, topic, func(events ...events.Event[int]) {
 				Expect(len(events)).To(Equal(2))

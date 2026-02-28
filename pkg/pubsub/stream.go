@@ -22,7 +22,7 @@ type stream interface {
 	hasPublishersOrSubscribers() bool
 
 	ID() StreamID
-	Description() StreamConfig
+	Config() StreamConfig
 
 	migrateStream(StreamConfig)
 	streamMetrics() *StreamMetrics
@@ -49,7 +49,7 @@ type streamCoordinator[T any] interface {
 }
 
 type baseStream[T any] struct {
-	description StreamConfig
+	streamConfig StreamConfig
 
 	publisherArray publisherManager[T]
 	subscriberMap  *notificationMap[T]
@@ -106,17 +106,17 @@ func (b *baseStream[T]) doTryClose(force bool) bool {
 	return false
 }
 
-func (b *baseStream[T]) migrateStream(description StreamConfig) {
+func (b *baseStream[T]) migrateStream(streamConfig StreamConfig) {
 
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	newEngine := newStreamCoordinator(description, b.subscriberMap)
+	newEngine := newStreamCoordinator(streamConfig, b.subscriberMap)
 
 	b.streamMetrics().WaitUntilDrained()
 
-	b.description = description
-	b.subscriberMap.description = description.DefaultSubscribers
+	b.streamConfig = streamConfig
+	b.subscriberMap.configuration = streamConfig.DefaultSubscribers
 	b.streamCoordinator.close()
 	b.streamCoordinator = newEngine
 	b.streamCoordinator.run()
@@ -214,17 +214,17 @@ type localAsyncSortingStream[T any] struct {
 }
 
 // newStreamFromDescription creates and returns a typedStream of a given stream type T
-func newStreamFromDescription[T any](description StreamConfig) typedStream[T] {
+func newStreamFromDescription[T any](streamConfig StreamConfig) typedStream[T] {
 	var (
 		streamCoordinator streamCoordinator[T]
 		metrics           = newStreamMetrics()
-		subscribers       = newNotificationMap[T](description.DefaultSubscribers, metrics)
+		subscribers       = newNotificationMap[T](streamConfig.DefaultSubscribers, metrics)
 	)
 
-	streamCoordinator = newStreamCoordinator(description, subscribers)
+	streamCoordinator = newStreamCoordinator(streamConfig, subscribers)
 
 	stream := &baseStream[T]{
-		description:       description,
+		streamConfig:      streamConfig,
 		subscriberMap:     subscribers,
 		publisherArray:    newPublisherManager[T](),
 		metrics:           metrics,
@@ -237,12 +237,12 @@ func newStreamFromDescription[T any](description StreamConfig) typedStream[T] {
 	return stream
 }
 
-func newStreamCoordinator[T any](description StreamConfig, subscribers *notificationMap[T]) (streamEngine streamCoordinator[T]) {
-	if description.Asynchronous {
-		if description.Sort {
-			streamEngine = newLocalAsyncSortedStream[T](subscribers, description)
+func newStreamCoordinator[T any](streamConfig StreamConfig, subscribers *notificationMap[T]) (streamEngine streamCoordinator[T]) {
+	if streamConfig.Asynchronous {
+		if streamConfig.Sort {
+			streamEngine = newLocalAsyncSortedStream[T](subscribers, streamConfig)
 		} else {
-			streamEngine = newLocalAsyncStream[T](subscribers, description)
+			streamEngine = newLocalAsyncStream[T](subscribers, streamConfig)
 		}
 	} else {
 		streamEngine = newLocalSyncStream[T](subscribers)
@@ -260,11 +260,11 @@ func newLocalSyncStream[T any](subscribers subscribers[T]) *localSyncStream[T] {
 }
 
 // newLocalAsyncStream is created w/ event buffering
-func newLocalAsyncStream[T any](subscribers subscribers[T], description StreamConfig) *localAsyncStream[T] {
+func newLocalAsyncStream[T any](subscribers subscribers[T], streamConfig StreamConfig) *localAsyncStream[T] {
 
 	var ch events.EventChannel[T]
-	if description.BufferCapacity > 0 {
-		ch = make(events.EventChannel[T], description.BufferCapacity)
+	if streamConfig.BufferCapacity > 0 {
+		ch = make(events.EventChannel[T], streamConfig.BufferCapacity)
 	} else {
 		ch = make(events.EventChannel[T])
 	}
@@ -277,13 +277,13 @@ func newLocalAsyncStream[T any](subscribers subscribers[T], description StreamCo
 }
 
 // newLocalAsyncSortedStream is created w/ sorted event buffering
-func newLocalAsyncSortedStream[T any](subscribers subscribers[T], description StreamConfig) *localAsyncSortingStream[T] {
+func newLocalAsyncSortedStream[T any](subscribers subscribers[T], streamConfig StreamConfig) *localAsyncSortingStream[T] {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	a := &localAsyncSortingStream[T]{
 		subscriberMap: subscribers,
 		closed:        sync.WaitGroup{},
-		streamBuf:     events.NewSortedSimpleAsyncBuffer[T](description.BufferCapacity),
+		streamBuf:     events.NewSortedSimpleAsyncBuffer[T](streamConfig.BufferCapacity),
 		active:        atomic.Bool{},
 		ctx:           ctx,
 		cancel:        cancel,
@@ -400,11 +400,11 @@ func (b *baseStream[T]) streamMetrics() *StreamMetrics {
 }
 
 func (b *baseStream[T]) ID() StreamID {
-	return b.description.ID
+	return b.streamConfig.ID
 }
 
-func (b *baseStream[T]) Description() StreamConfig {
-	return b.description
+func (b *baseStream[T]) Config() StreamConfig {
+	return b.streamConfig
 }
 
 func (b *baseStream[T]) addPublisher(pub *defaultPublisher[T]) {

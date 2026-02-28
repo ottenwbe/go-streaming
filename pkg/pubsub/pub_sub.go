@@ -21,7 +21,7 @@ type StreamRepository struct {
 	mutex     sync.RWMutex
 }
 
-// NewRepository creates a new, isolated pub/sub instance.
+// NewStreamRepository creates a new, isolated pub/sub instance.
 func NewStreamRepository() *StreamRepository {
 	return &StreamRepository{
 		streamIdx: make(map[StreamID]stream),
@@ -45,12 +45,12 @@ func GetOrAddStream[T any](topic string, opts ...StreamOption) (StreamID, error)
 func GetOrAddStreamOnRepository[T any](b *StreamRepository, topic string, opts ...StreamOption) (StreamID, error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
-	streamDescription := MakeStreamConfig[T](topic, opts...)
-	stream := newStreamFromDescription[T](streamDescription)
+	streamConfig := MakeStreamConfig[T](topic, opts...)
+	stream := newStreamFromDescription[T](streamConfig)
 	return b.doGetOrAddStream(stream)
 }
 
-// AddOrReplaceStream uses a description of a stream to add it or replace it to the pub sub system
+// AddOrReplaceStream uses a configuration of a stream to add it or replace it to the pub sub system
 func AddOrReplaceStream[T any](topic string, opts ...StreamOption) (StreamID, error) {
 	return AddOrReplaceStreamOnRepository[T](defaultStreamRepository, topic, opts...)
 }
@@ -58,18 +58,18 @@ func AddOrReplaceStream[T any](topic string, opts ...StreamOption) (StreamID, er
 func AddOrReplaceStreamOnRepository[T any](b *StreamRepository, topic string, opts ...StreamOption) (StreamID, error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
-	streamDescription := MakeStreamConfig[T](topic, opts...)
-	s, err := getAndConvertStreamByID[T](b, streamDescription.StreamID())
+	streamConfig := MakeStreamConfig[T](topic, opts...)
+	s, err := getAndConvertStreamByID[T](b, streamConfig.StreamID())
 
 	// add new stream if no existing stream exists
 	if errors.Is(err, ErrStreamNotFound) {
-		stream := newStreamFromDescription[T](streamDescription)
+		stream := newStreamFromDescription[T](streamConfig)
 		return b.doGetOrAddStream(stream)
 	} else if err != nil {
 		return NilStreamID(), err
 	}
 
-	s.migrateStream(streamDescription)
+	s.migrateStream(streamConfig)
 	return s.ID(), nil
 }
 
@@ -109,7 +109,7 @@ func StartStream(id StreamID) error {
 	return defaultStreamRepository.StartStream(id)
 }
 
-// StartStream starts the stream with the given ID.
+// StartStreamOnRepository starts the stream with the given ID.
 func StartStreamOnRepository(id StreamID, r *StreamRepository) error {
 	if r == nil {
 		r = defaultStreamRepository
@@ -204,7 +204,7 @@ func UnsubscribeOnRepository[T any](b *StreamRepository, rec TypedSubscriber[T])
 	}
 
 	s.unsubscribe(rec.ID())
-	autoCleanup = s.Description().AutoCleanup
+	autoCleanup = s.Config().AutoCleanup
 	id = s.ID()
 
 	return nil
@@ -280,21 +280,21 @@ func UnRegisterPublisherOnRepository[T any](b *StreamRepository, publisher Publi
 
 	s.removePublisher(publisher.ID())
 	id = s.ID()
-	autoCleanup = s.Description().AutoCleanup
+	autoCleanup = s.Config().AutoCleanup
 
 	return nil
 }
 
-// GetConfiguration retrieves the description of a stream identified by the given ID.
+// GetConfiguration retrieves the configuration of a stream identified by the given ID.
 func GetConfiguration(id StreamID) (StreamConfig, error) {
-	return defaultStreamRepository.GetDescription(id)
+	return defaultStreamRepository.Config(id)
 }
 
-func (r *StreamRepository) GetDescription(id StreamID) (StreamConfig, error) {
+func (r *StreamRepository) Config(id StreamID) (StreamConfig, error) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 	if s, ok := r.streamIdx[id]; ok {
-		return s.Description(), nil
+		return s.Config(), nil
 	}
 
 	return StreamConfig{}, ErrStreamNotFound
@@ -352,7 +352,7 @@ func (r *StreamRepository) doTryRemoveStreams(streamIDs ...StreamID) {
 }
 
 func (r *StreamRepository) addAndStartStream(newStream stream) {
-	if newStream.Description().AutoStart {
+	if newStream.Config().AutoStart {
 		newStream.run()
 	}
 	r.streamIdx[newStream.ID()] = newStream

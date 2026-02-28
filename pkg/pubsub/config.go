@@ -9,14 +9,14 @@ import (
 )
 
 var (
-	ErrStreamDescriptionWithoutID = errors.New("stream description: no id provided")
+	ErrStreamDescriptionWithoutID = errors.New("stream configuration: no id provided")
 )
 
 // SubscriberConfig details the subscriber configurations
 type SubscriberConfig struct {
-	Synchronous           bool                     `yaml:"synchronous" json:"synchronous"`
-	BufferCapacity        int                      `yaml:"bufferCapacity" json:"bufferCapacity"`
-	BufferPolicySelection events.PolicyDescription `yaml:"selectionPolicy" json:"selectionPolicy"`
+	Synchronous           bool                `yaml:"synchronous" json:"synchronous"`
+	BufferCapacity        int                 `yaml:"bufferCapacity" json:"bufferCapacity"`
+	BufferPolicySelection events.PolicyConfig `yaml:"selectionPolicy" json:"selectionPolicy"`
 }
 
 // StreamConfig details the stream configurations
@@ -30,11 +30,11 @@ type StreamConfig struct {
 	Sort               bool             `yaml:"sorted" json:"sorted"`
 }
 
-// SubscriberOption allows to configure the subscription
+// SubscriberOption allows to configure the subscription / subscriber config
 type SubscriberOption func(*SubscriberConfig)
 
 // SubscriberWithSelectionPolicy allows to provide a selection policy for the subscriber
-func SubscriberWithSelectionPolicy(p events.PolicyDescription) SubscriberOption {
+func SubscriberWithSelectionPolicy(p events.PolicyConfig) SubscriberOption {
 	return func(s *SubscriberConfig) {
 		s.BufferPolicySelection = p
 	}
@@ -54,7 +54,7 @@ func SubscriberWithBufferCapacity(capacity int) SubscriberOption {
 
 type StreamOption func(*StreamConfig)
 
-func WithSubscriberSelectionPolicy(p events.PolicyDescription) StreamOption {
+func WithSubscriberSelectionPolicy(p events.PolicyConfig) StreamOption {
 	return func(s *StreamConfig) {
 		s.DefaultSubscribers.BufferPolicySelection = p
 	}
