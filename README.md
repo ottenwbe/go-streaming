@@ -1,7 +1,7 @@
 # Go Streaming Library
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/ottenwbe/go-streaming/blob/main/LICENSE)
 [![Go](https://github.com/ottenwbe/go-streaming/actions/workflows/go.yml/badge.svg)](https://github.com/ottenwbe/go-streaming/actions/workflows/go.yml)
-[![Known Vulnerabilities](https://snyk.io/test/github/ottenwbe/go-streaming/badge.svg)](https://snyk.io/test/github/ottenwbe/go-streaming)
+
 
 This is a basic event streaming and processing library.
 The processing engine is mainly designed for flexibility and extendability  .
@@ -17,12 +17,13 @@ Hence, also no specific language like CQL is supported and optimizations are not
 - **Type-Safe Pub/Sub**: Leverages Go generics for type-safe event streams.
 - **Continuous Queries**: Functional DSL for building stream processing pipelines.
 - **Backpressure & Buffering**: Built-in support for buffered streams and flow control.
-- **Windowing**: Support for time-based and count-based windows (via selection policies).
+- **Windowing**: Support for time-based (`TemporalWindow`) and count-based (`CountingWindow`) windows.
+- **Joins**: Support for joining streams (`Join`, `LeftJoin`) with windowing policies.
 
 ## Limitations
 
-- **Operator Support**: The primary supported operator types are the `PIPELINE_OPERATOR`, `FILTER` and `MAP` for batch processing. -  **Standard Operators**: The set of standard, built-in operators is minimal and will need to be expanded for more complex use cases.
-- **Builder API**: The Query creation using a fluent builder pattern for query construction is experimental.
+- **Operator Support**: The library provides a set of standard operators (`Filter`, `Map`, `Join`, `BatchSum`, etc.), but specialized operators may need to be implemented.
+- **Distributed Processing**: This is currently a single-node, in-memory processing engine.
 
 ## Usage
 
@@ -43,12 +44,11 @@ err := pubsub.InstantPublishByTopic[int]("my-topic", 42)
 Build processing pipelines using the functional API:
 
 ```go
-q, err := query.Query[int](
-    query.Process[int](
-        engine.ContinuousSmaller[int](50), // Example operator
-        query.FromSourceStream[int]("source-topic"),
-    ),
-)
+b := processing.NewBuilder[int]()
+b.From(processing.Source[int]("source-topic")).
+    Process(processing.Operator[int](processing.Smaller[int](50)))
+
+q, err := b.Build(true)
 
 q.Subscribe(func(e events.Event[int]) {
     // Handle processed output
@@ -64,7 +64,7 @@ See our examples folder for more details.
 
 ## Packages
 
-- `pubsub`: Core messaging infrastructure.
-- `query`: Query construction and lifecycle management.
-- `engine`: Stream processing operators.
-- `buffer`: Event buffering implementations.
+- `pkg/pubsub`: Core messaging infrastructure.
+- `pkg/processing`: Query construction, lifecycle management, and operators.
+- `pkg/events`: Event definitions and buffering implementations.
+- `pkg/log`: Logging interface.
