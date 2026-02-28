@@ -19,17 +19,12 @@ func main() {
 	log.SetLogger(zap.S())
 	var wg sync.WaitGroup
 
-	q, err := processing.Query[float32](
-		processing.Process[float32](
-			processing.ContinuousConvert[int, float32](),
-			//	 processing.OnStream[int](
-			processing.Process[int](
-				processing.ContinuousGreater[int](50),
-				processing.FromSourceStream[int]("in", pubsub.WithAsynchronousStream(true)),
-			),
-			//),
-		),
-	)
+	b := processing.NewBuilder[float32]()
+	b.From(processing.Source[int]("in", pubsub.WithAsynchronousStream(true))).
+		Process(processing.Operator[int](processing.Greater[int](50))).
+		Process(processing.Operator[float32](processing.Convert[int, float32]()))
+
+	q, err := b.Build(false)
 	if err != nil {
 		zap.S().Fatal(err)
 	}
