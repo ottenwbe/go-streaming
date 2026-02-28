@@ -24,17 +24,24 @@ func main() {
 	// -> Map(*100) [float64]
 	// -> Convert [int]
 	// -> Filter(Even) [int]
-	// -> Output [int]
-	b := processing.NewBuilder[int]()
+	// -> Join(secondary) [map[string]any]
+	// -> Output [map[string]any]
+	b := processing.NewBuilder[map[string]any]()
+
+	// Define a join policy
+	policy := events.MakePolicy(events.TemporalWindow, 0, 0, time.Now(), time.Second, time.Second)
+
 	b.From(processing.Source[float64]("in", pubsub.WithAsynchronousStream(true))).
 		Process(processing.Operator[float64](processing.Greater[float64](0.5))).
 		Process(processing.Operator[float64](processing.Map(func(e events.Event[float64]) float64 {
 			return e.GetContent() * 100
 		}))).
 		Process(processing.Operator[int](processing.Convert[float64, int]())).
-		Process(processing.Operator[int](processing.Filter(func(e events.Event[int]) bool {
-			return e.GetContent()%2 == 0
-		})))
+		Process(processing.Operator[map[string]any](processing.Map(func(e events.Event[int]) map[string]any {
+			return map[string]any{"id": e.GetContent(), "val": "primary"}
+		}))).
+		AddInput(processing.Source[map[string]any]("secondary")).
+		Process(processing.Operator[map[string]any](processing.Join("id", policy)))
 
 	q, err := b.Build(false)
 	if err != nil {
@@ -42,7 +49,7 @@ func main() {
 	}
 
 	// Subscribe to the query output
-	err = q.Subscribe(func(e events.Event[int]) {
+	err = q.Subscribe(func(e events.Event[map[string]any]) {
 		zap.S().Infof("event received: %v", e.GetContent())
 	})
 	if err != nil {
@@ -67,6 +74,10 @@ func publishEvents() {
 		for i := 0; i < numEvents; i++ {
 			// PublishContent raw float64 values; the system wraps them in Events
 			if err := pubsub.InstantPublishByTopic("in", rand.Float64()); err != nil {
+				zap.S().Error("publish error", zap.Error(err))
+			}
+			// Publish to secondary stream for joining
+			if err := pubsub.InstantPublishByTopic("secondary", map[string]any{"id": rand.Int() % 100, "info": "joined"}); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
 			}
 			time.Sleep(10 * time.Millisecond)
