@@ -166,6 +166,7 @@ type FanInOperatorEngine[TIn any, TOut any] struct {
 	fanInFunction func(map[int][]events.Event[TIn]) []TOut
 	policy        events.MultiSelectionPolicy[TIn]
 	buffers       map[int]*events.EventBuffer[TIn]
+	readers       map[int]events.BufferReader[TIn]
 	inputs        []pubsub.TypedSubscriber[TIn]
 	mutex         sync.Mutex
 }
@@ -192,7 +193,7 @@ func (o *FanInOperatorEngine[TIn, TOut]) Start() error {
 	}
 
 	o.buffers = make(map[int]*events.EventBuffer[TIn])
-	readers := make(map[int]events.BufferReader[TIn])
+	o.readers = make(map[int]events.BufferReader[TIn])
 
 	// Initialize policy based on the first input's configuration
 	// We assume all inputs share the same windowing logic for the fan-in
@@ -203,10 +204,12 @@ func (o *FanInOperatorEngine[TIn, TOut]) Start() error {
 		return fmt.Errorf("unsupported policy for fan-in: %s", pDesc.Type)
 	}
 
-	for i, inputConfig := range o.config.Inputs {
+	for i := range o.config.Inputs {
 		o.buffers[i] = events.NewEventBuffer[TIn]()
-		readers[i] = o.buffers[i]
+		o.readers[i] = o.buffers[i]
+	}
 
+	for i, inputConfig := range o.config.Inputs {
 		idx := i
 		sub, err := pubsub.SubscribeByTopicID[TIn](inputConfig.Stream, func(e events.Event[TIn]) {
 			o.processInput(idx, e)
@@ -256,11 +259,7 @@ func (o *FanInOperatorEngine[TIn, TOut]) processInput(idx int, e events.Event[TI
 	}
 
 	o.buffers[idx].Add(e)
-	readers := make(map[int]events.BufferReader[TIn])
-	for i, b := range o.buffers {
-		readers[i] = b
-	}
-	o.policy.UpdateSelection(readers)
+	o.policy.UpdateSelection(o.readers)
 }
 
 func (o *FanInOperatorEngine[TIn, TOut]) onWindowReady(data map[int][]events.Event[TIn]) {
