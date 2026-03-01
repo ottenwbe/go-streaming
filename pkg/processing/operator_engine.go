@@ -227,7 +227,6 @@ func (o *FanInOperatorEngine[TIn, TOut]) Start() error {
 		o.inputs = append(o.inputs, sub)
 	}
 
-	o.policy.SetBuffers(readers)
 	o.policy.AddCallback(o.onWindowReady)
 
 	return nil
@@ -257,7 +256,11 @@ func (o *FanInOperatorEngine[TIn, TOut]) processInput(idx int, e events.Event[TI
 	}
 
 	o.buffers[idx].Add(e)
-	o.policy.UpdateSelection()
+	readers := make(map[int]events.BufferReader[TIn])
+	for i, b := range o.buffers {
+		readers[i] = b
+	}
+	o.policy.UpdateSelection(readers)
 }
 
 func (o *FanInOperatorEngine[TIn, TOut]) onWindowReady(data map[int][]events.Event[TIn]) {
@@ -352,7 +355,6 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) Start() error {
 		return errors.Join(append(errs, fmt.Errorf("unsupported policy for join: %s", pDesc.Type))...)
 	}
 
-	o.policy.SetBuffers(o.bufferLeft, o.bufferRight)
 	o.policy.AddCallback(o.onWindowReady)
 
 	var err error
@@ -399,7 +401,7 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) processLeft(e events.Event[TLe
 		return
 	}
 	o.bufferLeft.Add(e)
-	o.policy.UpdateSelection()
+	o.policy.UpdateSelection(o.bufferLeft, o.bufferRight)
 }
 
 func (o *JoinOperatorEngine[TLeft, TRight, TOut]) processRight(e events.Event[TRight]) {
@@ -409,7 +411,7 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) processRight(e events.Event[TR
 		return
 	}
 	o.bufferRight.Add(e)
-	o.policy.UpdateSelection()
+	o.policy.UpdateSelection(o.bufferLeft, o.bufferRight)
 }
 
 func (o *JoinOperatorEngine[TLeft, TRight, TOut]) onWindowReady(left []events.Event[TLeft], right []events.Event[TRight]) {

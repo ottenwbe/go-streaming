@@ -184,7 +184,6 @@ func NewLimitedConsumableAsyncBuffer[T any](policy SelectionPolicy[T], limit int
 		},
 		limit: limit,
 	}
-	s.selectionPolicy.SetBuffer(&s.buffer)
 	return s
 }
 
@@ -194,7 +193,6 @@ func NewConsumableAsyncBuffer[T any](policy SelectionPolicy[T]) Buffer[T] {
 		asyncBuffer:     newAsyncBuffer[T](),
 		selectionPolicy: policy,
 	}
-	s.selectionPolicy.SetBuffer(&s.buffer)
 	return s
 }
 
@@ -430,7 +428,7 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents(ctx context.Context) 
 
 	var (
 		selectedEvents basicBuffer[T]
-		selectionFound = s.selectionPolicy.NextSelectionReady()
+		selectionFound = s.selectionPolicy.NextSelectionReady(s.buffer)
 		selection      EventSelection
 	)
 
@@ -439,7 +437,7 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents(ctx context.Context) 
 		if err := s.wait(ctx); err != nil {
 			return nil, err
 		}
-		selectionFound = s.selectionPolicy.NextSelectionReady()
+		selectionFound = s.selectionPolicy.NextSelectionReady(s.buffer)
 	}
 
 	selection = s.selectionPolicy.NextSelection()
@@ -452,7 +450,7 @@ func (s *ConsumableAsyncBuffer[T]) GetAndConsumeNextEvents(ctx context.Context) 
 
 	if selectionFound {
 		s.selectionPolicy.Shift()
-		s.selectionPolicy.UpdateSelection()
+		s.selectionPolicy.UpdateSelection(s.buffer)
 		offset := s.selectionPolicy.NextSelection().Start
 
 		removeCount := offset
@@ -481,7 +479,7 @@ func (s *ConsumableAsyncBuffer[T]) AddEvents(ctx context.Context, events []Event
 	}
 
 	s.buffer = append(s.buffer, events...)
-	s.selectionPolicy.UpdateSelection()
+	s.selectionPolicy.UpdateSelection(s.buffer)
 
 	s.broadcast()
 	return nil
@@ -497,7 +495,7 @@ func (s *ConsumableAsyncBuffer[T]) AddEvent(ctx context.Context, event Event[T])
 	}
 
 	s.buffer = append(s.buffer, event)
-	s.selectionPolicy.UpdateSelection()
+	s.selectionPolicy.UpdateSelection(s.buffer)
 
 	s.broadcast()
 	return nil
@@ -605,7 +603,7 @@ func (s *LimitedConsumableAsyncBuffer[T]) AddEvents(ctx context.Context, events 
 	}
 
 	s.buffer = append(s.buffer, events...)
-	s.selectionPolicy.UpdateSelection()
+	s.selectionPolicy.UpdateSelection(s.buffer)
 
 	s.broadcast()
 	return nil
@@ -630,7 +628,7 @@ func (s *LimitedConsumableAsyncBuffer[T]) AddEvent(ctx context.Context, event Ev
 	}
 
 	s.buffer = append(s.buffer, event)
-	s.selectionPolicy.UpdateSelection()
+	s.selectionPolicy.UpdateSelection(s.buffer)
 
 	s.broadcast()
 	return nil

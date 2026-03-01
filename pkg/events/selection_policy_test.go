@@ -240,7 +240,7 @@ var _ = Describe("SelectionPolicy", func() {
 
 			buf1 := events.NewEventBuffer[string]()
 			buf2 := events.NewEventBuffer[string]()
-			p.SetBuffers(map[int]events.BufferReader[string]{0: buf1, 1: buf2})
+			buffers := map[int]events.BufferReader[string]{0: buf1, 1: buf2}
 
 			buf1.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(time.Minute)}, Content: "e1.1"})
 			buf1.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(11 * time.Minute)}, Content: "e1.2"})
@@ -250,15 +250,15 @@ var _ = Describe("SelectionPolicy", func() {
 			buf2.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(12 * time.Minute)}, Content: "e2.2"})
 			buf2.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(22 * time.Minute)}, Content: "e2.3"})
 
-			p.UpdateSelection()
-			Expect(p.NextSelectionReady()).To(BeTrue())
+			p.UpdateSelection(buffers)
+			Expect(p.NextSelectionReady(buffers)).To(BeTrue())
 			sel := p.NextSelection()
 			Expect(sel[0]).To(Equal(events.EventSelection{Start: 0, End: 0}))
 			Expect(sel[1]).To(Equal(events.EventSelection{Start: 0, End: 0}))
 
 			p.Shift()
-			p.UpdateSelection()
-			Expect(p.NextSelectionReady()).To(BeTrue())
+			p.UpdateSelection(buffers)
+			Expect(p.NextSelectionReady(buffers)).To(BeTrue())
 			sel = p.NextSelection()
 			Expect(sel[0]).To(Equal(events.EventSelection{Start: 1, End: 1}))
 			Expect(sel[1]).To(Equal(events.EventSelection{Start: 1, End: 1}))
@@ -271,19 +271,18 @@ var _ = Describe("SelectionPolicy", func() {
 
 			bufLeft := events.NewEventBuffer[string]()
 			bufRight := events.NewEventBuffer[int]()
-			p.SetBuffers(bufLeft, bufRight)
 
 			bufLeft.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(time.Minute)}, Content: "e1"})
 			bufRight.Add(&events.TemporalEvent[int]{Stamp: events.TimeStamp{StartTime: start.Add(2 * time.Minute)}, Content: 1})
 
-			p.UpdateSelection()
-			Expect(p.NextSelectionReady()).To(BeFalse())
+			p.UpdateSelection(bufLeft, bufRight)
+			Expect(p.NextSelectionReady(bufLeft, bufRight)).To(BeFalse())
 
 			bufLeft.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(11 * time.Minute)}, Content: "e2"})
 			bufRight.Add(&events.TemporalEvent[int]{Stamp: events.TimeStamp{StartTime: start.Add(12 * time.Minute)}, Content: 2})
 
-			p.UpdateSelection()
-			Expect(p.NextSelectionReady()).To(BeTrue())
+			p.UpdateSelection(bufLeft, bufRight)
+			Expect(p.NextSelectionReady(bufLeft, bufRight)).To(BeTrue())
 
 			l, r := p.NextSelection()
 			Expect(l).To(Equal(events.EventSelection{Start: 0, End: 0}))
@@ -291,7 +290,7 @@ var _ = Describe("SelectionPolicy", func() {
 
 			fired := false
 			p.AddCallback(func(l []events.Event[string], r []events.Event[int]) { fired = true })
-			p.UpdateSelection()
+			p.UpdateSelection(bufLeft, bufRight)
 			Expect(fired).To(BeTrue())
 		})
 	})
