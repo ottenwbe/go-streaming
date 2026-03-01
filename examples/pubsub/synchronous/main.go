@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/log"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
 	"go.uber.org/zap"
@@ -19,21 +20,41 @@ func main() {
 
 	// 1. Configure the publish/subscribe system for the topic 'Some Integers'
 	// Note: this is a synchronous stream, which means that the subscribers need to consume events before a publisher cans send the next event
-	intStreamID, err := pubsub.AddOrReplaceStream[int]("Some Integers", pubsub.WithSubscriberSync(true))
+	intStreamID, err := pubsub.AddOrReplaceStream[int]("Some Integers", pubsub.WithAsynchronousStream(false), pubsub.WithSubscriberSync(true))
 	if err != nil {
 		zap.S().Fatalf("Failed to create stream: %v", err)
 	}
-	defer pubsub.TryRemoveStreams(intStreamID)
+
+	start := time.Now()
 
 	// 2. Subscribe to the topic 'Some Integers'
-	startSubscriber("TypedSubscriber 1", intStreamID, 2*time.Microsecond)
-	startSubscriber("TypedSubscriber 2", intStreamID, time.Microsecond)
+	sub1 := startSubscriber("TypedSubscriber 1", intStreamID, 2*time.Microsecond, &wg)
+	sub2 := startSubscriber("TypedSubscriber 2", intStreamID, time.Microsecond, &wg)
 
-	// 3. PublishContent events to the topic 'Some Integers'
+	// 3. Publish events to the topic 'Some Integers'
 	startPublisher(intStreamID, &wg)
 
 	// 4. Wait for publishers and subscribers to send and receive all events
 	wg.Wait()
+	zap.S().Infof("Synchronous processing took %s", time.Since(start))
+
+	// 5. cleanup
+	unsubscribe("TypedSubscriber 1", intStreamID, sub1)
+	unsubscribe("TypedSubscriber 2", intStreamID, sub2)
+	pubsub.TryRemoveStreams(intStreamID)
+}
+
+func startSubscriber(name string, streamID pubsub.StreamID, delay time.Duration, wg *sync.WaitGroup) pubsub.TypedSubscriber[int] {
+	wg.Add(maxEvents)
+	sub, err := pubsub.SubscribeByTopicID[int](streamID, func(e events.Event[int]) {
+		zap.S().Infof("Event received by %s: %v", name, e)
+		time.Sleep(delay)
+		wg.Done()
+	})
+	if err != nil {
+		zap.S().Fatalf("Failed to subscribe %s: %v", name, err)
+	}
+	return sub
 }
 
 func startPublisher(streamID pubsub.StreamID, wg *sync.WaitGroup) {
@@ -54,16 +75,6 @@ func startPublisher(streamID pubsub.StreamID, wg *sync.WaitGroup) {
 	})
 }
 
-func startSubscriber(name string, streamID pubsub.StreamID, delay time.Duration) {
-	_, err := pubsub.SubscribeByTopicID[int](streamID, func(e events.Event[int]) {
-		zap.S().Infof("Event received by %s: %v", name, e)
-		time.Sleep(delay)
-	})
-	if err != nil {
-		zap.S().Fatalf("Failed to subscribe %s: %v", name, err)
-	}
-}
-
 func unregister(streamID pubsub.StreamID, publisher pubsub.Publisher[int]) {
 	err := pubsub.UnRegisterPublisher(publisher)
 	if err != nil {
@@ -80,4 +91,5 @@ func unsubscribe(name string, streamID pubsub.StreamID, subscriber pubsub.TypedS
 
 func init() {
 	zap.ReplaceGlobals(zap.Must(zap.NewProduction()))
+	log.SetLogger(zap.S())
 }

@@ -258,7 +258,7 @@ func (m *notificationMap[T]) newBatchSubscriber(streamID StreamID, callback func
 	var buf events.Buffer[T]
 
 	if subscriberConfig.BufferPolicySelection.Active {
-		p, err := events.NewPolicyFromDescription[T](subscriberConfig.BufferPolicySelection)
+		p, err := events.NewSelectionPolicyFromConfig[T](subscriberConfig.BufferPolicySelection)
 		if err != nil {
 			return nil, err
 		}

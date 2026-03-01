@@ -2,6 +2,7 @@ package events
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,12 +10,6 @@ import (
 
 	"github.com/google/uuid"
 )
-
-// BufferReader allows read-only access to an underlying event buffer that implements BufferReader
-type BufferReader[T any] interface {
-	Get(i int) Event[T]
-	Len() int
-}
 
 // EventSelection represents a range of events within a buffer slice.
 type EventSelection struct {
@@ -31,9 +26,17 @@ func (e EventSelection) IsValid() bool {
 type PolicyID uuid.UUID
 
 const (
-	CountingWindow = "counting"
-	TemporalWindow = "temporal"
-	SelectNext     = "selectNext"
+	CountingWindow      = "counting"
+	TemporalWindow      = "temporal"
+	SelectNext          = "selectNext"
+	MultiTemporalWindow = "multiTemporal"
+	DuoTemporalWindow   = "duoTemporal"
+)
+
+var (
+	ErrUnknownPolicyType      = errors.New("unknown policy type")
+	ErrUnknownMultiPolicyType = errors.New("unknown multi policy type")
+	ErrUnknownDuoPolicyType   = errors.New("unknown duo policy type")
 )
 
 // SelectionPolicyConfig is a serializable representation of a selection policy.
@@ -49,23 +52,76 @@ type SelectionPolicyConfig struct {
 	WindowShift  time.Duration `json:"windowShift,omitempty" yaml:"windowShift,omitempty"`
 }
 
+type SelectionOption func(*SelectionPolicyConfig)
+
+// SelectNextOption allows to configure values for a select next window
+func SelectNextOption() SelectionOption {
+	return func(s *SelectionPolicyConfig) {
+		s.Active = true
+		s.Type = SelectNext
+		s.Size = 1
+		s.Slide = 1
+	}
+}
+
+// CountingWindowOption allows to configure values for a counting window
+func CountingWindowOption(size, slide int) SelectionOption {
+	return func(s *SelectionPolicyConfig) {
+		s.Active = true
+		s.Type = CountingWindow
+		s.Size = size
+		s.Slide = slide
+	}
+}
+
+// TemporalWindowOption allows to configure values for a temporal window
+func TemporalWindowOption(windowStart time.Time, windowLength, windowShift time.Duration) SelectionOption {
+	return func(s *SelectionPolicyConfig) {
+		s.Active = true
+		s.Type = TemporalWindow
+		s.WindowStart = windowStart
+		s.WindowLength = windowLength
+		s.WindowShift = windowShift
+	}
+}
+
+// MultiTemporalWindowOption allows to configure values for a multi-temporal window
+func MultiTemporalWindowOption(windowStart time.Time, windowLength, windowShift time.Duration) SelectionOption {
+	return func(s *SelectionPolicyConfig) {
+		s.Active = true
+		s.Type = MultiTemporalWindow
+		s.WindowStart = windowStart
+		s.WindowLength = windowLength
+		s.WindowShift = windowShift
+	}
+}
+
+// DuoTemporalWindowOption allows to configure values for a duo-temporal window
+func DuoTemporalWindowOption(windowStart time.Time, windowLength, windowShift time.Duration) SelectionOption {
+	return func(s *SelectionPolicyConfig) {
+		s.Active = true
+		s.Type = DuoTemporalWindow
+		s.WindowStart = windowStart
+		s.WindowLength = windowLength
+		s.WindowShift = windowShift
+	}
+}
+
 type (
 	// SelectionPolicy defines how events are selected from a buffer
 	SelectionPolicy[T any] interface {
-		NextSelectionReady() bool
+		NextSelectionReady(buffer BufferReader[T]) bool
 		NextSelection() EventSelection
-		UpdateSelection()
+		UpdateSelection(buffer BufferReader[T])
 		Shift()
 		Offset(offset int)
 		ID() PolicyID
-		SetBuffer(reader BufferReader[T])
 		Description() SelectionPolicyConfig
 	}
 
 	// CountingWindowPolicy selects a fixed number of events (n) with a sliding window (shift).
 	CountingWindowPolicy[T any] struct {
 		PolicyID
-		buffer       BufferReader[T]
 		n            int
 		shift        int
 		currentRange EventSelection
@@ -73,7 +129,6 @@ type (
 	// TemporalWindowPolicy selects events based on a time window.
 	TemporalWindowPolicy[T any] struct {
 		PolicyID
-		buffer       BufferReader[T]
 		currentRange EventSelection
 		windowStart  time.Time
 		windowEnd    time.Time
@@ -82,24 +137,20 @@ type (
 	}
 )
 
-func (s *CountingWindowPolicy[T]) SetBuffer(buffer BufferReader[T]) {
-	s.buffer = buffer
-}
-
 func (s *CountingWindowPolicy[T]) NextSelection() EventSelection {
 	return s.currentRange
 }
 
-func (s *CountingWindowPolicy[T]) NextSelectionReady() bool {
-	return s.currentRange.End-s.currentRange.Start+1 >= s.n
+func (s *CountingWindowPolicy[T]) NextSelectionReady(buffer BufferReader[T]) bool {
+	return s.currentRange.End-s.currentRange.Start+1 >= s.n && buffer.Len() > s.currentRange.End
 }
 
-func (s *CountingWindowPolicy[T]) UpdateSelection() {
-	available := s.buffer.Len() - s.currentRange.Start
+func (s *CountingWindowPolicy[T]) UpdateSelection(buffer BufferReader[T]) {
+	available := buffer.Len() - s.currentRange.Start
 	if available >= s.n {
 		s.currentRange.End = s.currentRange.Start + s.n - 1
 	} else {
-		s.currentRange.End = s.buffer.Len() - 1
+		s.currentRange.End = buffer.Len() - 1
 	}
 }
 
@@ -125,11 +176,11 @@ func (s *CountingWindowPolicy[T]) Description() SelectionPolicyConfig {
 }
 
 // NextSelectionReady checks if there are no more events within the window
-func (s *TemporalWindowPolicy[T]) NextSelectionReady() bool {
-	if s.buffer.Len() == 0 {
+func (s *TemporalWindowPolicy[T]) NextSelectionReady(buffer BufferReader[T]) bool {
+	if buffer.Len() == 0 {
 		return false
 	}
-	return s.buffer.Get(s.buffer.Len() - 1).GetStamp().StartTime.After(s.windowEnd)
+	return buffer.Get(buffer.Len() - 1).GetStamp().StartTime.After(s.windowEnd)
 }
 
 // NextSelection returns the EventSelection for the current window
@@ -147,8 +198,8 @@ func (s *TemporalWindowPolicy[T]) Description() SelectionPolicyConfig {
 }
 
 // UpdateSelection updates the window based on the new event's timestamp
-func (s *TemporalWindowPolicy[T]) UpdateSelection() {
-	updateSelectionForBuffer(s.buffer, &s.currentRange, s.windowStart, s.windowEnd)
+func (s *TemporalWindowPolicy[T]) UpdateSelection(buffer BufferReader[T]) {
+	updateSelectionForBuffer(buffer, &s.currentRange, s.windowStart, s.windowEnd)
 }
 
 // Shift is not relevant for time-based window and is left empty
@@ -161,10 +212,6 @@ func (s *TemporalWindowPolicy[T]) Shift() {
 func (s *TemporalWindowPolicy[T]) Offset(offset int) {
 	s.currentRange.Start = max(-1, s.currentRange.Start-offset)
 	s.currentRange.End = max(-1, s.currentRange.End-offset)
-}
-
-func (s *TemporalWindowPolicy[T]) SetBuffer(buffer BufferReader[T]) {
-	s.buffer = buffer
 }
 
 func (id PolicyID) ID() PolicyID {
@@ -203,7 +250,13 @@ func NewTemporalWindowPolicy[T any](startingTime time.Time, windowLength time.Du
 	}
 }
 
-func MakeSelectionPolicy(t string, size int, slide int, windowStart time.Time, windowLength time.Duration, windowShift time.Duration) SelectionPolicyConfig {
+func MakeSelectionPolicy(option SelectionOption) SelectionPolicyConfig {
+	config := SelectionPolicyConfig{}
+	option(&config)
+	return config
+}
+
+func MakeSelectionPolicyByValue(t string, size int, slide int, windowStart time.Time, windowLength time.Duration, windowShift time.Duration) SelectionPolicyConfig {
 	return SelectionPolicyConfig{
 		Active:       true,
 		Type:         t,
@@ -215,8 +268,8 @@ func MakeSelectionPolicy(t string, size int, slide int, windowStart time.Time, w
 	}
 }
 
-// NewPolicyFromDescription creates a new SelectionPolicy from a SelectionPolicyConfig.
-func NewPolicyFromDescription[T any](desc SelectionPolicyConfig) (SelectionPolicy[T], error) {
+// NewSelectionPolicyFromConfig creates a new SelectionPolicy from a SelectionPolicyConfig.
+func NewSelectionPolicyFromConfig[T any](desc SelectionPolicyConfig) (SelectionPolicy[T], error) {
 	switch desc.Type {
 	case CountingWindow:
 		return NewCountingWindowPolicy[T](desc.Size, desc.Slide), nil
@@ -225,8 +278,45 @@ func NewPolicyFromDescription[T any](desc SelectionPolicyConfig) (SelectionPolic
 	case TemporalWindow:
 		return NewTemporalWindowPolicy[T](desc.WindowStart, desc.WindowLength, desc.WindowShift), nil
 	default:
-		return nil, fmt.Errorf("unknown policy type: '%s'", desc.Type)
+		return nil, fmt.Errorf("%w: '%s'", ErrUnknownPolicyType, desc.Type)
 	}
+}
+
+func NewSelectionPolicy[T any](option SelectionOption) (SelectionPolicy[T], error) {
+	config := SelectionPolicyConfig{}
+	option(&config)
+	return NewSelectionPolicyFromConfig[T](config)
+}
+
+// NewMultiSelectionPolicyFromConfig creates a new MultiSelectionPolicy from a SelectionPolicyConfig.
+func NewMultiSelectionPolicyFromConfig[T any](desc SelectionPolicyConfig) (MultiSelectionPolicy[T], error) {
+	switch desc.Type {
+	case MultiTemporalWindow:
+		return NewMultiTemporalWindowPolicy[T](desc.WindowStart, desc.WindowLength, desc.WindowShift), nil
+	default:
+		return nil, fmt.Errorf("%w: '%s'", ErrUnknownMultiPolicyType, desc.Type)
+	}
+}
+
+func NewMultiSelectionPolicy[T any](option SelectionOption) (MultiSelectionPolicy[T], error) {
+	config := MakeSelectionPolicy(option)
+	return NewMultiSelectionPolicyFromConfig[T](config)
+}
+
+// NewDuoSelectionPolicyFromConfig creates a new DuoPolicy from a SelectionPolicyConfig.
+func NewDuoSelectionPolicyFromConfig[TLeft, TRight any](desc SelectionPolicyConfig) (DuoPolicy[TLeft, TRight], error) {
+	switch desc.Type {
+	case DuoTemporalWindow:
+		return NewDuoTemporalWindowPolicy[TLeft, TRight](desc.WindowStart, desc.WindowLength, desc.WindowShift), nil
+	default:
+		return nil, fmt.Errorf("%w: '%s'", ErrUnknownDuoPolicyType, desc.Type)
+	}
+}
+
+func NewDuoSelectionPolicy[TLeft, TRight any](option SelectionOption) (DuoPolicy[TLeft, TRight], error) {
+	config := SelectionPolicyConfig{}
+	option(&config)
+	return NewDuoSelectionPolicyFromConfig[TLeft, TRight](config)
 }
 
 // PolicyDescriptionFromJSON parses a SelectionPolicyConfig from a JSON byte slice.
@@ -262,13 +352,12 @@ type MultiEventSelection map[int]EventSelection
 
 // MultiSelectionPolicy defines how events are selected from multiple buffers
 type MultiSelectionPolicy[T any] interface {
-	NextSelectionReady() bool
+	NextSelectionReady(buffers map[int]BufferReader[T]) bool
 	NextSelection() MultiEventSelection
-	UpdateSelection()
+	UpdateSelection(buffers map[int]BufferReader[T])
 	Shift()
 	Offset(bufferIndex int, offset int)
 	ID() PolicyID
-	SetBuffers(readers map[int]BufferReader[T])
 	Description() SelectionPolicyConfig
 	AddCallback(callback func(map[int][]Event[T]))
 }
@@ -276,7 +365,6 @@ type MultiSelectionPolicy[T any] interface {
 // MultiTemporalWindowPolicy selects events based on a time window across multiple buffers.
 type MultiTemporalWindowPolicy[T any] struct {
 	PolicyID
-	buffers      map[int]BufferReader[T]
 	currentRange MultiEventSelection
 	windowStart  time.Time
 	windowEnd    time.Time
@@ -290,23 +378,15 @@ func (s *MultiTemporalWindowPolicy[T]) AddCallback(callback func(map[int][]Event
 	s.callbacks = append(s.callbacks, callback)
 }
 
-func (s *MultiTemporalWindowPolicy[T]) SetBuffers(buffers map[int]BufferReader[T]) {
-	s.buffers = buffers
-	s.currentRange = make(MultiEventSelection)
-	for id := range buffers {
-		s.currentRange[id] = EventSelection{0, -1}
-	}
-}
-
 func (s *MultiTemporalWindowPolicy[T]) NextSelection() MultiEventSelection {
 	return s.currentRange
 }
 
-func (s *MultiTemporalWindowPolicy[T]) NextSelectionReady() bool {
-	if len(s.buffers) == 0 {
+func (s *MultiTemporalWindowPolicy[T]) NextSelectionReady(buffers map[int]BufferReader[T]) bool {
+	if len(buffers) == 0 {
 		return false
 	}
-	for _, buffer := range s.buffers {
+	for _, buffer := range buffers {
 		if buffer.Len() == 0 {
 			return false
 		}
@@ -317,19 +397,22 @@ func (s *MultiTemporalWindowPolicy[T]) NextSelectionReady() bool {
 	return true
 }
 
-func (s *MultiTemporalWindowPolicy[T]) UpdateSelection() {
-	for id, buffer := range s.buffers {
+func (s *MultiTemporalWindowPolicy[T]) UpdateSelection(buffers map[int]BufferReader[T]) {
+	for id, buffer := range buffers {
+		if _, ok := s.currentRange[id]; !ok {
+			s.currentRange[id] = EventSelection{0, -1}
+		}
 		sel := s.currentRange[id]
 		updateSelectionForBuffer(buffer, &sel, s.windowStart, s.windowEnd)
 		s.currentRange[id] = sel
 	}
 
-	if s.NextSelectionReady() {
-		s.triggerCallbacks()
+	if s.NextSelectionReady(buffers) {
+		s.triggerCallbacks(buffers)
 	}
 }
 
-func (s *MultiTemporalWindowPolicy[T]) triggerCallbacks() {
+func (s *MultiTemporalWindowPolicy[T]) triggerCallbacks(buffers map[int]BufferReader[T]) {
 	if s.fired || len(s.callbacks) == 0 {
 		return
 	}
@@ -338,7 +421,7 @@ func (s *MultiTemporalWindowPolicy[T]) triggerCallbacks() {
 	events := make(map[int][]Event[T])
 	for id, sel := range s.currentRange {
 		for i := sel.Start; i <= sel.End; i++ {
-			events[id] = append(events[id], s.buffers[id].Get(i))
+			events[id] = append(events[id], buffers[id].Get(i))
 		}
 	}
 	for _, cb := range s.callbacks {
@@ -388,13 +471,12 @@ func NewMultiTemporalWindowPolicy[T any](startingTime time.Time, windowLength ti
 
 // DuoPolicy defines how events are selected from two buffers of different types
 type DuoPolicy[TLeft, TRight any] interface {
-	NextSelectionReady() bool
+	NextSelectionReady(left BufferReader[TLeft], right BufferReader[TRight]) bool
 	NextSelection() (EventSelection, EventSelection)
-	UpdateSelection()
+	UpdateSelection(left BufferReader[TLeft], right BufferReader[TRight])
 	Shift()
 	Offset(leftOffset, rightOffset int)
 	ID() PolicyID
-	SetBuffers(left BufferReader[TLeft], right BufferReader[TRight])
 	Description() SelectionPolicyConfig
 	AddCallback(callback func([]Event[TLeft], []Event[TRight]))
 }
@@ -402,8 +484,6 @@ type DuoPolicy[TLeft, TRight any] interface {
 // DuoTemporalWindowPolicy selects events based on a time window across two buffers.
 type DuoTemporalWindowPolicy[TLeft, TRight any] struct {
 	PolicyID
-	bufferLeft   BufferReader[TLeft]
-	bufferRight  BufferReader[TRight]
 	rangeLeft    EventSelection
 	rangeRight   EventSelection
 	windowStart  time.Time
@@ -414,22 +494,15 @@ type DuoTemporalWindowPolicy[TLeft, TRight any] struct {
 	fired        bool
 }
 
-func (s *DuoTemporalWindowPolicy[TLeft, TRight]) SetBuffers(left BufferReader[TLeft], right BufferReader[TRight]) {
-	s.bufferLeft = left
-	s.bufferRight = right
-	s.rangeLeft = EventSelection{0, -1}
-	s.rangeRight = EventSelection{0, -1}
-}
-
-func (s *DuoTemporalWindowPolicy[TLeft, TRight]) NextSelectionReady() bool {
-	if s.bufferLeft == nil || s.bufferRight == nil {
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) NextSelectionReady(left BufferReader[TLeft], right BufferReader[TRight]) bool {
+	if left == nil || right == nil {
 		return false
 	}
-	if s.bufferLeft.Len() == 0 || s.bufferRight.Len() == 0 {
+	if left.Len() == 0 || right.Len() == 0 {
 		return false
 	}
-	leftReady := s.bufferLeft.Get(s.bufferLeft.Len() - 1).GetStamp().StartTime.After(s.windowEnd)
-	rightReady := s.bufferRight.Get(s.bufferRight.Len() - 1).GetStamp().StartTime.After(s.windowEnd)
+	leftReady := left.Get(left.Len() - 1).GetStamp().StartTime.After(s.windowEnd)
+	rightReady := right.Get(right.Len() - 1).GetStamp().StartTime.After(s.windowEnd)
 	return leftReady && rightReady
 }
 
@@ -437,16 +510,16 @@ func (s *DuoTemporalWindowPolicy[TLeft, TRight]) NextSelection() (EventSelection
 	return s.rangeLeft, s.rangeRight
 }
 
-func (s *DuoTemporalWindowPolicy[TLeft, TRight]) UpdateSelection() {
-	updateSelectionForBuffer(s.bufferLeft, &s.rangeLeft, s.windowStart, s.windowEnd)
-	updateSelectionForBuffer(s.bufferRight, &s.rangeRight, s.windowStart, s.windowEnd)
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) UpdateSelection(left BufferReader[TLeft], right BufferReader[TRight]) {
+	updateSelectionForBuffer(left, &s.rangeLeft, s.windowStart, s.windowEnd)
+	updateSelectionForBuffer(right, &s.rangeRight, s.windowStart, s.windowEnd)
 
-	if s.NextSelectionReady() {
-		s.triggerCallbacks()
+	if s.NextSelectionReady(left, right) {
+		s.triggerCallbacks(left, right)
 	}
 }
 
-func (s *DuoTemporalWindowPolicy[TLeft, TRight]) triggerCallbacks() {
+func (s *DuoTemporalWindowPolicy[TLeft, TRight]) triggerCallbacks(left BufferReader[TLeft], right BufferReader[TRight]) {
 	if s.fired || len(s.callbacks) == 0 {
 		return
 	}
@@ -454,12 +527,12 @@ func (s *DuoTemporalWindowPolicy[TLeft, TRight]) triggerCallbacks() {
 
 	leftEvents := make([]Event[TLeft], 0)
 	for i := s.rangeLeft.Start; i <= s.rangeLeft.End; i++ {
-		leftEvents = append(leftEvents, s.bufferLeft.Get(i))
+		leftEvents = append(leftEvents, left.Get(i))
 	}
 
 	rightEvents := make([]Event[TRight], 0)
 	for i := s.rangeRight.Start; i <= s.rangeRight.End; i++ {
-		rightEvents = append(rightEvents, s.bufferRight.Get(i))
+		rightEvents = append(rightEvents, right.Get(i))
 	}
 
 	for _, cb := range s.callbacks {

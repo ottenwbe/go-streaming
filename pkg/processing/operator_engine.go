@@ -166,6 +166,7 @@ type FanInOperatorEngine[TIn any, TOut any] struct {
 	fanInFunction func(map[int][]events.Event[TIn]) []TOut
 	policy        events.MultiSelectionPolicy[TIn]
 	buffers       map[int]*events.EventBuffer[TIn]
+	readers       map[int]events.BufferReader[TIn]
 	inputs        []pubsub.TypedSubscriber[TIn]
 	mutex         sync.Mutex
 }
@@ -192,7 +193,7 @@ func (o *FanInOperatorEngine[TIn, TOut]) Start() error {
 	}
 
 	o.buffers = make(map[int]*events.EventBuffer[TIn])
-	readers := make(map[int]events.BufferReader[TIn])
+	o.readers = make(map[int]events.BufferReader[TIn])
 
 	// Initialize policy based on the first input's configuration
 	// We assume all inputs share the same windowing logic for the fan-in
@@ -203,10 +204,12 @@ func (o *FanInOperatorEngine[TIn, TOut]) Start() error {
 		return fmt.Errorf("unsupported policy for fan-in: %s", pDesc.Type)
 	}
 
-	for i, inputConfig := range o.config.Inputs {
+	for i := range o.config.Inputs {
 		o.buffers[i] = events.NewEventBuffer[TIn]()
-		readers[i] = o.buffers[i]
+		o.readers[i] = o.buffers[i]
+	}
 
+	for i, inputConfig := range o.config.Inputs {
 		idx := i
 		sub, err := pubsub.SubscribeByTopicID[TIn](inputConfig.Stream, func(e events.Event[TIn]) {
 			o.processInput(idx, e)
@@ -227,7 +230,6 @@ func (o *FanInOperatorEngine[TIn, TOut]) Start() error {
 		o.inputs = append(o.inputs, sub)
 	}
 
-	o.policy.SetBuffers(readers)
 	o.policy.AddCallback(o.onWindowReady)
 
 	return nil
@@ -257,7 +259,7 @@ func (o *FanInOperatorEngine[TIn, TOut]) processInput(idx int, e events.Event[TI
 	}
 
 	o.buffers[idx].Add(e)
-	o.policy.UpdateSelection()
+	o.policy.UpdateSelection(o.readers)
 }
 
 func (o *FanInOperatorEngine[TIn, TOut]) onWindowReady(data map[int][]events.Event[TIn]) {
@@ -352,7 +354,6 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) Start() error {
 		return errors.Join(append(errs, fmt.Errorf("unsupported policy for join: %s", pDesc.Type))...)
 	}
 
-	o.policy.SetBuffers(o.bufferLeft, o.bufferRight)
 	o.policy.AddCallback(o.onWindowReady)
 
 	var err error
@@ -399,7 +400,7 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) processLeft(e events.Event[TLe
 		return
 	}
 	o.bufferLeft.Add(e)
-	o.policy.UpdateSelection()
+	o.policy.UpdateSelection(o.bufferLeft, o.bufferRight)
 }
 
 func (o *JoinOperatorEngine[TLeft, TRight, TOut]) processRight(e events.Event[TRight]) {
@@ -409,7 +410,7 @@ func (o *JoinOperatorEngine[TLeft, TRight, TOut]) processRight(e events.Event[TR
 		return
 	}
 	o.bufferRight.Add(e)
-	o.policy.UpdateSelection()
+	o.policy.UpdateSelection(o.bufferLeft, o.bufferRight)
 }
 
 func (o *JoinOperatorEngine[TLeft, TRight, TOut]) onWindowReady(left []events.Event[TLeft], right []events.Event[TRight]) {
