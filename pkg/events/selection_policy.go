@@ -2,6 +2,7 @@ package events
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -31,9 +32,17 @@ func (e EventSelection) IsValid() bool {
 type PolicyID uuid.UUID
 
 const (
-	CountingWindow = "counting"
-	TemporalWindow = "temporal"
-	SelectNext     = "selectNext"
+	CountingWindow      = "counting"
+	TemporalWindow      = "temporal"
+	SelectNext          = "selectNext"
+	MultiTemporalWindow = "multiTemporal"
+	DuoTemporalWindow   = "duoTemporal"
+)
+
+var (
+	ErrUnknownPolicyType      = errors.New("unknown policy type")
+	ErrUnknownMultiPolicyType = errors.New("unknown multi policy type")
+	ErrUnknownDuoPolicyType   = errors.New("unknown duo policy type")
 )
 
 // SelectionPolicyConfig is a serializable representation of a selection policy.
@@ -47,6 +56,61 @@ type SelectionPolicyConfig struct {
 	WindowStart  time.Time     `json:"windowStart,omitempty" yaml:"windowStart,omitempty"`
 	WindowLength time.Duration `json:"windowLength,omitempty" yaml:"windowLength,omitempty"`
 	WindowShift  time.Duration `json:"windowShift,omitempty" yaml:"windowShift,omitempty"`
+}
+
+type SelectionOption func(*SelectionPolicyConfig)
+
+// SelectNextOption allows to configure values for a select next window
+func SelectNextOption() SelectionOption {
+	return func(s *SelectionPolicyConfig) {
+		s.Active = true
+		s.Type = SelectNext
+		s.Size = 1
+		s.Slide = 1
+	}
+}
+
+// CountingWindowOption allows to configure values for a counting window
+func CountingWindowOption(size, slide int) SelectionOption {
+	return func(s *SelectionPolicyConfig) {
+		s.Active = true
+		s.Type = CountingWindow
+		s.Size = size
+		s.Slide = slide
+	}
+}
+
+// TemporalWindowOption allows to configure values for a temporal window
+func TemporalWindowOption(windowStart time.Time, windowLength, windowShift time.Duration) SelectionOption {
+	return func(s *SelectionPolicyConfig) {
+		s.Active = true
+		s.Type = TemporalWindow
+		s.WindowStart = windowStart
+		s.WindowLength = windowLength
+		s.WindowShift = windowShift
+	}
+}
+
+// MultiTemporalWindowOption allows to configure values for a multi-temporal window
+func MultiTemporalWindowOption(windowStart time.Time, windowLength, windowShift time.Duration) SelectionOption {
+	return func(s *SelectionPolicyConfig) {
+		s.Active = true
+		s.Type = MultiTemporalWindow
+		s.WindowStart = windowStart
+		s.WindowLength = windowLength
+		s.WindowShift = windowShift
+	}
+}
+
+// DuoTemporalWindowOption allows to configure values for a duo-temporal window
+func DuoTemporalWindowOption(windowStart time.Time, windowLength, windowShift time.Duration) SelectionOption {
+	return func(s *SelectionPolicyConfig) {
+		s.Active = true
+		s.Type = DuoTemporalWindow
+		s.WindowStart = windowStart
+		s.WindowLength = windowLength
+		s.WindowShift = windowShift
+	}
 }
 
 type (
@@ -215,8 +279,8 @@ func MakeSelectionPolicy(t string, size int, slide int, windowStart time.Time, w
 	}
 }
 
-// NewPolicyFromDescription creates a new SelectionPolicy from a SelectionPolicyConfig.
-func NewPolicyFromDescription[T any](desc SelectionPolicyConfig) (SelectionPolicy[T], error) {
+// NewSelectionPolicyFromConfig creates a new SelectionPolicy from a SelectionPolicyConfig.
+func NewSelectionPolicyFromConfig[T any](desc SelectionPolicyConfig) (SelectionPolicy[T], error) {
 	switch desc.Type {
 	case CountingWindow:
 		return NewCountingWindowPolicy[T](desc.Size, desc.Slide), nil
@@ -225,8 +289,46 @@ func NewPolicyFromDescription[T any](desc SelectionPolicyConfig) (SelectionPolic
 	case TemporalWindow:
 		return NewTemporalWindowPolicy[T](desc.WindowStart, desc.WindowLength, desc.WindowShift), nil
 	default:
-		return nil, fmt.Errorf("unknown policy type: '%s'", desc.Type)
+		return nil, fmt.Errorf("%w: '%s'", ErrUnknownPolicyType, desc.Type)
 	}
+}
+
+func NewSelectionPolicy[T any](option SelectionOption) (SelectionPolicy[T], error) {
+	config := SelectionPolicyConfig{}
+	option(&config)
+	return NewSelectionPolicyFromConfig[T](config)
+}
+
+// NewMultiSelectionPolicyFromConfig creates a new MultiSelectionPolicy from a SelectionPolicyConfig.
+func NewMultiSelectionPolicyFromConfig[T any](desc SelectionPolicyConfig) (MultiSelectionPolicy[T], error) {
+	switch desc.Type {
+	case MultiTemporalWindow:
+		return NewMultiTemporalWindowPolicy[T](desc.WindowStart, desc.WindowLength, desc.WindowShift), nil
+	default:
+		return nil, fmt.Errorf("%w: '%s'", ErrUnknownMultiPolicyType, desc.Type)
+	}
+}
+
+func NewMultiSelectionPolicy[T any](option SelectionOption) (MultiSelectionPolicy[T], error) {
+	config := SelectionPolicyConfig{}
+	option(&config)
+	return NewMultiSelectionPolicyFromConfig[T](config)
+}
+
+// NewDuoSelectionPolicyFromConfig creates a new DuoPolicy from a SelectionPolicyConfig.
+func NewDuoSelectionPolicyFromConfig[TLeft, TRight any](desc SelectionPolicyConfig) (DuoPolicy[TLeft, TRight], error) {
+	switch desc.Type {
+	case DuoTemporalWindow:
+		return NewDuoTemporalWindowPolicy[TLeft, TRight](desc.WindowStart, desc.WindowLength, desc.WindowShift), nil
+	default:
+		return nil, fmt.Errorf("%w: '%s'", ErrUnknownDuoPolicyType, desc.Type)
+	}
+}
+
+func NewDuoSelectionPolicy[TLeft, TRight any](option SelectionOption) (DuoPolicy[TLeft, TRight], error) {
+	config := SelectionPolicyConfig{}
+	option(&config)
+	return NewDuoSelectionPolicyFromConfig[TLeft, TRight](config)
 }
 
 // PolicyDescriptionFromJSON parses a SelectionPolicyConfig from a JSON byte slice.

@@ -2,6 +2,7 @@ package events_test
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -231,6 +232,69 @@ var _ = Describe("SelectionPolicy", func() {
 			})
 		})
 	})
+	Describe("MultiTemporalWindowPolicy", func() {
+		It("can select events across multiple buffers", func() {
+			start := time.Now()
+			// Window: [0, 10), Shift: 10
+			p := events.NewMultiTemporalWindowPolicy[string](start, 10*time.Minute, 10*time.Minute)
+
+			buf1 := events.NewEventBuffer[string]()
+			buf2 := events.NewEventBuffer[string]()
+			p.SetBuffers(map[int]events.BufferReader[string]{0: buf1, 1: buf2})
+
+			buf1.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(time.Minute)}, Content: "e1.1"})
+			buf1.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(11 * time.Minute)}, Content: "e1.2"})
+			buf1.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(21 * time.Minute)}, Content: "e1.3"})
+
+			buf2.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(2 * time.Minute)}, Content: "e2.1"})
+			buf2.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(12 * time.Minute)}, Content: "e2.2"})
+			buf2.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(22 * time.Minute)}, Content: "e2.3"})
+
+			p.UpdateSelection()
+			Expect(p.NextSelectionReady()).To(BeTrue())
+			sel := p.NextSelection()
+			Expect(sel[0]).To(Equal(events.EventSelection{Start: 0, End: 0}))
+			Expect(sel[1]).To(Equal(events.EventSelection{Start: 0, End: 0}))
+
+			p.Shift()
+			p.UpdateSelection()
+			Expect(p.NextSelectionReady()).To(BeTrue())
+			sel = p.NextSelection()
+			Expect(sel[0]).To(Equal(events.EventSelection{Start: 1, End: 1}))
+			Expect(sel[1]).To(Equal(events.EventSelection{Start: 1, End: 1}))
+		})
+	})
+	Describe("DuoTemporalWindowPolicy", func() {
+		It("can select events across two typed buffers", func() {
+			start := time.Now()
+			p := events.NewDuoTemporalWindowPolicy[string, int](start, 10*time.Minute, 10*time.Minute)
+
+			bufLeft := events.NewEventBuffer[string]()
+			bufRight := events.NewEventBuffer[int]()
+			p.SetBuffers(bufLeft, bufRight)
+
+			bufLeft.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(time.Minute)}, Content: "e1"})
+			bufRight.Add(&events.TemporalEvent[int]{Stamp: events.TimeStamp{StartTime: start.Add(2 * time.Minute)}, Content: 1})
+
+			p.UpdateSelection()
+			Expect(p.NextSelectionReady()).To(BeFalse())
+
+			bufLeft.Add(&events.TemporalEvent[string]{Stamp: events.TimeStamp{StartTime: start.Add(11 * time.Minute)}, Content: "e2"})
+			bufRight.Add(&events.TemporalEvent[int]{Stamp: events.TimeStamp{StartTime: start.Add(12 * time.Minute)}, Content: 2})
+
+			p.UpdateSelection()
+			Expect(p.NextSelectionReady()).To(BeTrue())
+
+			l, r := p.NextSelection()
+			Expect(l).To(Equal(events.EventSelection{Start: 0, End: 0}))
+			Expect(r).To(Equal(events.EventSelection{Start: 0, End: 0}))
+
+			fired := false
+			p.AddCallback(func(l []events.Event[string], r []events.Event[int]) { fired = true })
+			p.UpdateSelection()
+			Expect(fired).To(BeTrue())
+		})
+	})
 	Describe("SelectNextPolicy", func() {
 		Context("Select Events", func() {
 			It("one at a time", func() {
@@ -270,7 +334,7 @@ var _ = Describe("SelectionPolicy", func() {
 				Size:  5,
 				Slide: 1,
 			}
-			p, err := events.NewPolicyFromDescription[int](desc)
+			p, err := events.NewSelectionPolicyFromConfig[int](desc)
 			Expect(err).To(BeNil())
 			Expect(p).NotTo(BeNil())
 		})
@@ -278,7 +342,7 @@ var _ = Describe("SelectionPolicy", func() {
 			desc := events.SelectionPolicyConfig{
 				Type: events.SelectNext,
 			}
-			p, err := events.NewPolicyFromDescription[int](desc)
+			p, err := events.NewSelectionPolicyFromConfig[int](desc)
 			Expect(err).To(BeNil())
 			Expect(p).NotTo(BeNil())
 		})
@@ -289,7 +353,29 @@ var _ = Describe("SelectionPolicy", func() {
 				WindowLength: time.Minute,
 				WindowShift:  time.Minute,
 			}
-			p, err := events.NewPolicyFromDescription[int](desc)
+			p, err := events.NewSelectionPolicyFromConfig[int](desc)
+			Expect(err).To(BeNil())
+			Expect(p).NotTo(BeNil())
+		})
+		It("can create a MultiTemporalWindowPolicy", func() {
+			desc := events.SelectionPolicyConfig{
+				Type:         events.MultiTemporalWindow,
+				WindowStart:  time.Now(),
+				WindowLength: time.Minute,
+				WindowShift:  time.Minute,
+			}
+			p, err := events.NewMultiSelectionPolicyFromConfig[int](desc)
+			Expect(err).To(BeNil())
+			Expect(p).NotTo(BeNil())
+		})
+		It("can create a DuoTemporalWindowPolicy", func() {
+			desc := events.SelectionPolicyConfig{
+				Type:         events.DuoTemporalWindow,
+				WindowStart:  time.Now(),
+				WindowLength: time.Minute,
+				WindowShift:  time.Minute,
+			}
+			p, err := events.NewDuoSelectionPolicyFromConfig[int, string](desc)
 			Expect(err).To(BeNil())
 			Expect(p).NotTo(BeNil())
 		})
@@ -334,8 +420,20 @@ slide: 1
 			jsonStr := `{"type":"unknown_type"}`
 			desc, err := events.PolicyDescriptionFromJSON([]byte(jsonStr))
 			Expect(err).To(BeNil())
-			_, err = events.NewPolicyFromDescription[int](desc)
+			_, err = events.NewSelectionPolicyFromConfig[int](desc)
 			Expect(err).To(HaveOccurred())
+		})
+		It("returns error for unknown multi policy type", func() {
+			desc := events.SelectionPolicyConfig{Type: "unknown"}
+			_, err := events.NewMultiSelectionPolicyFromConfig[int](desc)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, events.ErrUnknownMultiPolicyType)).To(BeTrue())
+		})
+		It("returns error for unknown duo policy type", func() {
+			desc := events.SelectionPolicyConfig{Type: "unknown"}
+			_, err := events.NewDuoSelectionPolicyFromConfig[int, string](desc)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, events.ErrUnknownDuoPolicyType)).To(BeTrue())
 		})
 	})
 })
