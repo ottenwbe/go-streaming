@@ -11,12 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// BufferReader allows read-only access to an underlying event buffer that implements BufferReader
-type BufferReader[T any] interface {
-	Get(i int) Event[T]
-	Len() int
-}
-
 // EventSelection represents a range of events within a buffer slice.
 type EventSelection struct {
 	Start int

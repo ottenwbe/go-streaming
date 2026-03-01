@@ -17,6 +17,12 @@ var (
 	ErrLimitExceeded = errors.New("buffer: limit exceeded")
 )
 
+// BufferReader allows read-only access to an underlying event buffer that implements BufferReader
+type BufferReader[T any] interface {
+	Get(i int) Event[T]
+	Len() int
+}
+
 // EventBuffer is a simple, non-concurrent, in-memory buffer for events.
 // It is not safe for concurrent use without external locking. It implements BufferReader.
 type EventBuffer[T any] struct {
