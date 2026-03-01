@@ -251,7 +251,7 @@ var _ = Describe("Default Operators", func() {
 
 		BeforeEach(func() {
 			baseTime = time.Now()
-			policy = events.MakeSelectionPolicy(events.TemporalWindow, 0, 0, baseTime, time.Second, time.Second)
+			policy = events.MakeSelectionPolicyByValue(events.TemporalWindow, 0, 0, baseTime, time.Second, time.Second)
 			results = make([]events.Event[map[string]any], 0)
 			resultsMu = sync.Mutex{}
 		})

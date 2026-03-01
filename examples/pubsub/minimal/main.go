@@ -17,11 +17,11 @@ func main() {
 			close(done)
 		})
 
-	// 2. PublishContent to the same topic
+	// 2. Publish to the same topic
 	pub, _ := pubsub.RegisterPublisherByTopic[int]("my-topic")
 	pub.Publish(events.NewEvent(42))
 
-	// 3. Consume the event
+	// 3. Consume the event (see callback in 1.)
 	<-done
 
 	// 4. Cleanup

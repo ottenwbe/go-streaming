@@ -250,7 +250,13 @@ func NewTemporalWindowPolicy[T any](startingTime time.Time, windowLength time.Du
 	}
 }
 
-func MakeSelectionPolicy(t string, size int, slide int, windowStart time.Time, windowLength time.Duration, windowShift time.Duration) SelectionPolicyConfig {
+func MakeSelectionPolicy(option SelectionOption) SelectionPolicyConfig {
+	config := SelectionPolicyConfig{}
+	option(&config)
+	return config
+}
+
+func MakeSelectionPolicyByValue(t string, size int, slide int, windowStart time.Time, windowLength time.Duration, windowShift time.Duration) SelectionPolicyConfig {
 	return SelectionPolicyConfig{
 		Active:       true,
 		Type:         t,
@@ -293,8 +299,7 @@ func NewMultiSelectionPolicyFromConfig[T any](desc SelectionPolicyConfig) (Multi
 }
 
 func NewMultiSelectionPolicy[T any](option SelectionOption) (MultiSelectionPolicy[T], error) {
-	config := SelectionPolicyConfig{}
-	option(&config)
+	config := MakeSelectionPolicy(option)
 	return NewMultiSelectionPolicyFromConfig[T](config)
 }
 

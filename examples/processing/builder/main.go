@@ -29,7 +29,7 @@ func main() {
 	b := processing.NewBuilder[map[string]any]()
 
 	// Define a join policy
-	policy := events.MakeSelectionPolicy(events.TemporalWindow, 0, 0, time.Now(), time.Second, time.Second)
+	policy := events.MakeSelectionPolicyByValue(events.TemporalWindow, 0, 0, time.Now(), time.Second, time.Second)
 
 	b.From(processing.Source[float64]("in", pubsub.WithAsynchronousStream(true))).
 		Process(processing.Operator[float64](processing.Greater[float64](0.5))).

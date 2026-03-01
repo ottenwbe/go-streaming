@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
+	"github.com/ottenwbe/go-streaming/pkg/log"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 
 	"go.uber.org/zap"
@@ -24,15 +25,24 @@ func main() {
 	}
 	defer pubsub.TryRemoveStreams(intStreamID)
 
-	// 2. Subscribe to the topic 'Some Integers'
-	startSubscriber("TypedSubscriber 1", intStreamID, 2*time.Microsecond)
-	startSubscriber("TypedSubscriber 2", intStreamID, time.Microsecond)
+	start := time.Now()
 
-	// 3. PublishContent events to the topic 'Some Integers'
+	// 2. Subscribe to the topic 'Some Integers'
+	sub1 := startSubscriber("TypedSubscriber 1", intStreamID, 2*time.Microsecond, &wg)
+	sub2 := startSubscriber("TypedSubscriber 2", intStreamID, time.Microsecond, &wg)
+
+	// 3. Publish events to the topic 'Some Integers'
 	startPublisher(intStreamID, &wg)
 
 	// 4. Wait for publishers and subscribers to send and receive all events
 	wg.Wait()
+
+	zap.S().Infof("Asynchronous processing took %s", time.Since(start))
+
+	// 5. cleanup
+	unsubscribe("TypedSubscriber 1", intStreamID, sub1)
+	unsubscribe("TypedSubscriber 2", intStreamID, sub2)
+	pubsub.TryRemoveStreams(intStreamID)
 }
 
 func startPublisher(streamID pubsub.StreamID, wg *sync.WaitGroup) {
@@ -52,14 +62,18 @@ func startPublisher(streamID pubsub.StreamID, wg *sync.WaitGroup) {
 	})
 }
 
-func startSubscriber(name string, streamID pubsub.StreamID, delay time.Duration) {
-	_, err := pubsub.SubscribeByTopicID[int](streamID, func(e events.Event[int]) {
+func startSubscriber(name string, streamID pubsub.StreamID, delay time.Duration, wg *sync.WaitGroup) pubsub.TypedSubscriber[int] {
+
+	wg.Add(maxEvents)
+	sub, err := pubsub.SubscribeByTopicID[int](streamID, func(e events.Event[int]) {
 		zap.S().Infof("Event received by %s: %v", name, e)
 		time.Sleep(delay)
+		wg.Done()
 	})
 	if err != nil {
 		zap.S().Fatalf("Failed to subscribe %s: %v", name, err)
 	}
+	return sub
 }
 
 func unregister(streamID pubsub.StreamID, publisher pubsub.Publisher[int]) {
@@ -78,4 +92,5 @@ func unsubscribe(name string, streamID pubsub.StreamID, subscriber pubsub.TypedS
 
 func init() {
 	zap.ReplaceGlobals(zap.Must(zap.NewProduction()))
+	log.SetLogger(zap.S())
 }
