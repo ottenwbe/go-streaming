@@ -359,6 +359,7 @@ func (s *SortedSimpleAsyncBuffer[T]) AddEvents(ctx context.Context, events []Eve
 	s.buffer = append(s.buffer, events...)
 
 	// Sort the buffer based on StartTime
+	// TODO: insertion sort
 	sort.SliceStable(s.buffer, func(i, j int) bool {
 		return s.buffer[i].GetStamp().StartTime.Before(s.buffer[j].GetStamp().StartTime)
 	})
@@ -387,10 +388,13 @@ func (s *SortedSimpleAsyncBuffer[T]) AddEvent(ctx context.Context, event Event[T
 		}
 	}
 
-	s.buffer = append(s.buffer, event)
-	sort.SliceStable(s.buffer, func(i, j int) bool {
-		return s.buffer[i].GetStamp().StartTime.Before(s.buffer[j].GetStamp().StartTime)
+	idx := sort.Search(len(s.buffer), func(i int) bool {
+		return s.buffer[i].GetStamp().StartTime.After(event.GetStamp().StartTime)
 	})
+
+	s.buffer = append(s.buffer, nil)
+	copy(s.buffer[idx+1:], s.buffer[idx:])
+	s.buffer[idx] = event
 
 	s.broadcast()
 	return nil
