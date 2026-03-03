@@ -5,11 +5,11 @@ import (
 	"errors"
 	"reflect"
 
+	"github.com/goccy/go-yaml"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
-	"gopkg.in/yaml.v3"
 )
 
 var (

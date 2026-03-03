@@ -59,45 +59,24 @@ func BatchCount[TEvent any, TOut number](policy events.SelectionPolicyConfig) fu
 			WithOutput(out...),
 		)
 
-		return NewOperator[TEvent, TEvent](batchCount, config, id)
+		return NewOperator[TEvent, TOut](batchCount, config, id)
 	}
 }
 
 // Greater creates a query that filters events greater than a specified value.
 func Greater[T number](greaterThan T) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
-	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
-
-		greater := func(input events.Event[T]) bool {
-			return input.GetContent() > greaterThan
-		}
-
-		config := MakeOperatorConfig(
-			FILTER_OPERATOR,
-			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
-			WithOutput(out...),
-		)
-
-		return NewOperator[T, T](greater, config, id)
+	greater := func(input events.Event[T]) bool {
+		return input.GetContent() > greaterThan
 	}
+	return Filter(greater)
 }
 
 // Smaller creates a query that filters events smaller than a specified value.
 func Smaller[T number](than T) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
-
-	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
-
-		smaller := func(input events.Event[T]) bool {
-			return input.GetContent() < than
-		}
-
-		config := MakeOperatorConfig(
-			FILTER_OPERATOR,
-			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
-			WithOutput(out...),
-		)
-
-		return NewOperator[T, T](smaller, config, id)
+	smaller := func(input events.Event[T]) bool {
+		return input.GetContent() < than
 	}
+	return Filter(smaller)
 }
 
 // Convert creates a query that converts events from one numeric type to another.
@@ -314,3 +293,10 @@ func Observe[T any](callback func(events.Event[T])) func(in []pubsub.StreamID, o
 		return NewOperator[T, T](mapper, config, id)
 	}
 }
+
+// Tokenize creates a query that splits a string into individual words.
+// func Tokenize() func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+// 	return FlatMap[string, string](func(e events.Event[string]) []string {
+// 		return strings.Fields(e.GetContent())
+// 	})
+// }

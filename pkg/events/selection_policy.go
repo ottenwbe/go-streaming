@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"github.com/goccy/go-yaml"
 
 	"github.com/google/uuid"
 )

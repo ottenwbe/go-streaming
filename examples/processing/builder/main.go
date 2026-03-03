@@ -71,7 +71,7 @@ func main() {
 
 func publishEvents() {
 	go func() {
-		for i := 0; i < numEvents; i++ {
+		for range numEvents {
 			// PublishContent raw float64 values; the system wraps them in Events
 			if err := pubsub.InstantPublishByTopic("in", rand.Float64()); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
