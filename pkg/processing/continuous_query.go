@@ -2,6 +2,7 @@ package processing
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/google/uuid"
@@ -16,8 +17,11 @@ var (
 
 // ContinuousQuery represents a running query that processes streams.
 type ContinuousQuery interface {
-	addStreams(streams ...pubsub.StreamID)
+	addStreams(isSource bool, streams ...pubsub.StreamID)
 	addOperations(operators ...OperatorID)
+	sourceStreams() []pubsub.StreamID
+	outputStream() pubsub.StreamID
+	operatorIDs() []OperatorID
 	ID() ID
 	close() error
 	Run() error
@@ -32,11 +36,14 @@ type TypedContinuousQuery[T any] struct {
 
 	operators []OperatorID
 	streams   []pubsub.StreamID
+
 	outStream pubsub.StreamID
+	inStreams []pubsub.StreamID
 
 	subscriptions []pubsub.TypedSubscriber[T]
-	closeOnce     sync.Once
-	repo          *pubsub.StreamRepository
+
+	closeOnce sync.Once
+	repo      *pubsub.StreamRepository
 }
 
 // Close stops the query and unsubscribes the output receiver.
@@ -136,8 +143,32 @@ func newContinuousQuery[T any](opts ...QueryOption) ContinuousQuery {
 	}
 }
 
-func (c *TypedContinuousQuery[T]) addStreams(streams ...pubsub.StreamID) {
+func RegisterPublisher[T any](c ContinuousQuery, topic string) (pubsub.Publisher[T], error) {
+	streamID := pubsub.MakeStreamID[T](topic)
+
+	if !in(c.sourceStreams(), streamID) {
+		return nil, fmt.Errorf("topic %s not found in query sources", topic)
+	}
+	return pubsub.RegisterPublisherOnRepository[T](c.repository(), streamID)
+}
+
+func (c *TypedContinuousQuery[T]) sourceStreams() []pubsub.StreamID {
+	return c.inStreams
+}
+
+func (c *TypedContinuousQuery[T]) outputStream() pubsub.StreamID {
+	return c.outStream
+}
+
+func (c *TypedContinuousQuery[T]) operatorIDs() []OperatorID {
+	return c.operators
+}
+
+func (c *TypedContinuousQuery[T]) addStreams(isSource bool, streams ...pubsub.StreamID) {
 	c.streams = append(c.streams, streams...)
+	if isSource {
+		c.inStreams = append(c.inStreams, streams...)
+	}
 }
 
 func (c *TypedContinuousQuery[T]) addOperations(operators ...OperatorID) {

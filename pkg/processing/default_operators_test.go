@@ -57,6 +57,131 @@ var _ = Describe("Default Operators", func() {
 		})
 	})
 
+	Context("Even / Odd", func() {
+		It("should filter even numbers", func() {
+			topic := "even-test-topic"
+			b := processing.NewBuilder[int]()
+			b.From(processing.Source[int](topic)).
+				Process(processing.Operator[int](processing.Even[int]()))
+
+			q, err = b.Build(true)
+			Expect(err).To(BeNil())
+
+			var results []int
+			var wg sync.WaitGroup
+			wg.Add(2)
+
+			err = q.Subscribe(func(e events.Event[int]) {
+				results = append(results, e.GetContent())
+				wg.Done()
+			})
+			Expect(err).To(BeNil())
+
+			pubsub.InstantPublishByTopic(topic, 1)
+			pubsub.InstantPublishByTopic(topic, 2)
+			pubsub.InstantPublishByTopic(topic, 3)
+			pubsub.InstantPublishByTopic(topic, 4)
+
+			wg.Wait()
+			Expect(results).To(Equal([]int{2, 4}))
+		})
+
+		It("should filter odd numbers", func() {
+			topic := "odd-test-topic"
+			b := processing.NewBuilder[int]()
+			b.From(processing.Source[int](topic)).
+				Process(processing.Operator[int](processing.Odd[int]()))
+
+			q, err = b.Build(true)
+			Expect(err).To(BeNil())
+
+			var results []int
+			var wg sync.WaitGroup
+			wg.Add(2)
+
+			err = q.Subscribe(func(e events.Event[int]) {
+				results = append(results, e.GetContent())
+				wg.Done()
+			})
+			Expect(err).To(BeNil())
+
+			pubsub.InstantPublishByTopic(topic, 1)
+			pubsub.InstantPublishByTopic(topic, 2)
+			pubsub.InstantPublishByTopic(topic, 3)
+			pubsub.InstantPublishByTopic(topic, 4)
+
+			wg.Wait()
+			Expect(results).To(Equal([]int{1, 3}))
+		})
+
+		It("should filter 'even' numbers from floats by truncating", func() {
+			topic := "even-float-test-topic"
+			b := processing.NewBuilder[float64]()
+			b.From(processing.Source[float64](topic)).
+				Process(processing.Operator[float64](processing.Even[float64]()))
+
+			q, err = b.Build(true)
+			Expect(err).To(BeNil())
+
+			var results []float64
+			var wg sync.WaitGroup
+			wg.Add(2) // Expecting 2.1 and 4.9
+
+			err = q.Subscribe(func(e events.Event[float64]) {
+				results = append(results, e.GetContent())
+				wg.Done()
+			})
+			Expect(err).To(BeNil())
+
+			pubsub.InstantPublishByTopic(topic, 1.5) // int(1.5) is 1 (odd)
+			pubsub.InstantPublishByTopic(topic, 2.1) // int(2.1) is 2 (even)
+			pubsub.InstantPublishByTopic(topic, 3.9) // int(3.9) is 3 (odd)
+			pubsub.InstantPublishByTopic(topic, 4.9) // int(4.9) is 4 (even)
+
+			wg.Wait()
+			Expect(results).To(ConsistOf(2.1, 4.9))
+		})
+	})
+
+	Context("Limit", func() {
+		It("should only take the first N events", func() {
+			topic := "limit-test-topic"
+			b := processing.NewBuilder[int]()
+			b.From(processing.Source[int](topic)).
+				Process(processing.Operator[int](processing.Limit[int](2)))
+
+			q, err = b.Build(true)
+			Expect(err).To(BeNil())
+
+			var results []int
+			var mu sync.Mutex
+
+			err = q.Subscribe(func(e events.Event[int]) {
+				mu.Lock()
+				defer mu.Unlock()
+				results = append(results, e.GetContent())
+			})
+			Expect(err).To(BeNil())
+
+			pubsub.InstantPublishByTopic(topic, 1)
+			pubsub.InstantPublishByTopic(topic, 2)
+			pubsub.InstantPublishByTopic(topic, 3)
+			pubsub.InstantPublishByTopic(topic, 4)
+
+			Eventually(func() []int {
+				mu.Lock()
+				defer mu.Unlock()
+				return results
+			}).Should(Equal([]int{1, 2}))
+
+			Consistently(func() []int {
+				mu.Lock()
+				defer mu.Unlock()
+				return results
+			}).Should(Equal([]int{1, 2}))
+		})
+	})
+
 	Context("FlatMap", func() {
 		It("should map one event to multiple events", func() {
 			topic := "flatmap-test-topic"

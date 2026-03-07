@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var defaultBufferCapacity = 5
+var DefaultBufferCapacity = 5
 
 var (
 	ErrBufferStopped = errors.New("buffer: is stopped")
@@ -141,7 +141,7 @@ func (b basicBuffer[T]) Len() int {
 
 func newAsyncBuffer[T any]() *asyncBuffer[T] {
 	s := &asyncBuffer[T]{
-		buffer:      make(basicBuffer[T], 0, defaultBufferCapacity),
+		buffer:      make(basicBuffer[T], 0, DefaultBufferCapacity),
 		bufferMutex: sync.Mutex{},
 		stopped:     false,
 		signal:      make(chan struct{}),
