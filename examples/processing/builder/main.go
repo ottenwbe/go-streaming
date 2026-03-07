@@ -49,9 +49,7 @@ func main() {
 	}
 
 	// Subscribe to the query output
-	err = q.Subscribe(func(e events.Event[map[string]any]) {
-		zap.S().Infof("event received: %v", e.GetContent())
-	})
+	err = q.Subscribe(callback)
 	if err != nil {
 		zap.S().Fatal(err)
 	}
@@ -69,9 +67,13 @@ func main() {
 	time.Sleep(2 * time.Second)
 }
 
+func callback(e events.Event[map[string]any]) {
+	zap.S().Infof("event received: %v", e.GetContent())
+}
+
 func publishEvents() {
 	go func() {
-		for i := 0; i < numEvents; i++ {
+		for range numEvents {
 			// PublishContent raw float64 values; the system wraps them in Events
 			if err := pubsub.InstantPublishByTopic("in", rand.Float64()); err != nil {
 				zap.S().Error("publish error", zap.Error(err))

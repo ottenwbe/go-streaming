@@ -73,7 +73,7 @@ func (b *Builder) From(createFunc StreamCreationOptions) *Builder {
 	}
 
 	b.streams[sid] = createFunc.streamCreateFunc
-	b.query.addStreams(sid)
+	b.query.addStreams(true, sid)
 	b.current = append(b.current, sid)
 	return b
 }
@@ -96,10 +96,16 @@ func (b *Builder) Merge(b2 *Builder) *Builder {
 		return b
 	}
 
+	b2SourceStreams := make(map[pubsub.StreamID]any)
+	for _, s := range b2.query.sourceStreams() {
+		b2SourceStreams[s] = true
+	}
+
 	for id, s := range b2.streams {
 		if _, ok := b.streams[id]; !ok {
 			b.streams[id] = s
-			b.query.addStreams(id)
+			_, isSource := b2SourceStreams[id]
+			b.query.addStreams(isSource, id)
 		}
 	}
 
@@ -169,7 +175,7 @@ func (b *Builder) Process(operatorFunc OperatorCreationOptions) *Builder {
 		}
 
 		b.streams[outSid] = outOpt.streamCreateFunc
-		b.query.addStreams(outSid)
+		b.query.addStreams(false, outSid)
 		outputs = append(outputs, outSid)
 	}
 
@@ -220,7 +226,7 @@ func (b *Builder) Build(run bool) (ContinuousQuery, error) {
 	}
 
 	if returnErr != nil {
-		b.query.close()
+		b.query.Close()
 
 		return nil, returnErr
 	}

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/goccy/go-yaml"
 	"github.com/ottenwbe/go-streaming/pkg/events"
-	"gopkg.in/yaml.v3"
 )
 
 var (

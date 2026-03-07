@@ -400,3 +400,50 @@ var _ = Describe("FanInOperatorEngine", func() {
 		Expect(receivedEvents[0].GetContent()).To(Equal(3))
 	})
 })
+
+//TODO: fix
+// var _ = Describe("TokenizeOperator", func() {
+// 	var (
+// 		oid           processing.OperatorID
+// 		err           error
+// 		sidin, sidout pubsub.StreamID
+// 	)
+
+// 	BeforeEach(func() {
+// 		sidin, _ = pubsub.GetOrAddStream[string]("in-tokenize")
+// 		sidout, _ = pubsub.GetOrAddStream[string]("out-tokenize")
+
+// 		of := processing.Tokenize()
+// 		oid, err = of([]pubsub.StreamID{sidin}, []pubsub.StreamID{sidout}, processing.NilOperatorID())
+// 		Expect(err).To(BeNil())
+// 	})
+
+// 	AfterEach(func() {
+// 		processing.RemoveOperator(oid)
+// 		pubsub.TryRemoveStreams(sidin, sidout)
+// 	})
+
+// 	It("should split strings into words", func() {
+// 		var (
+// 			receivedEvents []events.Event[string]
+// 		)
+// 		sub, err := pubsub.SubscribeByTopic[string]("out-tokenize", func(event events.Event[string]) {
+// 			receivedEvents = append(receivedEvents, event)
+// 		})
+// 		Expect(err).To(BeNil())
+// 		defer pubsub.Unsubscribe(sub)
+
+// 		pubsub.InstantPublishByTopic[string]("in-tokenize", "hello world")
+// 		pubsub.InstantPublishByTopic[string]("in-tokenize", "foo bar 123")
+
+// 		Eventually(func() int {
+// 			return len(receivedEvents)
+// 		}).Should(Equal(5))
+
+// 		var contents []string
+// 		for _, e := range receivedEvents {
+// 			contents = append(contents, e.GetContent())
+// 		}
+// 		Expect(contents).To(ContainElements("hello", "world", "foo", "bar", "123"))
+// 	})
+// })
