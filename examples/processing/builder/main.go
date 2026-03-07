@@ -49,9 +49,7 @@ func main() {
 	}
 
 	// Subscribe to the query output
-	err = q.Subscribe(func(e events.Event[map[string]any]) {
-		zap.S().Infof("event received: %v", e.GetContent())
-	})
+	err = q.Subscribe(callback)
 	if err != nil {
 		zap.S().Fatal(err)
 	}
@@ -67,6 +65,10 @@ func main() {
 
 	// Keep the application running to process events
 	time.Sleep(2 * time.Second)
+}
+
+func callback(e events.Event[map[string]any]) {
+	zap.S().Infof("event received: %v", e.GetContent())
 }
 
 func publishEvents() {
