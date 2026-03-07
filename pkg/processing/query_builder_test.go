@@ -125,10 +125,12 @@ var _ = Describe("Builder API", func() {
 			Expect(q).NotTo(BeNil())
 
 			// Verify that both source streams are registered as sources in the merged query
-			_, err1 := query.RegisterPublisher[int](q, "source1")
+			p1, err1 := query.RegisterPublisher[int](q, "source1")
+			query.UnRegisterPublisher(q, p1)
 			Expect(err1).To(BeNil())
 
-			_, err2 := query.RegisterPublisher[int](q, "source2")
+			p2, err2 := query.RegisterPublisher[int](q, "source2")
+			query.UnRegisterPublisher(q, p2)
 			Expect(err2).To(BeNil())
 
 			// Verify that a non-source stream is not considered a source

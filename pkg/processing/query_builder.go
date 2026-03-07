@@ -226,7 +226,7 @@ func (b *Builder) Build(run bool) (ContinuousQuery, error) {
 	}
 
 	if returnErr != nil {
-		b.query.close()
+		b.query.Close()
 
 		return nil, returnErr
 	}
