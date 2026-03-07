@@ -100,7 +100,6 @@ var _ = Describe("Builder API", func() {
 			b1.Merge(b2)
 
 			// Add a process step to have a valid output
-			// We need a FanIn operator because we have 2 input streams
 			fanIn := func(in []pubsub.StreamID, out []pubsub.StreamID, id query.OperatorID) (query.OperatorID, error) {
 				policy := events.SelectionPolicyConfig{
 					Type:         events.TemporalWindow,
