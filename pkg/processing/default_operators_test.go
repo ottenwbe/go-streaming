@@ -182,6 +182,36 @@ var _ = Describe("Default Operators", func() {
 		})
 	})
 
+	Context("Contains", func() {
+		It("should filter string events that contain a substring", func() {
+			topic := "contains-test-topic"
+			b := processing.NewBuilder[string]()
+			b.From(processing.Source[string](topic)).
+				Process(processing.Operator[string](processing.Contains("world")))
+
+			q, err = b.Build(true)
+			Expect(err).To(BeNil())
+
+			var results []string
+			var wg sync.WaitGroup
+			wg.Add(2) // "hello world", "worldy"
+
+			err = q.Subscribe(func(e events.Event[string]) {
+				results = append(results, e.GetContent())
+				wg.Done()
+			})
+			Expect(err).To(BeNil())
+
+			pubsub.InstantPublishByTopic(topic, "hello world")
+			pubsub.InstantPublishByTopic(topic, "hello there")
+			pubsub.InstantPublishByTopic(topic, "worldy")
+			pubsub.InstantPublishByTopic(topic, "foo bar")
+
+			wg.Wait()
+			Expect(results).To(ConsistOf("hello world", "worldy"))
+		})
+	})
+
 	Context("FlatMap", func() {
 		It("should map one event to multiple events", func() {
 			topic := "flatmap-test-topic"

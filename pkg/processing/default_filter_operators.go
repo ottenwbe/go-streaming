@@ -1,6 +1,8 @@
 package processing
 
 import (
+	"strings"
+
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
 )
@@ -62,4 +64,12 @@ func Limit[T any](n int) func(in []pubsub.StreamID, out []pubsub.StreamID, id Op
 		}
 		return Filter(limit)(in, out, id)
 	}
+}
+
+// Contains creates a query that filters string events that contain a specific substring.
+func Contains(substring string) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+	contains := func(input events.Event[string]) bool {
+		return strings.Contains(input.GetContent(), substring)
+	}
+	return Filter(contains)
 }
