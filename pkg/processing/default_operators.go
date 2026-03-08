@@ -3,6 +3,7 @@ package processing
 import (
 	"errors"
 	"maps"
+	"strings"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
@@ -260,8 +261,8 @@ func Observe[T any](callback func(events.Event[T])) func(in []pubsub.StreamID, o
 }
 
 // Tokenize creates a query that splits a string into individual words.
-// func Tokenize() func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
-// 	return FlatMap[string, string](func(e events.Event[string]) []string {
-// 		return strings.Fields(e.GetContent())
-// 	})
-// }
+func Tokenize() func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+	return FlatMap[string, string](func(e events.Event[string]) []string {
+		return strings.Fields(e.GetContent())
+	})
+}

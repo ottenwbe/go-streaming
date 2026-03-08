@@ -394,49 +394,52 @@ var _ = Describe("FanInOperatorEngine", func() {
 	})
 })
 
-//TODO: fix
-// var _ = Describe("TokenizeOperator", func() {
-// 	var (
-// 		oid           processing.OperatorID
-// 		err           error
-// 		sidin, sidout pubsub.StreamID
-// 	)
+var _ = Describe("TokenizeOperator", func() {
+	var (
+		q   processing.ContinuousQuery
+		err error
+	)
 
-// 	BeforeEach(func() {
-// 		sidin, _ = pubsub.GetOrAddStream[string]("in-tokenize")
-// 		sidout, _ = pubsub.GetOrAddStream[string]("out-tokenize")
+	AfterEach(func() {
+		if q != nil {
+			_ = processing.Close(q)
+		}
+	})
 
-// 		of := processing.Tokenize()
-// 		oid, err = of([]pubsub.StreamID{sidin}, []pubsub.StreamID{sidout}, processing.NilOperatorID())
-// 		Expect(err).To(BeNil())
-// 	})
+	It("should split strings into words", func() {
+		b := processing.NewBuilder[string]()
+		b.From(processing.Source[string]("in-tokenize")).
+			ConnectTo(processing.Operator[string](processing.Tokenize()))
 
-// 	AfterEach(func() {
-// 		processing.RemoveOperator(oid)
-// 		pubsub.TryRemoveStreams(sidin, sidout)
-// 	})
+		q, err = b.Build(true)
+		Expect(err).To(BeNil())
 
-// 	It("should split strings into words", func() {
-// 		var (
-// 			receivedEvents []events.Event[string]
-// 		)
-// 		sub, err := pubsub.SubscribeByTopic[string]("out-tokenize", func(event events.Event[string]) {
-// 			receivedEvents = append(receivedEvents, event)
-// 		})
-// 		Expect(err).To(BeNil())
-// 		defer pubsub.Unsubscribe(sub)
+		var (
+			receivedEvents []events.Event[string]
+			mu             sync.Mutex
+		)
+		err = q.Subscribe(func(event events.Event[string]) {
+			mu.Lock()
+			defer mu.Unlock()
+			receivedEvents = append(receivedEvents, event)
+		})
+		Expect(err).To(BeNil())
 
-// 		pubsub.InstantPublishByTopic[string]("in-tokenize", "hello world")
-// 		pubsub.InstantPublishByTopic[string]("in-tokenize", "foo bar 123")
+		pubsub.InstantPublishByTopic[string]("in-tokenize", "hello world")
+		pubsub.InstantPublishByTopic[string]("in-tokenize", "foo bar 123")
 
-// 		Eventually(func() int {
-// 			return len(receivedEvents)
-// 		}).Should(Equal(5))
+		Eventually(func() int {
+			mu.Lock()
+			defer mu.Unlock()
+			return len(receivedEvents)
+		}).Should(Equal(5))
 
-// 		var contents []string
-// 		for _, e := range receivedEvents {
-// 			contents = append(contents, e.GetContent())
-// 		}
-// 		Expect(contents).To(ContainElements("hello", "world", "foo", "bar", "123"))
-// 	})
-// })
+		mu.Lock()
+		var contents []string
+		for _, e := range receivedEvents {
+			contents = append(contents, e.GetContent())
+		}
+		mu.Unlock()
+		Expect(contents).To(ContainElements("hello", "world", "foo", "bar", "123"))
+	})
+})
