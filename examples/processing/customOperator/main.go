@@ -56,11 +56,11 @@ func main() {
 	b := processing.NewBuilder[map[string]int]()
 	b.From(processing.Source[string](userInputTopic)).
 		// Tokenize
-		Process(processing.Operator[string](processing.FlatMap(func(e events.Event[string]) []string {
+		ConnectTo(processing.Operator[string](processing.FlatMap(func(e events.Event[string]) []string {
 			return strings.Fields(e.GetContent())
 		}))).
 		// Count words in the window
-		Process(processing.Operator[map[string]int](WordCountWindow(wordCountPolicy)))
+		ConnectTo(processing.Operator[map[string]int](WordCountWindow(wordCountPolicy)))
 
 	query, err := b.Build(true)
 	if err != nil {

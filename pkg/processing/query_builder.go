@@ -154,8 +154,8 @@ func CreateFanOutStream[TOut any](operatorCreateFunc CreateOperatorFunc, numOutp
 	}
 }
 
-// Process adds an operator to the query
-func (b *Builder) Process(operatorFunc OperatorCreationOptions) *Builder {
+// ConnectTo connects streams / operators to an operator of the query
+func (b *Builder) ConnectTo(operatorFunc OperatorCreationOptions) *Builder {
 	if b.err != nil {
 		return b
 	}

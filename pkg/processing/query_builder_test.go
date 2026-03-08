@@ -30,7 +30,7 @@ var _ = Describe("Builder API", func() {
 			// Source -> Greater(10) -> Output
 			b := query.NewBuilder[int]()
 			b.From(query.Source[int]("builder-source-1")).
-				Process(query.Operator[int]( //nolint:staticcheck
+				ConnectTo(query.Operator[int]( //nolint:staticcheck
 					query.Greater[int](10),
 				))
 
@@ -71,8 +71,8 @@ var _ = Describe("Builder API", func() {
 			b := query.NewBuilder[int]()
 			// No From() called
 
-			// Process requires input
-			b.Process(query.Operator[int](query.Greater[int](10)))
+			// ConnectTo requires input
+			b.ConnectTo(query.Operator[int](query.Greater[int](10)))
 
 			_, err := b.Build(false)
 			Expect(err).To(HaveOccurred())
@@ -118,7 +118,7 @@ var _ = Describe("Builder API", func() {
 				}
 				return query.NewFanInOperator[int, int](config, op, id)
 			}
-			b1.Process(query.Operator[int](fanIn))
+			b1.ConnectTo(query.Operator[int](fanIn))
 
 			// Build the query
 			q, err = b1.Build(false)
@@ -149,12 +149,12 @@ var _ = Describe("Builder API", func() {
 			b.From(query.Source[int]("chain-source"))
 
 			// Op 1: Add 1
-			b.Process(query.Operator[int](query.Map(func(e events.Event[int]) int {
+			b.ConnectTo(query.Operator[int](query.Map(func(e events.Event[int]) int {
 				return e.GetContent() + 1
 			})))
 
 			// Op 2: Multiply by 2
-			b.Process(query.Operator[int](query.Map(func(e events.Event[int]) int {
+			b.ConnectTo(query.Operator[int](query.Map(func(e events.Event[int]) int {
 				return e.GetContent() * 2
 			})))
 
@@ -189,7 +189,7 @@ var _ = Describe("Builder API", func() {
 			}
 
 			// Use CreateFanOutStream to generate multiple outputs
-			b.Process(query.CreateFanOutStream[int](noopFanOut, 2))
+			b.ConnectTo(query.CreateFanOutStream[int](noopFanOut, 2))
 
 			// Build should fail because we haven't converged the 2 streams into 1
 			_, err := b.Build(false)
@@ -206,7 +206,7 @@ var _ = Describe("Builder API", func() {
 			splitter := query.Map(func(e events.Event[string]) string {
 				return e.GetContent()
 			})
-			b.Process(query.CreateFanOutStream[string](splitter, 2))
+			b.ConnectTo(query.CreateFanOutStream[string](splitter, 2))
 
 			// 2. Fan-in: A fan-in operator that merges the two streams.
 			baseTime := time.Now()
@@ -234,7 +234,7 @@ var _ = Describe("Builder API", func() {
 				}
 				return query.NewFanInOperator[string, string](config, op, id)
 			}
-			b.Process(query.Operator[string](merger))
+			b.ConnectTo(query.Operator[string](merger))
 
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())

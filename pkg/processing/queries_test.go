@@ -23,7 +23,7 @@ var _ = Describe("Continuous Query", func() {
 		count = atomic.Int32{}
 		b := query.NewBuilder[int]()
 		b.From(query.Source[int]("test")).
-			Process(query.Operator[int](query.Smaller[int](5)))
+			ConnectTo(query.Operator[int](query.Smaller[int](5)))
 		q, err = b.Build(false)
 		Expect(err).To(BeNil())
 		err = q.Subscribe(
@@ -125,14 +125,14 @@ var _ = Describe("Continuous Query", func() {
 	})
 
 	Describe("Error Handling", func() {
-		It("Process propagates operator creation errors", func() {
+		It("ConnectTo propagates operator creation errors", func() {
 			errOp := func(in []pubsub.StreamID, out []pubsub.StreamID, id query.OperatorID) (query.OperatorID, error) {
 				return query.OperatorID{}, errors.New("op failed")
 			}
 
 			b := query.NewBuilder[int]()
 			b.From(query.Source[int]("topic")).
-				Process(query.Operator[int](errOp))
+				ConnectTo(query.Operator[int](errOp))
 			_, err := b.Build(false)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("op failed"))

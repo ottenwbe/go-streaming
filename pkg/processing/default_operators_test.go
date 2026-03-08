@@ -30,7 +30,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "filter-test-topic"
 			b := processing.NewBuilder[int]()
 			b.From(processing.Source[int](topic)).
-				Process(processing.Operator[int](processing.Filter(func(e events.Event[int]) bool {
+				ConnectTo(processing.Operator[int](processing.Filter(func(e events.Event[int]) bool {
 					return e.GetContent()%2 == 0
 				})))
 
@@ -62,7 +62,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "even-test-topic"
 			b := processing.NewBuilder[int]()
 			b.From(processing.Source[int](topic)).
-				Process(processing.Operator[int](processing.Even[int]()))
+				ConnectTo(processing.Operator[int](processing.Even[int]()))
 
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
@@ -90,7 +90,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "odd-test-topic"
 			b := processing.NewBuilder[int]()
 			b.From(processing.Source[int](topic)).
-				Process(processing.Operator[int](processing.Odd[int]()))
+				ConnectTo(processing.Operator[int](processing.Odd[int]()))
 
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
@@ -118,7 +118,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "even-float-test-topic"
 			b := processing.NewBuilder[float64]()
 			b.From(processing.Source[float64](topic)).
-				Process(processing.Operator[float64](processing.Even[float64]()))
+				ConnectTo(processing.Operator[float64](processing.Even[float64]()))
 
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
@@ -148,7 +148,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "limit-test-topic"
 			b := processing.NewBuilder[int]()
 			b.From(processing.Source[int](topic)).
-				Process(processing.Operator[int](processing.Limit[int](2)))
+				ConnectTo(processing.Operator[int](processing.Limit[int](2)))
 
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
@@ -187,7 +187,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "contains-test-topic"
 			b := processing.NewBuilder[string]()
 			b.From(processing.Source[string](topic)).
-				Process(processing.Operator[string](processing.Contains("world")))
+				ConnectTo(processing.Operator[string](processing.Contains("world")))
 
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
@@ -217,7 +217,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "flatmap-test-topic"
 			b := processing.NewBuilder[string]()
 			b.From(processing.Source[string](topic)).
-				Process(processing.Operator[string](processing.FlatMap(func(e events.Event[string]) []string {
+				ConnectTo(processing.Operator[string](processing.FlatMap(func(e events.Event[string]) []string {
 					return strings.Split(e.GetContent(), " ")
 				})))
 
@@ -245,7 +245,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "flatmap-empty-test-topic"
 			b := processing.NewBuilder[int]()
 			b.From(processing.Source[int](topic)).
-				Process(processing.Operator[int](processing.FlatMap(func(e events.Event[int]) []int {
+				ConnectTo(processing.Operator[int](processing.FlatMap(func(e events.Event[int]) []int {
 					if e.GetContent() > 5 {
 						return []int{e.GetContent()}
 					}
@@ -283,7 +283,7 @@ var _ = Describe("Default Operators", func() {
 
 			b := processing.NewBuilder[int]().
 				From(processing.Source[int](topic)).
-				Process(processing.Operator[int](processing.Observe(func(e events.Event[int]) {
+				ConnectTo(processing.Operator[int](processing.Observe(func(e events.Event[int]) {
 					observedValue = e.GetContent()
 					wg.Done()
 				})))
@@ -316,7 +316,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "map-select-topic"
 			b := processing.NewBuilder[any]()
 			b.From(processing.Source[map[string]any](topic)).
-				Process(processing.Operator[any](processing.SelectFromMap("city")))
+				ConnectTo(processing.Operator[any](processing.SelectFromMap("city")))
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
 
@@ -340,7 +340,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "map-select-fail-topic"
 			b := processing.NewBuilder[any]()
 			b.From(processing.Source[map[string]any](topic)).
-				Process(processing.Operator[any](processing.SelectFromMap("city")))
+				ConnectTo(processing.Operator[any](processing.SelectFromMap("city")))
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
 
@@ -374,7 +374,7 @@ var _ = Describe("Default Operators", func() {
 
 			b := processing.NewBuilder[string]()
 			b.From(processing.Source[int](topic)).
-				Process(processing.Operator[string](processing.Map(mapper)))
+				ConnectTo(processing.Operator[string](processing.Map(mapper)))
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
 
@@ -432,7 +432,7 @@ var _ = Describe("Default Operators", func() {
 			b := processing.NewBuilder[map[string]any]()
 			b.From(processing.Source[map[string]any]("entry_cam")).
 				From(processing.Source[map[string]any]("exit_cam")).
-				Process(processing.Operator[map[string]any](processing.Join("vehicle_id", policy)))
+				ConnectTo(processing.Operator[map[string]any](processing.Join("vehicle_id", policy)))
 
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
@@ -461,7 +461,7 @@ var _ = Describe("Default Operators", func() {
 			b := processing.NewBuilder[map[string]any]()
 			b.From(processing.Source[map[string]any]("entry_cam_left")).
 				From(processing.Source[map[string]any]("exit_cam_left")).
-				Process(processing.Operator[map[string]any](processing.LeftJoin("vehicle_id", policy)))
+				ConnectTo(processing.Operator[map[string]any](processing.LeftJoin("vehicle_id", policy)))
 
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
