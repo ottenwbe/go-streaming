@@ -14,7 +14,7 @@ var (
 	ErrAmbiguousOutput = errors.New("builder: query results in multiple output streams, cannot determine main output")
 )
 
-// Default Builder (Builder1):
+// Default Builder
 
 // Builder provides an API to construct ContinuousQueries.
 type Builder struct {
