@@ -13,6 +13,21 @@ import (
 
 var _ = Describe("Buffer", func() {
 
+	Describe("EventBuffer", func() {
+		It("should behave like a standard slice-based buffer", func() {
+			buf := events.NewEventBuffer[string]()
+			buf.Add(events.NewEvent("1"))
+			buf.Add(events.NewEvent("2"))
+
+			Expect(buf.Len()).To(Equal(2))
+			Expect(buf.Get(0).GetContent()).To(Equal("1"))
+
+			buf.Remove(1)
+			Expect(buf.Len()).To(Equal(1))
+			Expect(buf.Get(0).GetContent()).To(Equal("2"))
+		})
+	})
+
 	Describe("LimitedSimpleAsyncBuffer", func() {
 
 		var (
@@ -61,6 +76,33 @@ var _ = Describe("Buffer", func() {
 			})
 		})
 
+	})
+
+	Describe("LimitedConsumableAsyncBuffer", func() {
+		It("should respect the limit and block on AddEvent", func() {
+			// Limit 1, SelectNext policy
+			buf := events.NewLimitedConsumableAsyncBuffer[string](events.NewSelectNextPolicy[string](), 1)
+			defer buf.StopBlocking()
+
+			e1 := events.NewEvent("e1")
+			e2 := events.NewEvent("e2")
+
+			err := buf.AddEvent(context.Background(), e1)
+			Expect(err).To(BeNil())
+
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				err := buf.AddEvent(context.Background(), e2)
+				Expect(err).To(BeNil())
+				close(done)
+			}()
+
+			Consistently(done).ShouldNot(BeClosed())
+
+			buf.GetAndConsumeNextEvents(context.Background())
+			Eventually(done).Should(BeClosed())
+		})
 	})
 
 	Describe("ConsumableAsyncBuffer", func() {
@@ -334,6 +376,45 @@ var _ = Describe("Buffer", func() {
 				Expect(e2Res).To(Equal([]events.Event[string]{e2}))
 				Expect(buf.Len()).To(Equal(0))
 			})
+		})
+
+		Context("With Limit", func() {
+			It("should block when limit is reached", func() {
+				buf = events.NewSortedSimpleAsyncBuffer[string](1)
+				defer buf.StopBlocking()
+
+				Expect(buf.AddEvent(context.Background(), e1)).To(Succeed())
+
+				done := make(chan struct{})
+				go func() {
+					defer GinkgoRecover()
+					Expect(buf.AddEvent(context.Background(), e2)).To(Succeed())
+					close(done)
+				}()
+
+				Consistently(done).ShouldNot(BeClosed())
+
+				buf.GetAndRemoveNextEvent(context.Background())
+				Eventually(done).Should(BeClosed())
+			})
+		})
+	})
+
+	Describe("Iterator", func() {
+		It("should iterate over the buffer", func() {
+			buf := events.NewSimpleAsyncBuffer[string]()
+			buf.AddEvent(context.Background(), events.NewEvent("1"))
+			buf.AddEvent(context.Background(), events.NewEvent("2"))
+
+			it := events.NewIterator[string](buf)
+
+			Expect(it.HasNext()).To(BeTrue())
+			Expect(it.Next().GetContent()).To(Equal("1"))
+
+			Expect(it.HasNext()).To(BeTrue())
+			Expect(it.Next().GetContent()).To(Equal("2"))
+
+			Expect(it.HasNext()).To(BeFalse())
 		})
 	})
 })

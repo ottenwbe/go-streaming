@@ -435,4 +435,100 @@ slide: 1
 			Expect(errors.Is(err, events.ErrUnknownDuoPolicyType)).To(BeTrue())
 		})
 	})
+	Describe("EventSelection", func() {
+		It("validates ranges correctly", func() {
+			Expect(events.EventSelection{Start: 0, End: 0}.IsValid()).To(BeTrue())
+			Expect(events.EventSelection{Start: 0, End: 1}.IsValid()).To(BeTrue())
+			Expect(events.EventSelection{Start: 1, End: 0}.IsValid()).To(BeFalse())
+			Expect(events.EventSelection{Start: -1, End: 0}.IsValid()).To(BeFalse())
+			Expect(events.EventSelection{Start: 0, End: -1}.IsValid()).To(BeFalse())
+		})
+	})
+	Describe("Policy Internals", func() {
+		Context("CountingWindowPolicy", func() {
+			It("correctly offsets indices", func() {
+				p := events.NewCountingWindowPolicy[int](2, 1)
+				buf := events.NewEventBuffer[int]()
+				buf.Add(events.NewEvent(1))
+				buf.Add(events.NewEvent(2))
+				buf.Add(events.NewEvent(3))
+
+				// [0, 1]
+				p.UpdateSelection(buf)
+				Expect(p.NextSelection()).To(Equal(events.EventSelection{Start: 0, End: 1}))
+
+				// Shift -> [1, 2]
+				p.Shift()
+				p.UpdateSelection(buf)
+				Expect(p.NextSelection()).To(Equal(events.EventSelection{Start: 1, End: 2}))
+
+				// Offset by 1
+				p.Offset(1)
+				Expect(p.NextSelection()).To(Equal(events.EventSelection{Start: 0, End: 1}))
+			})
+
+			It("provides correct description", func() {
+				p := events.NewCountingWindowPolicy[int](5, 2)
+				desc := p.Description()
+				Expect(desc.Type).To(Equal(events.CountingWindow))
+				Expect(desc.Size).To(Equal(5))
+				Expect(desc.Slide).To(Equal(2))
+			})
+
+			It("provides correct description for SelectNext", func() {
+				p := events.NewSelectNextPolicy[int]()
+				desc := p.Description()
+				Expect(desc.Type).To(Equal(events.SelectNext))
+			})
+		})
+
+		Context("TemporalWindowPolicy", func() {
+			It("correctly offsets indices", func() {
+				start := time.Now()
+				p := events.NewTemporalWindowPolicy[int](start, time.Minute, time.Minute)
+
+				buf := events.NewEventBuffer[int]()
+				buf.Add(&events.TemporalEvent[int]{Stamp: events.TimeStamp{StartTime: start.Add(time.Second)}})
+				buf.Add(&events.TemporalEvent[int]{Stamp: events.TimeStamp{StartTime: start.Add(10 * time.Second)}})
+
+				p.UpdateSelection(buf)
+				Expect(p.NextSelection()).To(Equal(events.EventSelection{Start: 0, End: 1}))
+
+				p.Offset(1)
+				Expect(p.NextSelection()).To(Equal(events.EventSelection{Start: -1, End: 0}))
+			})
+
+			It("skips events before window start", func() {
+				start := time.Now()
+				p := events.NewTemporalWindowPolicy[int](start, time.Minute, time.Minute)
+
+				buf := events.NewEventBuffer[int]()
+				// Before window
+				buf.Add(&events.TemporalEvent[int]{Stamp: events.TimeStamp{StartTime: start.Add(-time.Second)}})
+				// Inside window
+				buf.Add(&events.TemporalEvent[int]{Stamp: events.TimeStamp{StartTime: start.Add(time.Second)}})
+
+				p.UpdateSelection(buf)
+				// Should select [1, 1]
+				Expect(p.NextSelection()).To(Equal(events.EventSelection{Start: 1, End: 1}))
+			})
+		})
+
+		Context("MultiTemporalWindowPolicy", func() {
+			It("correctly offsets indices for specific buffer", func() {
+				start := time.Now()
+				p := events.NewMultiTemporalWindowPolicy[int](start, time.Minute, time.Minute)
+
+				buf0 := events.NewEventBuffer[int]()
+				buf0.Add(&events.TemporalEvent[int]{Stamp: events.TimeStamp{StartTime: start.Add(time.Second)}})
+
+				buffers := map[int]events.BufferReader[int]{0: buf0}
+
+				p.UpdateSelection(buffers)
+				p.Offset(0, 1)
+				sel := p.NextSelection()
+				Expect(sel[0]).To(Equal(events.EventSelection{Start: -1, End: -1}))
+			})
+		})
+	})
 })
