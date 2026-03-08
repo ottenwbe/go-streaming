@@ -52,9 +52,9 @@ var _ = Describe("OperatorRepository", func() {
 			return []int{s}
 		}
 
-		oid, err = processing.NewOperator[int, int](
-			sum,
+		oid, err = processing.NewPipelineOperator[int, int](
 			d,
+			sum,
 			processing.NilOperatorID(),
 		)
 		Expect(err).To(BeNil())
@@ -130,7 +130,7 @@ var _ = Describe("OperatorRepository", func() {
 
 			opFunc := func(in []events.Event[string]) []string { return nil }
 
-			oid, err := processing.NewOperator[string, string](opFunc, conf, processing.NilOperatorID())
+			oid, err := processing.NewPipelineOperator[string, string](conf, opFunc, processing.NilOperatorID())
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(pubsub.ErrStreamTypeMismatch))
 
@@ -153,7 +153,7 @@ var _ = Describe("OperatorRepository", func() {
 			)
 
 			opFunc := func(in []events.Event[string]) []string { return nil }
-			oid, _ := processing.NewOperator[string, string](opFunc, conf, processing.NilOperatorID())
+			oid, _ := processing.NewPipelineOperator[string, string](conf, opFunc, processing.NilOperatorID())
 			op, _ := processing.OperatorRepository().Get(oid)
 
 			err := op.Start()
@@ -192,7 +192,7 @@ var _ = Describe("FilterOperatorEngine", func() {
 			return event.GetContent()%2 == 0
 		}
 
-		oid, err = processing.NewOperator[int, int](isEven, d, processing.NilOperatorID())
+		oid, err = processing.NewFilterOperator[int](d, isEven, processing.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 
@@ -257,7 +257,7 @@ var _ = Describe("MapOperatorEngine", func() {
 			return event.GetContent() * 2
 		}
 
-		oid, err = processing.NewOperator[int, int](double, d, processing.NilOperatorID())
+		oid, err = processing.NewMapOperator[int, int](d, double, processing.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 
@@ -335,7 +335,7 @@ var _ = Describe("FanInOperatorEngine", func() {
 			return []int{sum}
 		}
 
-		oid, err = processing.NewOperator[int, int](fanInOp, d, processing.NilOperatorID())
+		oid, err = processing.NewFanInOperator[int, int](d, fanInOp, processing.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 

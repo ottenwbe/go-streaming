@@ -212,7 +212,7 @@ func (b *Builder) Build(run bool) (ContinuousQuery, error) {
 	// create all streams
 	for _, streamF := range b.streams {
 		_, err := streamF(b.query.repository())
-		if err != nil {
+		if err != nil && !errors.Is(err, pubsub.ErrStreamAlreadyExists) {
 			returnErr = errors.Join(returnErr, err)
 		}
 	}

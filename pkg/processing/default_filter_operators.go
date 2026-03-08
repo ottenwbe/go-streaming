@@ -15,7 +15,7 @@ func Filter[T any](predicate func(events.Event[T]) bool) func(in []pubsub.Stream
 			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
 			WithOutput(out...),
 		)
-		return NewOperator[T, T](predicate, config, id)
+		return NewFilterOperator[T](config, predicate, id)
 	}
 }
 

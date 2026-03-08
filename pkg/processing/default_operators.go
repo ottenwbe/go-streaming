@@ -32,9 +32,7 @@ func BatchSum[TEvent events.NumericConstraint](policy events.SelectionPolicyConf
 			WithOutput(out...),
 		)
 
-		op, err := NewOperator[TEvent, TEvent](batchSumF, config, id)
-
-		return op, err
+		return NewPipelineOperator[TEvent, TEvent](config, batchSumF, id)
 	}
 }
 
@@ -54,7 +52,7 @@ func BatchCount[TEvent any, TOut events.NumericConstraint](policy events.Selecti
 			WithOutput(out...),
 		)
 
-		return NewOperator[TEvent, TOut](batchCount, config, id)
+		return NewPipelineOperator[TEvent, TOut](config, batchCount, id)
 	}
 }
 
@@ -72,7 +70,7 @@ func Convert[TIn, TOut events.NumericConstraint]() func(in []pubsub.StreamID, ou
 			WithOutput(out...),
 		)
 
-		return NewOperator[TIn, TOut](convert, config, id)
+		return NewMapOperator[TIn, TOut](config, convert, id)
 	}
 }
 
@@ -97,7 +95,7 @@ func SelectFromMap(key string) func(in []pubsub.StreamID, out []pubsub.StreamID,
 			WithOutput(out...),
 		)
 
-		return NewOperator[map[string]any, any](mapper, config, id)
+		return NewMapOperator[map[string]any, any](config, mapper, id)
 	}
 }
 
@@ -109,7 +107,7 @@ func Map[TIn, TOut any](mapper func(events.Event[TIn]) TOut) func(in []pubsub.St
 			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
 			WithOutput(out...),
 		)
-		return NewOperator[TIn, TOut](mapper, config, id)
+		return NewMapOperator[TIn, TOut](config, mapper, id)
 	}
 }
 
@@ -159,7 +157,7 @@ func Join(
 			WithOutput(out...),
 		)
 
-		return NewOperator[map[string]any, map[string]any](joinFunc, config, id)
+		return NewFanInOperator[map[string]any, map[string]any](config, joinFunc, id)
 	}
 }
 
@@ -214,7 +212,7 @@ func LeftJoin(
 			WithOutput(out...),
 		)
 
-		return NewOperator[map[string]any, map[string]any](joinFunc, config, id)
+		return NewFanInOperator[map[string]any, map[string]any](config, joinFunc, id)
 	}
 }
 
@@ -238,7 +236,7 @@ func FlatMap[TIn, TOut any](mapper func(events.Event[TIn]) []TOut) func(in []pub
 			WithOutput(out...),
 		)
 
-		return NewOperator[TIn, TOut](batchMapper, config, id)
+		return NewPipelineOperator[TIn, TOut](config, batchMapper, id)
 	}
 }
 
@@ -257,7 +255,7 @@ func Observe[T any](callback func(events.Event[T])) func(in []pubsub.StreamID, o
 			WithOutput(out...),
 		)
 
-		return NewOperator[T, T](mapper, config, id)
+		return NewMapOperator[T, T](config, mapper, id)
 	}
 }
 
