@@ -30,7 +30,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "filter-test-topic"
 			b := processing.NewBuilder[int]()
 			b.From(processing.Source[int](topic)).
-				Process(processing.Operator[int](processing.Filter(func(e events.Event[int]) bool {
+				ConnectTo(processing.Operator[int](processing.Filter(func(e events.Event[int]) bool {
 					return e.GetContent()%2 == 0
 				})))
 
@@ -57,12 +57,167 @@ var _ = Describe("Default Operators", func() {
 		})
 	})
 
+	Context("Even / Odd", func() {
+		It("should filter even numbers", func() {
+			topic := "even-test-topic"
+			b := processing.NewBuilder[int]()
+			b.From(processing.Source[int](topic)).
+				ConnectTo(processing.Operator[int](processing.Even[int]()))
+
+			q, err = b.Build(true)
+			Expect(err).To(BeNil())
+
+			var results []int
+			var wg sync.WaitGroup
+			wg.Add(2)
+
+			err = q.Subscribe(func(e events.Event[int]) {
+				results = append(results, e.GetContent())
+				wg.Done()
+			})
+			Expect(err).To(BeNil())
+
+			pubsub.InstantPublishByTopic(topic, 1)
+			pubsub.InstantPublishByTopic(topic, 2)
+			pubsub.InstantPublishByTopic(topic, 3)
+			pubsub.InstantPublishByTopic(topic, 4)
+
+			wg.Wait()
+			Expect(results).To(Equal([]int{2, 4}))
+		})
+
+		It("should filter odd numbers", func() {
+			topic := "odd-test-topic"
+			b := processing.NewBuilder[int]()
+			b.From(processing.Source[int](topic)).
+				ConnectTo(processing.Operator[int](processing.Odd[int]()))
+
+			q, err = b.Build(true)
+			Expect(err).To(BeNil())
+
+			var results []int
+			var wg sync.WaitGroup
+			wg.Add(2)
+
+			err = q.Subscribe(func(e events.Event[int]) {
+				results = append(results, e.GetContent())
+				wg.Done()
+			})
+			Expect(err).To(BeNil())
+
+			pubsub.InstantPublishByTopic(topic, 1)
+			pubsub.InstantPublishByTopic(topic, 2)
+			pubsub.InstantPublishByTopic(topic, 3)
+			pubsub.InstantPublishByTopic(topic, 4)
+
+			wg.Wait()
+			Expect(results).To(Equal([]int{1, 3}))
+		})
+
+		It("should filter 'even' numbers from floats by truncating", func() {
+			topic := "even-float-test-topic"
+			b := processing.NewBuilder[float64]()
+			b.From(processing.Source[float64](topic)).
+				ConnectTo(processing.Operator[float64](processing.Even[float64]()))
+
+			q, err = b.Build(true)
+			Expect(err).To(BeNil())
+
+			var results []float64
+			var wg sync.WaitGroup
+			wg.Add(2) // Expecting 2.1 and 4.9
+
+			err = q.Subscribe(func(e events.Event[float64]) {
+				results = append(results, e.GetContent())
+				wg.Done()
+			})
+			Expect(err).To(BeNil())
+
+			pubsub.InstantPublishByTopic(topic, 1.5) // int(1.5) is 1 (odd)
+			pubsub.InstantPublishByTopic(topic, 2.1) // int(2.1) is 2 (even)
+			pubsub.InstantPublishByTopic(topic, 3.9) // int(3.9) is 3 (odd)
+			pubsub.InstantPublishByTopic(topic, 4.9) // int(4.9) is 4 (even)
+
+			wg.Wait()
+			Expect(results).To(ConsistOf(2.1, 4.9))
+		})
+	})
+
+	Context("Limit", func() {
+		It("should only take the first N events", func() {
+			topic := "limit-test-topic"
+			b := processing.NewBuilder[int]()
+			b.From(processing.Source[int](topic)).
+				ConnectTo(processing.Operator[int](processing.Limit[int](2)))
+
+			q, err = b.Build(true)
+			Expect(err).To(BeNil())
+
+			var results []int
+			var mu sync.Mutex
+
+			err = q.Subscribe(func(e events.Event[int]) {
+				mu.Lock()
+				defer mu.Unlock()
+				results = append(results, e.GetContent())
+			})
+			Expect(err).To(BeNil())
+
+			pubsub.InstantPublishByTopic(topic, 1)
+			pubsub.InstantPublishByTopic(topic, 2)
+			pubsub.InstantPublishByTopic(topic, 3)
+			pubsub.InstantPublishByTopic(topic, 4)
+
+			Eventually(func() []int {
+				mu.Lock()
+				defer mu.Unlock()
+				return results
+			}).Should(Equal([]int{1, 2}))
+
+			Consistently(func() []int {
+				mu.Lock()
+				defer mu.Unlock()
+				return results
+			}).Should(Equal([]int{1, 2}))
+		})
+	})
+
+	Context("Contains", func() {
+		It("should filter string events that contain a substring", func() {
+			topic := "contains-test-topic"
+			b := processing.NewBuilder[string]()
+			b.From(processing.Source[string](topic)).
+				ConnectTo(processing.Operator[string](processing.Contains("world")))
+
+			q, err = b.Build(true)
+			Expect(err).To(BeNil())
+
+			var results []string
+			var wg sync.WaitGroup
+			wg.Add(2) // "hello world", "worldy"
+
+			err = q.Subscribe(func(e events.Event[string]) {
+				results = append(results, e.GetContent())
+				wg.Done()
+			})
+			Expect(err).To(BeNil())
+
+			pubsub.InstantPublishByTopic(topic, "hello world")
+			pubsub.InstantPublishByTopic(topic, "hello there")
+			pubsub.InstantPublishByTopic(topic, "worldy")
+			pubsub.InstantPublishByTopic(topic, "foo bar")
+
+			wg.Wait()
+			Expect(results).To(ConsistOf("hello world", "worldy"))
+		})
+	})
+
 	Context("FlatMap", func() {
 		It("should map one event to multiple events", func() {
 			topic := "flatmap-test-topic"
 			b := processing.NewBuilder[string]()
 			b.From(processing.Source[string](topic)).
-				Process(processing.Operator[string](processing.FlatMap(func(e events.Event[string]) []string {
+				ConnectTo(processing.Operator[string](processing.FlatMap(func(e events.Event[string]) []string {
 					return strings.Split(e.GetContent(), " ")
 				})))
 
@@ -90,7 +245,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "flatmap-empty-test-topic"
 			b := processing.NewBuilder[int]()
 			b.From(processing.Source[int](topic)).
-				Process(processing.Operator[int](processing.FlatMap(func(e events.Event[int]) []int {
+				ConnectTo(processing.Operator[int](processing.FlatMap(func(e events.Event[int]) []int {
 					if e.GetContent() > 5 {
 						return []int{e.GetContent()}
 					}
@@ -128,7 +283,7 @@ var _ = Describe("Default Operators", func() {
 
 			b := processing.NewBuilder[int]().
 				From(processing.Source[int](topic)).
-				Process(processing.Operator[int](processing.Observe(func(e events.Event[int]) {
+				ConnectTo(processing.Operator[int](processing.Observe(func(e events.Event[int]) {
 					observedValue = e.GetContent()
 					wg.Done()
 				})))
@@ -161,7 +316,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "map-select-topic"
 			b := processing.NewBuilder[any]()
 			b.From(processing.Source[map[string]any](topic)).
-				Process(processing.Operator[any](processing.SelectFromMap("city")))
+				ConnectTo(processing.Operator[any](processing.SelectFromMap("city")))
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
 
@@ -185,7 +340,7 @@ var _ = Describe("Default Operators", func() {
 			topic := "map-select-fail-topic"
 			b := processing.NewBuilder[any]()
 			b.From(processing.Source[map[string]any](topic)).
-				Process(processing.Operator[any](processing.SelectFromMap("city")))
+				ConnectTo(processing.Operator[any](processing.SelectFromMap("city")))
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
 
@@ -219,7 +374,7 @@ var _ = Describe("Default Operators", func() {
 
 			b := processing.NewBuilder[string]()
 			b.From(processing.Source[int](topic)).
-				Process(processing.Operator[string](processing.Map(mapper)))
+				ConnectTo(processing.Operator[string](processing.Map(mapper)))
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
 
@@ -277,7 +432,7 @@ var _ = Describe("Default Operators", func() {
 			b := processing.NewBuilder[map[string]any]()
 			b.From(processing.Source[map[string]any]("entry_cam")).
 				From(processing.Source[map[string]any]("exit_cam")).
-				Process(processing.Operator[map[string]any](processing.Join("vehicle_id", policy)))
+				ConnectTo(processing.Operator[map[string]any](processing.Join("vehicle_id", policy)))
 
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())
@@ -306,7 +461,7 @@ var _ = Describe("Default Operators", func() {
 			b := processing.NewBuilder[map[string]any]()
 			b.From(processing.Source[map[string]any]("entry_cam_left")).
 				From(processing.Source[map[string]any]("exit_cam_left")).
-				Process(processing.Operator[map[string]any](processing.LeftJoin("vehicle_id", policy)))
+				ConnectTo(processing.Operator[map[string]any](processing.LeftJoin("vehicle_id", policy)))
 
 			q, err = b.Build(true)
 			Expect(err).To(BeNil())

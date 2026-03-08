@@ -28,13 +28,8 @@ var _ = Describe("OperatorRepository", func() {
 			processing.WithOutput(sidout),
 			processing.WithAutoStart(true),
 			processing.WithInput(processing.InputConfig{
-				Stream: sidin,
-				InputPolicy: events.SelectionPolicyConfig{
-					Active: true,
-					Type:   events.CountingWindow,
-					Size:   10,
-					Slide:  10,
-				},
+				Stream:      sidin,
+				InputPolicy: events.MakeSelectionPolicy(events.CountingWindowOption(10, 10)),
 			}))
 
 		sum := func(input []events.Event[int]) []int {
@@ -52,9 +47,9 @@ var _ = Describe("OperatorRepository", func() {
 			return []int{s}
 		}
 
-		oid, err = processing.NewOperator[int, int](
-			sum,
+		oid, err = processing.NewPipelineOperator[int, int](
 			d,
+			sum,
 			processing.NilOperatorID(),
 		)
 		Expect(err).To(BeNil())
@@ -122,7 +117,7 @@ var _ = Describe("OperatorRepository", func() {
 			conf := processing.MakeOperatorConfig(processing.PIPELINE_OPERATOR,
 				processing.WithInput(processing.InputConfig{
 					Stream:      intStreamID, // Mismatch T
-					InputPolicy: events.SelectionPolicyConfig{Type: events.SelectNext},
+					InputPolicy: events.MakeSelectionPolicy(events.SelectNextOption()),
 				}),
 				processing.WithOutput(pubsub.MakeStreamID[string]("out-fail-test")),
 				processing.WithAutoStart(true),
@@ -130,7 +125,7 @@ var _ = Describe("OperatorRepository", func() {
 
 			opFunc := func(in []events.Event[string]) []string { return nil }
 
-			oid, err := processing.NewOperator[string, string](opFunc, conf, processing.NilOperatorID())
+			oid, err := processing.NewPipelineOperator[string, string](conf, opFunc, processing.NilOperatorID())
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(pubsub.ErrStreamTypeMismatch))
 
@@ -146,14 +141,14 @@ var _ = Describe("OperatorRepository", func() {
 			conf := processing.MakeOperatorConfig(processing.PIPELINE_OPERATOR,
 				processing.WithInput(processing.InputConfig{
 					Stream:      intStreamID, // Mismatch
-					InputPolicy: events.SelectionPolicyConfig{Type: events.SelectNext},
+					InputPolicy: events.MakeSelectionPolicy(events.SelectNextOption()),
 				}),
 				processing.WithOutput(pubsub.MakeStreamID[string](topicOut)),
 				processing.WithAutoStart(false),
 			)
 
 			opFunc := func(in []events.Event[string]) []string { return nil }
-			oid, _ := processing.NewOperator[string, string](opFunc, conf, processing.NilOperatorID())
+			oid, _ := processing.NewPipelineOperator[string, string](conf, opFunc, processing.NilOperatorID())
 			op, _ := processing.OperatorRepository().Get(oid)
 
 			err := op.Start()
@@ -182,17 +177,15 @@ var _ = Describe("FilterOperatorEngine", func() {
 			processing.WithOutput(sidout),
 			processing.WithAutoStart(true),
 			processing.WithInput(processing.InputConfig{
-				Stream: sidin,
-				InputPolicy: events.SelectionPolicyConfig{
-					Type: events.SelectNext,
-				},
+				Stream:      sidin,
+				InputPolicy: events.MakeSelectionPolicy(events.SelectNextOption()),
 			}))
 
 		isEven := func(event events.Event[int]) bool {
 			return event.GetContent()%2 == 0
 		}
 
-		oid, err = processing.NewOperator[int, int](isEven, d, processing.NilOperatorID())
+		oid, err = processing.NewFilterOperator[int](d, isEven, processing.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 
@@ -257,7 +250,7 @@ var _ = Describe("MapOperatorEngine", func() {
 			return event.GetContent() * 2
 		}
 
-		oid, err = processing.NewOperator[int, int](double, d, processing.NilOperatorID())
+		oid, err = processing.NewMapOperator[int, int](d, double, processing.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 
@@ -335,7 +328,7 @@ var _ = Describe("FanInOperatorEngine", func() {
 			return []int{sum}
 		}
 
-		oid, err = processing.NewOperator[int, int](fanInOp, d, processing.NilOperatorID())
+		oid, err = processing.NewFanInOperator[int, int](d, fanInOp, processing.NilOperatorID())
 		Expect(err).To(BeNil())
 	})
 
@@ -398,5 +391,55 @@ var _ = Describe("FanInOperatorEngine", func() {
 		mutex.Lock()
 		defer mutex.Unlock()
 		Expect(receivedEvents[0].GetContent()).To(Equal(3))
+	})
+})
+
+var _ = Describe("TokenizeOperator", func() {
+	var (
+		q   processing.ContinuousQuery
+		err error
+	)
+
+	AfterEach(func() {
+		if q != nil {
+			_ = processing.Close(q)
+		}
+	})
+
+	It("should split strings into words", func() {
+		b := processing.NewBuilder[string]()
+		b.From(processing.Source[string]("in-tokenize")).
+			ConnectTo(processing.Operator[string](processing.Tokenize()))
+
+		q, err = b.Build(true)
+		Expect(err).To(BeNil())
+
+		var (
+			receivedEvents []events.Event[string]
+			mu             sync.Mutex
+		)
+		err = q.Subscribe(func(event events.Event[string]) {
+			mu.Lock()
+			defer mu.Unlock()
+			receivedEvents = append(receivedEvents, event)
+		})
+		Expect(err).To(BeNil())
+
+		pubsub.InstantPublishByTopic[string]("in-tokenize", "hello world")
+		pubsub.InstantPublishByTopic[string]("in-tokenize", "foo bar 123")
+
+		Eventually(func() int {
+			mu.Lock()
+			defer mu.Unlock()
+			return len(receivedEvents)
+		}).Should(Equal(5))
+
+		mu.Lock()
+		var contents []string
+		for _, e := range receivedEvents {
+			contents = append(contents, e.GetContent())
+		}
+		mu.Unlock()
+		Expect(contents).To(ContainElements("hello", "world", "foo", "bar", "123"))
 	})
 })

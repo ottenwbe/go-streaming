@@ -20,7 +20,7 @@ func main() {
 	// define the query
 	b := processing.NewBuilder[int]()
 	b.From(processing.Source[int]("in", pubsub.WithAsynchronousStream(true))).
-		Process(processing.Operator[int](processing.Greater[int](50)))
+		ConnectTo(processing.Operator[int](processing.Greater[int](50)))
 
 	q, err := b.Build(false)
 	if err != nil {

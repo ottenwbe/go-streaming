@@ -37,6 +37,12 @@ var _ = Describe("Event", func() {
 			Expect(es).To(Equal([]events.Event[int]{e1, e2}))
 		})
 	})
+	Context("Numeric events", func() {
+		It("can be created", func() {
+			e := events.NewNumericEvent(123)
+			Expect(e.GetContent()).To(Equal(123))
+		})
+	})
 	Context("Stamp an Event w/o context", func() {
 		It("allows to read stamped information", func() {
 			tMeta := events.StampMeta{"test": 1}
@@ -91,6 +97,14 @@ var _ = Describe("Event", func() {
 			Expect(tm.Meta).To(HaveKeyWithValue("test", 1))
 			Expect(tm.Meta).To(HaveKeyWithValue("test2", 2))
 			Expect(tm.Meta).To(HaveKeyWithValue("test3", 3))
+		})
+	})
+	Context("GetTimeStamps", func() {
+		It("filters nil events", func() {
+			e1 := events.NewEvent(1)
+			stamps := events.GetTimeStamps(e1, nil)
+			Expect(stamps).To(HaveLen(1))
+			Expect(stamps[0]).To(Equal(e1.GetStamp()))
 		})
 	})
 })

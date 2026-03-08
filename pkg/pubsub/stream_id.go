@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/goccy/go-yaml"
 	"github.com/google/uuid"
-	"gopkg.in/yaml.v3"
 )
 
 const (

@@ -3,6 +3,7 @@ package processing
 import (
 	"errors"
 	"maps"
+	"strings"
 
 	"github.com/ottenwbe/go-streaming/pkg/events"
 	"github.com/ottenwbe/go-streaming/pkg/pubsub"
@@ -13,13 +14,8 @@ var (
 	ErrLeftJoinRequiresTwoInputs = errors.New("LeftJoin operator requires exactly two input streams")
 )
 
-// Constraint to limit the type parameter to numeric types
-type number interface {
-	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64
-}
-
 // BatchSum creates a query that sums numeric events over a window defined by the selection policy.
-func BatchSum[TEvent number](policy events.SelectionPolicyConfig) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+func BatchSum[TEvent events.NumericConstraint](policy events.SelectionPolicyConfig) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
@@ -37,14 +33,12 @@ func BatchSum[TEvent number](policy events.SelectionPolicyConfig) func(in []pubs
 			WithOutput(out...),
 		)
 
-		op, err := NewOperator[TEvent, TEvent](batchSumF, config, id)
-
-		return op, err
+		return NewPipelineOperator[TEvent, TEvent](config, batchSumF, id)
 	}
 }
 
 // BatchCount creates a query that counts events over a window defined by the selection policy.
-func BatchCount[TEvent any, TOut number](policy events.SelectionPolicyConfig) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+func BatchCount[TEvent any, TOut events.NumericConstraint](policy events.SelectionPolicyConfig) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
@@ -59,49 +53,12 @@ func BatchCount[TEvent any, TOut number](policy events.SelectionPolicyConfig) fu
 			WithOutput(out...),
 		)
 
-		return NewOperator[TEvent, TEvent](batchCount, config, id)
-	}
-}
-
-// Greater creates a query that filters events greater than a specified value.
-func Greater[T number](greaterThan T) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
-	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
-
-		greater := func(input events.Event[T]) bool {
-			return input.GetContent() > greaterThan
-		}
-
-		config := MakeOperatorConfig(
-			FILTER_OPERATOR,
-			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
-			WithOutput(out...),
-		)
-
-		return NewOperator[T, T](greater, config, id)
-	}
-}
-
-// Smaller creates a query that filters events smaller than a specified value.
-func Smaller[T number](than T) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
-
-	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
-
-		smaller := func(input events.Event[T]) bool {
-			return input.GetContent() < than
-		}
-
-		config := MakeOperatorConfig(
-			FILTER_OPERATOR,
-			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
-			WithOutput(out...),
-		)
-
-		return NewOperator[T, T](smaller, config, id)
+		return NewPipelineOperator[TEvent, TOut](config, batchCount, id)
 	}
 }
 
 // Convert creates a query that converts events from one numeric type to another.
-func Convert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+func Convert[TIn, TOut events.NumericConstraint]() func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 
 	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
 		convert := func(input events.Event[TIn]) TOut {
@@ -114,7 +71,7 @@ func Convert[TIn, TOut number]() func(in []pubsub.StreamID, out []pubsub.StreamI
 			WithOutput(out...),
 		)
 
-		return NewOperator[TIn, TOut](convert, config, id)
+		return NewMapOperator[TIn, TOut](config, convert, id)
 	}
 }
 
@@ -139,7 +96,7 @@ func SelectFromMap(key string) func(in []pubsub.StreamID, out []pubsub.StreamID,
 			WithOutput(out...),
 		)
 
-		return NewOperator[map[string]any, any](mapper, config, id)
+		return NewMapOperator[map[string]any, any](config, mapper, id)
 	}
 }
 
@@ -151,7 +108,7 @@ func Map[TIn, TOut any](mapper func(events.Event[TIn]) TOut) func(in []pubsub.St
 			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
 			WithOutput(out...),
 		)
-		return NewOperator[TIn, TOut](mapper, config, id)
+		return NewMapOperator[TIn, TOut](config, mapper, id)
 	}
 }
 
@@ -201,7 +158,7 @@ func Join(
 			WithOutput(out...),
 		)
 
-		return NewOperator[map[string]any, map[string]any](joinFunc, config, id)
+		return NewFanInOperator[map[string]any, map[string]any](config, joinFunc, id)
 	}
 }
 
@@ -256,19 +213,7 @@ func LeftJoin(
 			WithOutput(out...),
 		)
 
-		return NewOperator[map[string]any, map[string]any](joinFunc, config, id)
-	}
-}
-
-// Filter creates a query that filters events based on a provided predicate.
-func Filter[T any](predicate func(events.Event[T]) bool) func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
-	return func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
-		config := MakeOperatorConfig(
-			FILTER_OPERATOR,
-			WithInput(MakeInputConfigs(in, events.SelectionPolicyConfig{})...),
-			WithOutput(out...),
-		)
-		return NewOperator[T, T](predicate, config, id)
+		return NewFanInOperator[map[string]any, map[string]any](config, joinFunc, id)
 	}
 }
 
@@ -284,7 +229,7 @@ func FlatMap[TIn, TOut any](mapper func(events.Event[TIn]) []TOut) func(in []pub
 			return result
 		}
 
-		policy := events.SelectionPolicyConfig{Type: events.SelectNext, Active: true}
+		policy := events.MakeSelectionPolicy(events.SelectNextOption())
 
 		config := MakeOperatorConfig(
 			PIPELINE_OPERATOR,
@@ -292,7 +237,7 @@ func FlatMap[TIn, TOut any](mapper func(events.Event[TIn]) []TOut) func(in []pub
 			WithOutput(out...),
 		)
 
-		return NewOperator[TIn, TOut](batchMapper, config, id)
+		return NewPipelineOperator[TIn, TOut](config, batchMapper, id)
 	}
 }
 
@@ -311,6 +256,13 @@ func Observe[T any](callback func(events.Event[T])) func(in []pubsub.StreamID, o
 			WithOutput(out...),
 		)
 
-		return NewOperator[T, T](mapper, config, id)
+		return NewMapOperator[T, T](config, mapper, id)
 	}
+}
+
+// Tokenize creates a query that splits a string into individual words.
+func Tokenize() func(in []pubsub.StreamID, out []pubsub.StreamID, id OperatorID) (OperatorID, error) {
+	return FlatMap[string, string](func(e events.Event[string]) []string {
+		return strings.Fields(e.GetContent())
+	})
 }

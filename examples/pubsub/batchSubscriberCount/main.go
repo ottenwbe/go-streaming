@@ -16,7 +16,7 @@ func main() {
 		batchSize   = 5
 	)
 
-	// 1. Define a policy: Process events in batches of 5
+	// 1. Define a policy: ConnectTo events in batches of 5
 	// This creates a "Counting Window" that triggers every 5 events.
 	policy := events.MakeSelectionPolicy(events.CountingWindowOption(batchSize, batchSize))
 

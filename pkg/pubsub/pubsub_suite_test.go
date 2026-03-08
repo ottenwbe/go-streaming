@@ -9,5 +9,5 @@ import (
 
 func TestStreams(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "streams Suite")
+	RunSpecs(t, "PubSub Suite")
 }

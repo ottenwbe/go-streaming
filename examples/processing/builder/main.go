@@ -32,16 +32,16 @@ func main() {
 	policy := events.MakeSelectionPolicyByValue(events.TemporalWindow, 0, 0, time.Now(), time.Second, time.Second)
 
 	b.From(processing.Source[float64]("in", pubsub.WithAsynchronousStream(true))).
-		Process(processing.Operator[float64](processing.Greater[float64](0.5))).
-		Process(processing.Operator[float64](processing.Map(func(e events.Event[float64]) float64 {
+		ConnectTo(processing.Operator[float64](processing.Greater[float64](0.5))).
+		ConnectTo(processing.Operator[float64](processing.Map(func(e events.Event[float64]) float64 {
 			return e.GetContent() * 100
 		}))).
-		Process(processing.Operator[int](processing.Convert[float64, int]())).
-		Process(processing.Operator[map[string]any](processing.Map(func(e events.Event[int]) map[string]any {
+		ConnectTo(processing.Operator[int](processing.Convert[float64, int]())).
+		ConnectTo(processing.Operator[map[string]any](processing.Map(func(e events.Event[int]) map[string]any {
 			return map[string]any{"id": e.GetContent(), "val": "primary"}
 		}))).
 		AddInput(processing.Source[map[string]any]("secondary")).
-		Process(processing.Operator[map[string]any](processing.Join("id", policy)))
+		ConnectTo(processing.Operator[map[string]any](processing.Join("id", policy)))
 
 	q, err := b.Build(false)
 	if err != nil {
@@ -49,9 +49,7 @@ func main() {
 	}
 
 	// Subscribe to the query output
-	err = q.Subscribe(func(e events.Event[map[string]any]) {
-		zap.S().Infof("event received: %v", e.GetContent())
-	})
+	err = q.Subscribe(callback)
 	if err != nil {
 		zap.S().Fatal(err)
 	}
@@ -69,9 +67,13 @@ func main() {
 	time.Sleep(2 * time.Second)
 }
 
+func callback(e events.Event[map[string]any]) {
+	zap.S().Infof("event received: %v", e.GetContent())
+}
+
 func publishEvents() {
 	go func() {
-		for i := 0; i < numEvents; i++ {
+		for range numEvents {
 			// PublishContent raw float64 values; the system wraps them in Events
 			if err := pubsub.InstantPublishByTopic("in", rand.Float64()); err != nil {
 				zap.S().Error("publish error", zap.Error(err))
