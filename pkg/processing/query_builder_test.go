@@ -102,12 +102,7 @@ var _ = Describe("Builder API", func() {
 
 			// Add a process step to have a valid output
 			fanIn := func(in []pubsub.StreamID, out []pubsub.StreamID, id query.OperatorID) (query.OperatorID, error) {
-				policy := events.SelectionPolicyConfig{
-					Type:         events.TemporalWindow,
-					WindowLength: time.Second,
-					WindowShift:  time.Second,
-					WindowStart:  time.Now(),
-				}
+				policy := events.MakeSelectionPolicy(events.TemporalWindowOption(time.Now(), time.Second, time.Second))
 				config := query.MakeOperatorConfig(
 					query.FANIN_OPERATOR,
 					query.WithInput(query.MakeInputConfigs(in, policy)...),
@@ -210,12 +205,7 @@ var _ = Describe("Builder API", func() {
 
 			// 2. Fan-in: A fan-in operator that merges the two streams.
 			baseTime := time.Now()
-			mergerPolicy := events.SelectionPolicyConfig{
-				Type:         events.TemporalWindow,
-				WindowStart:  baseTime,
-				WindowLength: time.Second,
-				WindowShift:  time.Second,
-			}
+			mergerPolicy := events.MakeSelectionPolicy(events.TemporalWindowOption(baseTime, time.Second, time.Second))
 
 			merger := func(in []pubsub.StreamID, out []pubsub.StreamID, id query.OperatorID) (query.OperatorID, error) {
 				config := query.MakeOperatorConfig(

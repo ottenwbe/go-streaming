@@ -228,7 +228,7 @@ func FlatMap[TIn, TOut any](mapper func(events.Event[TIn]) []TOut) func(in []pub
 			return result
 		}
 
-		policy := events.SelectionPolicyConfig{Type: events.SelectNext, Active: true}
+		policy := events.MakeSelectionPolicy(events.SelectNextOption())
 
 		config := MakeOperatorConfig(
 			PIPELINE_OPERATOR,

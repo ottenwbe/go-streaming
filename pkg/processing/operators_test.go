@@ -28,13 +28,8 @@ var _ = Describe("OperatorRepository", func() {
 			processing.WithOutput(sidout),
 			processing.WithAutoStart(true),
 			processing.WithInput(processing.InputConfig{
-				Stream: sidin,
-				InputPolicy: events.SelectionPolicyConfig{
-					Active: true,
-					Type:   events.CountingWindow,
-					Size:   10,
-					Slide:  10,
-				},
+				Stream:      sidin,
+				InputPolicy: events.MakeSelectionPolicy(events.CountingWindowOption(10, 10)),
 			}))
 
 		sum := func(input []events.Event[int]) []int {
@@ -122,7 +117,7 @@ var _ = Describe("OperatorRepository", func() {
 			conf := processing.MakeOperatorConfig(processing.PIPELINE_OPERATOR,
 				processing.WithInput(processing.InputConfig{
 					Stream:      intStreamID, // Mismatch T
-					InputPolicy: events.SelectionPolicyConfig{Type: events.SelectNext},
+					InputPolicy: events.MakeSelectionPolicy(events.SelectNextOption()),
 				}),
 				processing.WithOutput(pubsub.MakeStreamID[string]("out-fail-test")),
 				processing.WithAutoStart(true),
@@ -146,7 +141,7 @@ var _ = Describe("OperatorRepository", func() {
 			conf := processing.MakeOperatorConfig(processing.PIPELINE_OPERATOR,
 				processing.WithInput(processing.InputConfig{
 					Stream:      intStreamID, // Mismatch
-					InputPolicy: events.SelectionPolicyConfig{Type: events.SelectNext},
+					InputPolicy: events.MakeSelectionPolicy(events.SelectNextOption()),
 				}),
 				processing.WithOutput(pubsub.MakeStreamID[string](topicOut)),
 				processing.WithAutoStart(false),
@@ -182,10 +177,8 @@ var _ = Describe("FilterOperatorEngine", func() {
 			processing.WithOutput(sidout),
 			processing.WithAutoStart(true),
 			processing.WithInput(processing.InputConfig{
-				Stream: sidin,
-				InputPolicy: events.SelectionPolicyConfig{
-					Type: events.SelectNext,
-				},
+				Stream:      sidin,
+				InputPolicy: events.MakeSelectionPolicy(events.SelectNextOption()),
 			}))
 
 		isEven := func(event events.Event[int]) bool {
