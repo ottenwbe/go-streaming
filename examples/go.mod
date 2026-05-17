@@ -6,7 +6,7 @@ replace github.com/ottenwbe/go-streaming => ../
 
 require (
 	github.com/ottenwbe/go-streaming v0.4.0
-	go.uber.org/zap v1.27.1
+	go.uber.org/zap v1.28.0
 )
 
 require (
