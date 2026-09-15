@@ -1,11 +1,11 @@
 module github.com/ottenwbe/go-streaming/examples
 
-go 1.25.0
+go 1.26.0
 
 replace github.com/ottenwbe/go-streaming => ../
 
 require (
-	github.com/ottenwbe/go-streaming v0.4.0
+	github.com/ottenwbe/go-streaming v0.4.1
 	go.uber.org/zap v1.28.0
 )
 
