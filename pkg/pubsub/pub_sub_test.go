@@ -398,10 +398,11 @@ var _ = Describe("PubSub", func() {
 	Describe("SubscribeBatchByTopic", func() {
 		It("receives events in batches based on policy", func() {
 			topic := "batch-topic"
-			desc := events.SelectionPolicyConfig{Type: events.CountingWindow, Size: 2, Slide: 2}
+			desc := events.SelectionPolicyConfig{Active: true, Type: events.CountingWindow, Size: 2, Slide: 2}
 
+			done := make(chan []events.Event[int], 1)
 			sub, err := pubsub.SubscribeBatchByTopicOnRepository[int](repo, topic, func(events ...events.Event[int]) {
-				Expect(len(events)).To(Equal(2))
+				done <- events
 			}, pubsub.SubscriberWithSelectionPolicy(desc))
 			Expect(err).To(BeNil())
 			defer pubsub.UnsubscribeOnRepository(repo, sub)
@@ -409,6 +410,10 @@ var _ = Describe("PubSub", func() {
 			// PublishContent 2 events
 			pubsub.InstantPublishByTopicOnRepository(repo, topic, 1)
 			pubsub.InstantPublishByTopicOnRepository(repo, topic, 2)
+
+			var received []events.Event[int]
+			Eventually(done).Should(Receive(&received))
+			Expect(len(received)).To(Equal(2))
 		})
 	})
 
