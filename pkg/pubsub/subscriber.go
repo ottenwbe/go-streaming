@@ -105,10 +105,12 @@ func newBufferedSubscriber[T any](streamID StreamID, buf events.Buffer[T], callb
 	if callback != nil {
 		rec.notify = callback
 		rec.notifyBatch = rec.drainCallbackBatch
+		rec.wg.Add(1)
 		go rec.notifyNext()
 	} else if callbackBatch != nil {
 		rec.notify = rec.drainCallback
 		rec.notifyBatch = callbackBatch
+		rec.wg.Add(1)
 		go rec.notifyNextBatch()
 	}
 
@@ -171,7 +173,6 @@ func (r *bufferedSubscriber[T]) ID() SubscriberID {
 }
 
 func (r *bufferedSubscriber[T]) notifyNextBatch() {
-	r.wg.Add(1)
 	defer r.wg.Done()
 	for r.active.Load() {
 		e, _ := r.buffer.GetAndConsumeNextEvents(r.ctx)
@@ -182,7 +183,6 @@ func (r *bufferedSubscriber[T]) notifyNextBatch() {
 }
 
 func (r *bufferedSubscriber[T]) notifyNext() {
-	r.wg.Add(1)
 	defer r.wg.Done()
 	for r.active.Load() {
 		e, _ := r.buffer.GetAndRemoveNextEvent(r.ctx)
