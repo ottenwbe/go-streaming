@@ -28,6 +28,7 @@ var _ = Describe("TypedSubscriber", func() {
 			rec      *defaultSubscriber[string]
 			streamID StreamID
 			result   events.Event[string]
+			resultMu sync.RWMutex
 		)
 
 		BeforeEach(func() {
@@ -37,6 +38,8 @@ var _ = Describe("TypedSubscriber", func() {
 				streamID: streamID,
 				iD:       SubscriberID(uuid.New()),
 				notify: func(event events.Event[string]) {
+					resultMu.Lock()
+					defer resultMu.Unlock()
 					result = event
 				},
 			}
@@ -59,14 +62,20 @@ var _ = Describe("TypedSubscriber", func() {
 
 			Eventually(
 				func() events.Event[string] {
+					resultMu.RLock()
+					defer resultMu.RUnlock()
 					return result
 				}).Should(Equal(event))
 		})
 
 		It("should stop notifying after close", func() {
 			rec.close()
+			resultMu.Lock()
 			result = nil
+			resultMu.Unlock()
 			rec.doNotify(events.NewEvent("test-event"))
+			resultMu.RLock()
+			defer resultMu.RUnlock()
 			Expect(result).To(BeNil())
 		})
 	})
@@ -77,6 +86,7 @@ var _ = Describe("TypedSubscriber", func() {
 			streamID StreamID
 			nMap     *notificationMap[string]
 			result   events.Event[string]
+			resultMu sync.RWMutex
 		)
 
 		BeforeEach(func() {
@@ -84,6 +94,8 @@ var _ = Describe("TypedSubscriber", func() {
 			nMap = newNotificationMap[string](MakeSubscriberConfig(), newStreamMetrics())
 			var err error
 			rec, err = nMap.newSubscriber(streamID, func(event events.Event[string]) {
+				resultMu.Lock()
+				defer resultMu.Unlock()
 				result = event
 			})
 			Expect(err).To(BeNil())
@@ -105,7 +117,11 @@ var _ = Describe("TypedSubscriber", func() {
 			event := events.NewEvent("test-buffered")
 			rec.doNotify(event)
 
-			Eventually(func() events.Event[string] { return result }).To(Equal(event))
+			Eventually(func() events.Event[string] {
+				resultMu.RLock()
+				defer resultMu.RUnlock()
+				return result
+			}).To(Equal(event))
 		})
 	})
 
@@ -115,6 +131,7 @@ var _ = Describe("TypedSubscriber", func() {
 			streamID StreamID
 			nMap     *notificationMap[string]
 			result   events.Event[string]
+			resultMu sync.RWMutex
 			start    atomic.Bool
 		)
 
@@ -125,6 +142,8 @@ var _ = Describe("TypedSubscriber", func() {
 			rec, err = nMap.newSubscriber(streamID, func(event events.Event[string]) {
 				for !start.Load() {
 				}
+				resultMu.Lock()
+				defer resultMu.Unlock()
 				result = event
 			})
 			Expect(err).To(BeNil())
@@ -156,6 +175,8 @@ var _ = Describe("TypedSubscriber", func() {
 			start.Store(true)
 
 			Eventually(func() events.Event[string] {
+				resultMu.RLock()
+				defer resultMu.RUnlock()
 				return result
 			}).To(Equal(event3))
 
@@ -167,7 +188,6 @@ var _ = Describe("TypedSubscriber", func() {
 		var (
 			nMap *notificationMap[string]
 			sID  StreamID
-			wg   sync.WaitGroup
 		)
 
 		BeforeEach(func() {
@@ -190,6 +210,7 @@ var _ = Describe("TypedSubscriber", func() {
 		It("should notify all receivers", func() {
 			var (
 				e1, e2 events.Event[string]
+				wg     sync.WaitGroup
 			)
 
 			rec1, _ := nMap.newSubscriber(sID, func(event events.Event[string]) {
